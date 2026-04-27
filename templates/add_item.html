@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>添加监控项</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="item_key" class="form-label">键值</label>
+                <input type="text" class="form-control" id="item_key" name="item_key" required>
+            </div>
+            <div class="mb-3">
+                <label for="name" class="form-label">名称</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="type" class="form-label">类型</label>
+                <select class="form-select" id="type" name="type" required>
+                    <option value="0">Zabbix agent</option>
+                    <option value="1">SNMPv1 agent</option>
+                    <option value="2">Zabbix trapper</option>
+                    <option value="3">Simple check</option>
+                    <option value="4">SNMPv2 agent</option>
+                    <option value="5">Zabbix internal</option>
+                    <option value="6">SNMPv3 agent</option>
+                    <option value="7">Zabbix agent (active)</option>
+                    <option value="8">Zabbix aggregate</option>
+                    <option value="9">Web item</option>
+                    <option value="10">External check</option>
+                    <option value="11">Database monitor</option>
+                    <option value="12">IPMI agent</option>
+                    <option value="13">SSH agent</option>
+                    <option value="14">TELNET agent</option>
+                    <option value="15">Calculated</option>
+                    <option value="16">JMX agent</option>
+                    <option value="17">SNMP trap</option>
+                    <option value="18">Dependent item</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="value_type" class="form-label">值类型</label>
+                <select class="form-select" id="value_type" name="value_type" required>
+                    <option value="0">Numeric (float)</option>
+                    <option value="1">Character</option>
+                    <option value="2">Log</option>
+                    <option value="3">Numeric (unsigned)</option>
+                    <option value="4">Text</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="delay" class="form-label">更新间隔</label>
+                <input type="text" class="form-control" id="delay" name="delay" value="1m" required>
+            </div>
+            <div class="mb-3">
+                <label for="template_name" class="form-label">模板</label>
+                <select class="form-select" id="template_name" name="template_name" required>
+                    {% for template in templates %}
+                    <option value="{{ template }}">{{ template }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description"></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="units" class="form-label">单位</label>
+                <input type="text" class="form-control" id="units" name="units">
+            </div>
+            <div class="mb-3">
+                <label for="multiplier" class="form-label">乘数</label>
+                <input type="number" class="form-control" id="multiplier" name="multiplier" value="0">
+            </div>
+            <div class="mb-3">
+                <label for="delta" class="form-label">Delta</label>
+                <input type="number" class="form-control" id="delta" name="delta" value="0">
+            </div>
+            <div class="mb-3">
+                <label for="history" class="form-label">历史数据保留天数</label>
+                <input type="number" class="form-control" id="history" name="history" value="7">
+            </div>
+            <div class="mb-3">
+                <label for="trends" class="form-label">趋势数据保留天数</label>
+                <input type="number" class="form-control" id="trends" name="trends" value="365">
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0">启用</option>
+                    <option value="1">禁用</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">添加</button>
+            <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

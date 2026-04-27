@@ -1,0 +1,26 @@
+{
+  "table": "mac_templates",
+  "columns": [
+    "id",
+    "name",
+    "description",
+    "created_at",
+    "updated_at"
+  ],
+  "rows": [
+    [
+      19,
+      "21001",
+      "Template OS Linux by Zabbix agent",
+      "2026-04-17T10:41:17.053888",
+      "2026-04-17T10:41:17.053888"
+    ],
+    [
+      20,
+      "Template OS Linux by Zabbix agent",
+      "Template OS Linux by Zabbix agent 模板 - 自动解析",
+      "2026-04-20T02:40:44.959459",
+      "2026-04-20T02:40:44.959459"
+    ]
+  ]
+}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑触发器原型复核记录</h1>
+    <form method="post">
+        <div class="mb-3">
+            <label for="host_ip" class="form-label">主机 IP</label>
+            <input type="text" class="form-control" id="host_ip" name="host_ip" value="{{ prototype.host_ip }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="description" class="form-label">描述</label>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label for="expression" class="form-label">表达式</label>
+            <input type="text" class="form-control" id="expression" name="expression" value="{{ prototype.expression }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="priority" class="form-label">优先级</label>
+            <input type="number" class="form-control" id="priority" name="priority" value="{{ prototype.priority }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="status" class="form-label">状态</label>
+            <input type="number" class="form-control" id="status" name="status" value="{{ prototype.status }}">
+        </div>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <a href="{{ url_for('trigger_prototypes_review') }}" class="btn btn-secondary">取消</a>
+    </form>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="mb-4">系统信息</h1>
+    
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">主机数</h5>
+                    <p class="card-text display-4">{{ stats.hosts }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">模板数</h5>
+                    <p class="card-text display-4">{{ stats.templates }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">监控项</h5>
+                    <p class="card-text display-4">{{ stats['items'] }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">触发器</h5>
+                    <p class="card-text display-4">{{ stats.triggers }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">自动发现规则</h5>
+                    <p class="card-text display-4">{{ stats.discovery_rules }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="mt-5 mb-3">主机列表</h2>
+    <table class="table table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>主机名</th>
+                <th>关联模板</th>
+                <th>监控项数量</th>
+                <th>触发器数量</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for host in hosts %}
+            <tr>
+                <td>{{ host.id }}</td>
+                <td>{{ host.name }}</td>
+                <td>{{ host.template_name or '未关联' }}</td>
+                <td>{{ host.item_count }}</td>
+                <td>{{ host.trigger_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="mt-4">
+        <a href="{{ url_for('system_info') }}" class="btn btn-primary">查看完整系统详情</a>
+    </div>
+{% endblock %}

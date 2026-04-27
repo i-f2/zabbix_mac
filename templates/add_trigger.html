@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>添加触发器</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="name" class="form-label">名称</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="expression" class="form-label">表达式</label>
+                <input type="text" class="form-control" id="expression" name="expression" required>
+                <small class="form-text text-muted">例如: {host:system.cpu.util.last()}>90</small>
+            </div>
+            <div class="mb-3">
+                <label for="priority" class="form-label">优先级</label>
+                <select class="form-select" id="priority" name="priority" required>
+                    <option value="0">Not classified</option>
+                    <option value="1">Information</option>
+                    <option value="2">Warning</option>
+                    <option value="3">Average</option>
+                    <option value="4">High</option>
+                    <option value="5">Disaster</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="template_name" class="form-label">模板</label>
+                <select class="form-select" id="template_name" name="template_name" required>
+                    {% for template in templates %}
+                    <option value="{{ template }}">{{ template }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description"></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0">启用</option>
+                    <option value="1">禁用</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">添加</button>
+            <a href="{{ url_for('triggers') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

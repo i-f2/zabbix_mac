@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="mb-4">触发器原型管理</h1>
+    
+    <table class="table table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>模板名称</th>
+                <th>发现规则</th>
+                <th>描述</th>
+                <th>优先级</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proto in prototypes %}
+            <tr>
+                <td>{{ proto.id }}</td>
+                <td>{{ proto.template_name }}</td>
+                <td>{{ proto.rule_name }}</td>
+                <td>{{ proto.description }}</td>
+                <td>
+                    {% if proto.priority == 0 %}
+                    <span class="badge bg-secondary">未分类</span>
+                    {% elif proto.priority == 1 %}
+                    <span class="badge bg-info">信息</span>
+                    {% elif proto.priority == 2 %}
+                    <span class="badge bg-warning">警告</span>
+                    {% elif proto.priority == 3 %}
+                    <span class="badge bg-danger">严重</span>
+                    {% elif proto.priority == 4 %}
+                    <span class="badge bg-dark">灾难</span>
+                    {% else %}
+                    {{ proto.priority }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if proto.status == 0 %}
+                    <span class="badge bg-success">启用</span>
+                    {% else %}
+                    <span class="badge bg-secondary">禁用</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

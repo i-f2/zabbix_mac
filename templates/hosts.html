@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>主机管理</h1>
+    <div class="mt-4">
+        <a href="{{ url_for('add_host') }}" class="btn btn-primary mb-3">添加主机</a>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>关联模板</th>
+                    <th>系统名称</th>
+                    <th>模块名称</th>
+                    <th>描述</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for host in hosts %}
+                <tr>
+                    <td>{{ host.id }}</td>
+                    <td>{{ host.name }}</td>
+                    <td>{{ host.template_name or '未设置' }}</td>
+                    <td>{{ host.system or '未设置' }}</td>
+                    <td>{{ host.subsystem or '未设置' }}</td>
+                    <td>{{ host.description }}</td>
+                    <td>{{ host.created_at }}</td>
+                    <td>
+                        <a href="{{ url_for('edit_host', host_id=host.id) }}" class="btn btn-sm btn-info">编辑</a>
+                        <a href="{{ url_for('delete_host', host_id=host.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑主机</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="name" class="form-label">主机名</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ host.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="template_name" class="form-label">关联模板</label>
+                <input type="text" class="form-control" id="template_name" name="template_name" value="{{ host.template_name or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description">{{ host.description }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="system" class="form-label">系统名称</label>
+                <input type="text" class="form-control" id="system" name="system" value="{{ host.system or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="subsystem" class="form-label">模块名称</label>
+                <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ host.subsystem or '' }}">
+            </div>
+            <button type="submit" class="btn btn-primary">更新</button>
+            <a href="{{ url_for('hosts') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

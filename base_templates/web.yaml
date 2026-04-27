@@ -1,0 +1,48 @@
+# Web 场景监控
+
+# Web 场景
+web_scenarios:
+  # 示例：网站可用性监控
+  - name: "Website Availability"
+    key: "web.check"
+    delay: "5m"
+    status: 0  # 0 表示启用
+    steps:
+      - name: "Homepage"
+        url: "http://localhost"
+        status_codes: "200"
+        no: 1
+      - name: "Login Page"
+        url: "http://localhost/login"
+        status_codes: "200"
+        no: 2
+    triggers:
+      - description: "Website is down"
+        expression: "min(5m)<1"
+        priority: 3
+      - description: "Website response time is high"
+        expression: "max(5m)>5"
+        priority: 2
+
+# Web 场景监控项
+web_items:
+  # 示例：网站响应时间监控
+  - name: "Website response time"
+    key: "web.test.time[Website Availability,Homepage,resp]"
+    type: 9  # 9 表示 Web 场景
+    value_type: 0
+    delay: "5m"
+  - name: "Website response code"
+    key: "web.test.rspcode[Website Availability,Homepage]"
+    type: 9
+    value_type: 3
+    delay: "5m"
+
+# Web 场景触发器
+web_triggers:
+  - description: "Website response time is too high (>5s)"
+    expression: "{host:web.test.time[Website Availability,Homepage,resp].last()}>5"
+    priority: 3
+  - description: "Website returned error status code"
+    expression: "{host:web.test.rspcode[Website Availability,Homepage].last()}<>200"
+    priority: 3

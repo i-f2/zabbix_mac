@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>监控项管理</h1>
+    <div class="mt-4">
+        <a href="{{ url_for('add_item') }}" class="btn btn-primary mb-3">添加监控项</a>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>键值</th>
+                    <th>名称</th>
+                    <th>模板</th>
+                    <th>更新间隔</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.item_key }}</td>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.template_name }}</td>
+                    <td>{{ item.delay }}</td>
+                    <td>{{ '启用' if item.status == 0 else '禁用' }}</td>
+                    <td>
+                        <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-sm btn-info">编辑</a>
+                        <a href="{{ url_for('delete_item', item_id=item.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

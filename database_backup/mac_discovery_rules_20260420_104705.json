@@ -1,0 +1,115 @@
+{
+  "table": "mac_discovery_rules",
+  "columns": [
+    "id",
+    "name",
+    "key",
+    "delay",
+    "evaltype",
+    "status",
+    "template_name",
+    "created_at",
+    "updated_at"
+  ],
+  "rows": [
+    [
+      50,
+      "Network interface discovery",
+      "net.if.discovery",
+      "1h",
+      0,
+      0,
+      "21001",
+      "2026-04-17T10:41:18.801194",
+      "2026-04-17T10:41:18.801194"
+    ],
+    [
+      51,
+      "Mounted filesystem discovery",
+      "vfs.fs.discovery",
+      "1h",
+      0,
+      0,
+      "21001",
+      "2026-04-17T10:41:18.801194",
+      "2026-04-17T10:41:18.801194"
+    ],
+    [
+      52,
+      "Block devices discovery",
+      "vfs.dev.discovery",
+      "1h",
+      0,
+      0,
+      "21001",
+      "2026-04-17T10:41:18.801194",
+      "2026-04-17T10:41:18.801194"
+    ],
+    [
+      53,
+      "Network interface discovery",
+      "net.if.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:42:07.140677",
+      "2026-04-20T02:42:07.140677"
+    ],
+    [
+      54,
+      "Mounted filesystem discovery",
+      "vfs.fs.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:42:07.628637",
+      "2026-04-20T02:42:07.628637"
+    ],
+    [
+      55,
+      "Block devices discovery",
+      "vfs.dev.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:42:07.927010",
+      "2026-04-20T02:42:07.927010"
+    ],
+    [
+      56,
+      "Network interface discovery",
+      "net.if.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:43:02.557033",
+      "2026-04-20T02:43:02.557033"
+    ],
+    [
+      57,
+      "Mounted filesystem discovery",
+      "vfs.fs.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:43:02.973276",
+      "2026-04-20T02:43:02.973276"
+    ],
+    [
+      58,
+      "Block devices discovery",
+      "vfs.dev.discovery",
+      "1h",
+      0,
+      0,
+      "Template OS Linux by Zabbix agent",
+      "2026-04-20T02:43:03.190515",
+      "2026-04-20T02:43:03.190515"
+    ]
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "table": "mac_trigger_dependencies",
+  "columns": [
+    "id",
+    "template_name",
+    "trigger_name",
+    "dependency_name",
+    "created_at"
+  ],
+  "rows": []
+}

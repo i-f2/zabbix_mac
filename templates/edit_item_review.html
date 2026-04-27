@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑监控项复核记录</h1>
+    <form method="post">
+        <div class="mb-3">
+            <label for="host_ip" class="form-label">主机 IP</label>
+            <input type="text" class="form-control" id="host_ip" name="host_ip" value="{{ item.host_ip }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="item_key" class="form-label">监控项键值</label>
+            <input type="text" class="form-control" id="item_key" name="item_key" value="{{ item.item_key }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">名称</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="type" class="form-label">类型</label>
+            <input type="number" class="form-control" id="type" name="type" value="{{ item.type }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="value_type" class="form-label">值类型</label>
+            <input type="number" class="form-control" id="value_type" name="value_type" value="{{ item.value_type }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="delay" class="form-label">延迟</label>
+            <input type="text" class="form-control" id="delay" name="delay" value="{{ item.delay }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="description" class="form-label">描述</label>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ item.description }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label for="units" class="form-label">单位</label>
+            <input type="text" class="form-control" id="units" name="units" value="{{ item.units }}">
+        </div>
+        <div class="mb-3">
+            <label for="multiplier" class="form-label">乘数</label>
+            <input type="number" class="form-control" id="multiplier" name="multiplier" value="{{ item.multiplier }}">
+        </div>
+        <div class="mb-3">
+            <label for="delta" class="form-label">增量</label>
+            <input type="number" class="form-control" id="delta" name="delta" value="{{ item.delta }}">
+        </div>
+        <div class="mb-3">
+            <label for="history" class="form-label">历史保留天数</label>
+            <input type="number" class="form-control" id="history" name="history" value="{{ item.history }}">
+        </div>
+        <div class="mb-3">
+            <label for="trends" class="form-label">趋势保留天数</label>
+            <input type="number" class="form-control" id="trends" name="trends" value="{{ item.trends }}">
+        </div>
+        <div class="mb-3">
+            <label for="status" class="form-label">状态</label>
+            <input type="number" class="form-control" id="status" name="status" value="{{ item.status }}">
+        </div>
+        <div class="mb-3">
+            <label for="template_name" class="form-label">模板名称</label>
+            <input type="text" class="form-control" id="template_name" name="template_name" value="{{ item.template_name }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="system" class="form-label">系统名称</label>
+            <input type="text" class="form-control" id="system" name="system" value="{{ item.system }}">
+        </div>
+        <div class="mb-3">
+            <label for="subsystem" class="form-label">模块名称</label>
+            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ item.subsystem }}">
+        </div>
+        <div class="mb-3">
+            <label for="master_item" class="form-label">主监控项</label>
+            <input type="text" class="form-control" id="master_item" name="master_item" value="{{ item.master_item }}" placeholder="主监控项的键值">
+        </div>
+        <div class="mb-3">
+            <label for="preprocessing" class="form-label">预处理步骤 (JSON格式)</label>
+            <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3">{{ item.preprocessing }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <a href="{{ url_for('items_review') }}" class="btn btn-secondary">取消</a>
+    </form>
+{% endblock %}

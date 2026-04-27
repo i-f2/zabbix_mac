@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="mb-4">监控项原型管理</h1>
+    
+    <table class="table table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>模板名称</th>
+                <th>发现规则</th>
+                <th>名称</th>
+                <th>键</th>
+                <th>值类型</th>
+                <th>延迟</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proto in prototypes %}
+            <tr>
+                <td>{{ proto.id }}</td>
+                <td>{{ proto.template_name }}</td>
+                <td>{{ proto.rule_name }}</td>
+                <td>{{ proto.name }}</td>
+                <td><code>{{ proto.key }}</code></td>
+                <td>{{ proto.value_type }}</td>
+                <td>{{ proto.delay }}</td>
+                <td>
+                    {% if proto.status == 0 %}
+                    <span class="badge bg-success">启用</span>
+                    {% else %}
+                    <span class="badge bg-secondary">禁用</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

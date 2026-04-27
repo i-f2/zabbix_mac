@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑监控项</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="item_key" class="form-label">键值</label>
+                <input type="text" class="form-control" id="item_key" name="item_key" value="{{ item.item_key }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="name" class="form-label">名称</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="type" class="form-label">类型</label>
+                <select class="form-select" id="type" name="type" required>
+                    <option value="0" {% if item.type == 0 %}selected{% endif %}>Zabbix agent</option>
+                    <option value="1" {% if item.type == 1 %}selected{% endif %}>SNMPv1 agent</option>
+                    <option value="2" {% if item.type == 2 %}selected{% endif %}>Zabbix trapper</option>
+                    <option value="3" {% if item.type == 3 %}selected{% endif %}>Simple check</option>
+                    <option value="4" {% if item.type == 4 %}selected{% endif %}>SNMPv2 agent</option>
+                    <option value="5" {% if item.type == 5 %}selected{% endif %}>Zabbix internal</option>
+                    <option value="6" {% if item.type == 6 %}selected{% endif %}>SNMPv3 agent</option>
+                    <option value="7" {% if item.type == 7 %}selected{% endif %}>Zabbix agent (active)</option>
+                    <option value="8" {% if item.type == 8 %}selected{% endif %}>Zabbix aggregate</option>
+                    <option value="9" {% if item.type == 9 %}selected{% endif %}>Web item</option>
+                    <option value="10" {% if item.type == 10 %}selected{% endif %}>External check</option>
+                    <option value="11" {% if item.type == 11 %}selected{% endif %}>Database monitor</option>
+                    <option value="12" {% if item.type == 12 %}selected{% endif %}>IPMI agent</option>
+                    <option value="13" {% if item.type == 13 %}selected{% endif %}>SSH agent</option>
+                    <option value="14" {% if item.type == 14 %}selected{% endif %}>TELNET agent</option>
+                    <option value="15" {% if item.type == 15 %}selected{% endif %}>Calculated</option>
+                    <option value="16" {% if item.type == 16 %}selected{% endif %}>JMX agent</option>
+                    <option value="17" {% if item.type == 17 %}selected{% endif %}>SNMP trap</option>
+                    <option value="18" {% if item.type == 18 %}selected{% endif %}>Dependent item</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="value_type" class="form-label">值类型</label>
+                <select class="form-select" id="value_type" name="value_type" required>
+                    <option value="0" {% if item.value_type == 0 %}selected{% endif %}>Numeric (float)</option>
+                    <option value="1" {% if item.value_type == 1 %}selected{% endif %}>Character</option>
+                    <option value="2" {% if item.value_type == 2 %}selected{% endif %}>Log</option>
+                    <option value="3" {% if item.value_type == 3 %}selected{% endif %}>Numeric (unsigned)</option>
+                    <option value="4" {% if item.value_type == 4 %}selected{% endif %}>Text</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="delay" class="form-label">更新间隔</label>
+                <input type="text" class="form-control" id="delay" name="delay" value="{{ item.delay }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="template_name" class="form-label">模板</label>
+                <select class="form-select" id="template_name" name="template_name" required>
+                    {% for template in templates %}
+                    <option value="{{ template }}" {% if item.template_name == template %}selected{% endif %}>{{ template }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description">{{ item.description }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="units" class="form-label">单位</label>
+                <input type="text" class="form-control" id="units" name="units" value="{{ item.units }}">
+            </div>
+            <div class="mb-3">
+                <label for="multiplier" class="form-label">乘数</label>
+                <input type="number" class="form-control" id="multiplier" name="multiplier" value="{{ item.multiplier }}">
+            </div>
+            <div class="mb-3">
+                <label for="delta" class="form-label">Delta</label>
+                <input type="number" class="form-control" id="delta" name="delta" value="{{ item.delta }}">
+            </div>
+            <div class="mb-3">
+                <label for="history" class="form-label">历史数据保留天数</label>
+                <input type="number" class="form-control" id="history" name="history" value="{{ item.history }}">
+            </div>
+            <div class="mb-3">
+                <label for="trends" class="form-label">趋势数据保留天数</label>
+                <input type="number" class="form-control" id="trends" name="trends" value="{{ item.trends }}">
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0" {% if item.status == 0 %}selected{% endif %}>启用</option>
+                    <option value="1" {% if item.status == 1 %}selected{% endif %}>禁用</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">更新</button>
+            <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

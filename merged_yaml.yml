@@ -1,0 +1,11 @@
+# 合并后的 YAML 配置
+# 生成时间: 自动生成
+
+key1: value1
+key2:
+  subkey1: subvalue1
+  subkey2: subvalue2
+key3:
+- item1
+- item2
+- item3

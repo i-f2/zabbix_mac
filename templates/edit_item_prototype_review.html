@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑监控项原型复核记录</h1>
+    <form method="post">
+        <div class="mb-3">
+            <label for="host_ip" class="form-label">主机 IP</label>
+            <input type="text" class="form-control" id="host_ip" name="host_ip" value="{{ prototype.host_ip }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">名称</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ prototype.name }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="key" class="form-label">键值</label>
+            <input type="text" class="form-control" id="key" name="key" value="{{ prototype.key }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="value_type" class="form-label">值类型</label>
+            <input type="number" class="form-control" id="value_type" name="value_type" value="{{ prototype.value_type }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="delay" class="form-label">延迟</label>
+            <input type="text" class="form-control" id="delay" name="delay" value="{{ prototype.delay }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="description" class="form-label">描述</label>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label for="units" class="form-label">单位</label>
+            <input type="text" class="form-control" id="units" name="units" value="{{ prototype.units }}">
+        </div>
+        <div class="mb-3">
+            <label for="multiplier" class="form-label">乘数</label>
+            <input type="number" class="form-control" id="multiplier" name="multiplier" value="{{ prototype.multiplier }}">
+        </div>
+        <div class="mb-3">
+            <label for="delta" class="form-label">增量</label>
+            <input type="number" class="form-control" id="delta" name="delta" value="{{ prototype.delta }}">
+        </div>
+        <div class="mb-3">
+            <label for="history" class="form-label">历史保留天数</label>
+            <input type="number" class="form-control" id="history" name="history" value="{{ prototype.history }}">
+        </div>
+        <div class="mb-3">
+            <label for="trends" class="form-label">趋势保留天数</label>
+            <input type="number" class="form-control" id="trends" name="trends" value="{{ prototype.trends }}">
+        </div>
+        <div class="mb-3">
+            <label for="status" class="form-label">状态</label>
+            <input type="number" class="form-control" id="status" name="status" value="{{ prototype.status }}">
+        </div>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <a href="{{ url_for('item_prototypes_review') }}" class="btn btn-secondary">取消</a>
+    </form>
+{% endblock %}

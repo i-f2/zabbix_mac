@@ -1,0 +1,54 @@
+# 请将每张图片中的YAML内容复制粘贴到下方对应的位置
+# 我会帮你合并、标准化（转换为snake_case）并生成最终文件
+
+---
+# IMG_0018.png
+{请将IMG_0018.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0019.png
+{请将IMG_0019.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0020.png
+{请将IMG_0020.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0021.png
+{请将IMG_0021.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0022.png
+{请将IMG_0022.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0023.png
+{请将IMG_0023.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0024.png
+{请将IMG_0024.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0025.png
+{请将IMG_0025.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0026.png
+{请将IMG_0026.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0027.png
+{请将IMG_0027.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0028.png
+{请将IMG_0028.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0029.png
+{请将IMG_0029.png中的YAML内容粘贴到这里}
+
+---
+# IMG_0030.png
+{请将IMG_0030.png中的YAML内容粘贴到这里}

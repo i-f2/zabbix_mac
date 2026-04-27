@@ -1,0 +1,19 @@
+# Zabbix Monitor as Code 配置文件示例
+
+# 主机配置
+hosts:
+  # 主机名
+  Zabbix server:
+    # 引用的模板
+    templates:
+      - 21001
+    # 额外监控项（优先级最高）
+    extra_items:
+      items:
+        # 自定义监控项
+        custom.metric:
+          name: 自定义指标
+          type: 0  # Zabbix agent
+          value_type: 3  # 浮点数
+          delay: 60  # 60秒
+          key_: custom.metric

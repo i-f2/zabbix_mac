@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>模板详情: {{ template.name }}</h1>
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">模板信息</h5>
+                <p class="card-text"><strong>描述:</strong> {{ template.description }}</p>
+                <p class="card-text"><strong>创建时间:</strong> {{ template.created_at }}</p>
+                <p class="card-text"><strong>更新时间:</strong> {{ template.updated_at }}</p>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <h3>监控项 ({{ items|length }})</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>键值</th>
+                        <th>名称</th>
+                        <th>类型</th>
+                        <th>值类型</th>
+                        <th>更新间隔</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td><code>{{ item.item_key }}</code></td>
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.type }}</td>
+                        <td>{{ item.value_type }}</td>
+                        <td>{{ item.delay }}</td>
+                        <td>
+                            {% if item.status == 0 %}
+                            <span class="badge bg-success">启用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4">
+            <h3>触发器 ({{ triggers|length }})</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>表达式</th>
+                        <th>优先级</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trigger in triggers %}
+                    <tr>
+                        <td>{{ trigger.name }}</td>
+                        <td><code>{{ trigger.expression }}</code></td>
+                        <td>
+                            {% if trigger.priority == 0 %}
+                            <span class="badge bg-secondary">未分类</span>
+                            {% elif trigger.priority == 1 %}
+                            <span class="badge bg-info">信息</span>
+                            {% elif trigger.priority == 2 %}
+                            <span class="badge bg-warning">警告</span>
+                            {% elif trigger.priority == 3 %}
+                            <span class="badge bg-danger">严重</span>
+                            {% elif trigger.priority == 4 %}
+                            <span class="badge bg-dark">灾难</span>
+                            {% else %}
+                            {{ trigger.priority }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if trigger.status == 0 %}
+                            <span class="badge bg-success">启用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4">
+            <h3>自动发现规则 ({{ discovery_rules|length }})</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>键值</th>
+                        <th>更新间隔</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in discovery_rules %}
+                    <tr>
+                        <td>{{ rule.name }}</td>
+                        <td><code>{{ rule.key }}</code></td>
+                        <td>{{ rule.delay }}</td>
+                        <td>
+                            {% if rule.status == 0 %}
+                            <span class="badge bg-success">启用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4">
+            <h3>监控项原型 ({{ item_prototypes|length }})</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>发现规则</th>
+                        <th>名称</th>
+                        <th>键值</th>
+                        <th>值类型</th>
+                        <th>更新间隔</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for proto in item_prototypes %}
+                    {% set rule = discovery_rules|selectattr('id', 'equalto', proto.discovery_rule_id)|first %}
+                    <tr>
+                        <td>{{ rule.name if rule else 'N/A' }}</td>
+                        <td>{{ proto.name }}</td>
+                        <td><code>{{ proto.key }}</code></td>
+                        <td>{{ proto.value_type }}</td>
+                        <td>{{ proto.delay }}</td>
+                        <td>
+                            {% if proto.status == 0 %}
+                            <span class="badge bg-success">启用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4">
+            <h3>触发器原型 ({{ trigger_prototypes|length }})</h3>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>发现规则</th>
+                        <th>描述</th>
+                        <th>表达式</th>
+                        <th>优先级</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for proto in trigger_prototypes %}
+                    {% set rule = discovery_rules|selectattr('id', 'equalto', proto.discovery_rule_id)|first %}
+                    <tr>
+                        <td>{{ rule.name if rule else 'N/A' }}</td>
+                        <td>{{ proto.description }}</td>
+                        <td><code>{{ proto.expression }}</code></td>
+                        <td>
+                            {% if proto.priority == 0 %}
+                            <span class="badge bg-secondary">未分类</span>
+                            {% elif proto.priority == 1 %}
+                            <span class="badge bg-info">信息</span>
+                            {% elif proto.priority == 2 %}
+                            <span class="badge bg-warning">警告</span>
+                            {% elif proto.priority == 3 %}
+                            <span class="badge bg-danger">严重</span>
+                            {% elif proto.priority == 4 %}
+                            <span class="badge bg-dark">灾难</span>
+                            {% else %}
+                            {{ proto.priority }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if proto.status == 0 %}
+                            <span class="badge bg-success">启用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">禁用</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}
