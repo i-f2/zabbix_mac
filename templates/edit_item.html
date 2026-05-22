@@ -60,11 +60,11 @@
             </div>
             <div class="mb-3">
                 <label for="description" class="form-label">描述</label>
-                <textarea class="form-control" id="description" name="description">{{ item.description }}</textarea>
+                <textarea class="form-control" id="description" name="description">{{ item.description or '' }}</textarea>
             </div>
             <div class="mb-3">
                 <label for="units" class="form-label">单位</label>
-                <input type="text" class="form-control" id="units" name="units" value="{{ item.units }}">
+                <input type="text" class="form-control" id="units" name="units" value="{{ item.units or '' }}">
             </div>
             <div class="mb-3">
                 <label for="multiplier" class="form-label">乘数</label>
@@ -88,6 +88,14 @@
                     <option value="0" {% if item.status == 0 %}selected{% endif %}>启用</option>
                     <option value="1" {% if item.status == 1 %}selected{% endif %}>禁用</option>
                 </select>
+            </div>
+            <div class="mb-3">
+                <label for="master_item" class="form-label">主监控项</label>
+                <input type="text" class="form-control" id="master_item" name="master_item" value="{{ item.master_item or '' }}" placeholder="如: item.key">
+            </div>
+            <div class="mb-3">
+                <label for="preprocessing" class="form-label">预处理 (JSON格式)</label>
+                <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3" placeholder="[{\"type\": 0, \"params\": \"\"}]">{{ item.preprocessing or '' }}</textarea>
             </div>
             <button type="submit" class="btn btn-primary">更新</button>
             <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>

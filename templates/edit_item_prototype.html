@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑监控项原型</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="name" class="form-label">名称</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ proto.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="key" class="form-label">键值</label>
+                <input type="text" class="form-control" id="key" name="key" value="{{ proto.key }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="value_type" class="form-label">值类型</label>
+                <select class="form-select" id="value_type" name="value_type" required>
+                    <option value="0" {% if proto.value_type == 0 %}selected{% endif %}>Numeric (float)</option>
+                    <option value="1" {% if proto.value_type == 1 %}selected{% endif %}>Character</option>
+                    <option value="2" {% if proto.value_type == 2 %}selected{% endif %}>Log</option>
+                    <option value="3" {% if proto.value_type == 3 %}selected{% endif %}>Numeric (unsigned)</option>
+                    <option value="4" {% if proto.value_type == 4 %}selected{% endif %}>Text</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="delay" class="form-label">更新间隔</label>
+                <input type="text" class="form-control" id="delay" name="delay" value="{{ proto.delay }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description">{{ proto.description or '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="units" class="form-label">单位</label>
+                <input type="text" class="form-control" id="units" name="units" value="{{ proto.units or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="multiplier" class="form-label">乘数</label>
+                <input type="number" class="form-control" id="multiplier" name="multiplier" value="{{ proto.multiplier }}">
+            </div>
+            <div class="mb-3">
+                <label for="delta" class="form-label">Delta</label>
+                <input type="number" class="form-control" id="delta" name="delta" value="{{ proto.delta }}">
+            </div>
+            <div class="mb-3">
+                <label for="history" class="form-label">历史数据保留天数</label>
+                <input type="number" class="form-control" id="history" name="history" value="{{ proto.history }}">
+            </div>
+            <div class="mb-3">
+                <label for="trends" class="form-label">趋势数据保留天数</label>
+                <input type="number" class="form-control" id="trends" name="trends" value="{{ proto.trends }}">
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0" {% if proto.status == 0 %}selected{% endif %}>启用</option>
+                    <option value="1" {% if proto.status == 1 %}selected{% endif %}>禁用</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">更新</button>
+            <a href="{{ url_for('item_prototypes') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

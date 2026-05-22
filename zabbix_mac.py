@@ -755,10 +755,10 @@ class ZabbixClient:
         """
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in scenario_data:
-                    scenario_data["tags"] = []
-                scenario_data["tags"].append(MANAGED_TAG)
+                # 注意：Zabbix 5.0 API 不支持 web 场景的 tags 参数
+                # 移除可能存在的 tags 参数
+                if "tags" in scenario_data:
+                    del scenario_data["tags"]
                 
                 result = self.api.httptest.create(scenario_data)
                 if "httptestids" in result and result["httptestids"]:
@@ -870,27 +870,13 @@ class ZabbixClient:
         """
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 提取discoveryruleid
-                discoveryruleid = prototype_data.pop('discoveryruleid', None)
-                
                 # 添加管理标签
                 if "tags" not in prototype_data:
                     prototype_data["tags"] = []
                 prototype_data["tags"].append(MANAGED_TAG)
                 
-                # 对于Zabbix 5.0，使用正确的参数格式
-                if discoveryruleid:
-                    # Zabbix 5.0 API 要求使用 discoveryids 参数
-                    result = self.api.triggerprototype.create(
-                        discoveryids=discoveryruleid,
-                        description=prototype_data.get('description'),
-                        expression=prototype_data.get('expression'),
-                        priority=prototype_data.get('priority'),
-                        status=prototype_data.get('status', 0),
-                        tags=prototype_data.get('tags', [])
-                    )
-                else:
-                    result = self.api.triggerprototype.create(prototype_data)
+                # 直接使用完整的prototype_data创建，包含discoveryruleid
+                result = self.api.triggerprototype.create(prototype_data)
                 
                 prototype_id = result["triggerids"][0]
                 logger.info(f"成功创建触发器原型: {prototype_data.get('description')} (ID: {prototype_id})")
@@ -1223,7 +1209,7 @@ class ConfigLoader:
                         "priority": row['priority'],
                     }
                     
-                    if row['description']:
+                    if row['description'] and row['description'] != 'None':
                         trigger_config['description'] = row['description']
                     if row['status']:
                         trigger_config['status'] = row['status']
@@ -1269,11 +1255,22 @@ class ConfigLoader:
                         cond_rows = cur2.fetchall()
                         logger.info(f"规则 {row['name']} 有 {len(cond_rows)} 个过滤条件")
                         
+                        OPERATOR_MAP = {
+                            'EQUALS': 0,
+                            'NOT_EQUAL': 1,
+                            'CONTAINS': 2,
+                            'NOT_CONTAINS': 3,
+                            'MATCHES_REGEX': 4,
+                            'NOT_MATCHES_REGEX': 5
+                        }
+                        
                         for cond_row in cond_rows:
+                            operator_str = cond_row['operator']
+                            operator_num = OPERATOR_MAP.get(operator_str, 0)
                             rule_config['filter']['conditions'].append({
                                 "macro": cond_row['macro'],
                                 "value": cond_row['value'],
-                                "operator": cond_row['operator']
+                                "operator": operator_num
                             })
                     
                     # 加载监控项原型（从复核表）
@@ -1553,8 +1550,114 @@ class ConfigLoader:
             logger.error(f"初始化 triggers_review 表失败: {e}")
             return False
     
+    def initialize_item_prototypes_review(self) -> bool:
+        """初始化 item_prototypes_review 表
+        
+        Returns:
+            是否成功
+        """
+        if not self.connection:
+            if not self.connect_db():
+                return False
+        
+        try:
+            logger.info("开始初始化 item_prototypes_review 表...")
+            
+            with self.connection.cursor() as cur:
+                logger.info("清空 item_prototypes_review 表...")
+                cur.execute("DELETE FROM item_prototypes_review")
+                logger.info(f"删除了 {cur.rowcount} 条记录")
+                
+                logger.info("初始化 item_prototypes_review 表...")
+                cur.execute("""
+                    INSERT INTO item_prototypes_review (
+                        item_prototype_id, discovery_rule_id, host_ip, name, key, value_type, delay,
+                        description, units, multiplier, delta, history, trends, status,
+                        system, subsystem, modified, confirmed, status_verification
+                    )
+                    SELECT 
+                        ip.id,
+                        ip.discovery_rule_id,
+                        h.name as host_ip,
+                        ip.name,
+                        ip.key,
+                        ip.value_type,
+                        ip.delay,
+                        ip.description,
+                        ip.units,
+                        ip.multiplier,
+                        ip.delta,
+                        ip.history,
+                        ip.trends,
+                        ip.status,
+                        h.system,
+                        h.subsystem,
+                        false,
+                        false,
+                        'pending'
+                    FROM item_prototypes ip
+                    CROSS JOIN hosts h
+                    JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+                    WHERE dr.template_name = '21001'
+                """)
+                logger.info(f"插入了 {cur.rowcount} 条记录到 item_prototypes_review 表")
+            
+            return True
+        except Exception as e:
+            logger.error(f"初始化 item_prototypes_review 表失败: {e}")
+            return False
+    
+    def initialize_trigger_prototypes_review(self) -> bool:
+        """初始化 trigger_prototypes_review 表
+        
+        Returns:
+            是否成功
+        """
+        if not self.connection:
+            if not self.connect_db():
+                return False
+        
+        try:
+            logger.info("开始初始化 trigger_prototypes_review 表...")
+            
+            with self.connection.cursor() as cur:
+                logger.info("清空 trigger_prototypes_review 表...")
+                cur.execute("DELETE FROM trigger_prototypes_review")
+                logger.info(f"删除了 {cur.rowcount} 条记录")
+                
+                logger.info("初始化 trigger_prototypes_review 表...")
+                cur.execute("""
+                    INSERT INTO trigger_prototypes_review (
+                        trigger_prototype_id, discovery_rule_id, host_ip, description, expression, priority, status,
+                        system, subsystem, modified, confirmed, status_verification
+                    )
+                    SELECT 
+                        tp.id,
+                        tp.discovery_rule_id,
+                        h.name as host_ip,
+                        tp.description,
+                        tp.expression,
+                        tp.priority,
+                        tp.status,
+                        h.system,
+                        h.subsystem,
+                        false,
+                        false,
+                        'pending'
+                    FROM trigger_prototypes tp
+                    CROSS JOIN hosts h
+                    JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+                    WHERE dr.template_name = '21001'
+                """)
+                logger.info(f"插入了 {cur.rowcount} 条记录到 trigger_prototypes_review 表")
+            
+            return True
+        except Exception as e:
+            logger.error(f"初始化 trigger_prototypes_review 表失败: {e}")
+            return False
+    
     def initialize_review_tables(self) -> bool:
-        """初始化复核表（items_review 和 triggers_review）
+        """初始化复核表（items_review、triggers_review、item_prototypes_review 和 trigger_prototypes_review）
         
         Returns:
             是否成功
@@ -1572,10 +1675,16 @@ class ConfigLoader:
             # 初始化 triggers_review 表
             success2 = self.initialize_triggers_review()
             
+            # 初始化 item_prototypes_review 表
+            success3 = self.initialize_item_prototypes_review()
+            
+            # 初始化 trigger_prototypes_review 表
+            success4 = self.initialize_trigger_prototypes_review()
+            
             # 提交事务
             self.connection.commit()
             logger.info("复核表初始化完成")
-            return success1 and success2
+            return success1 and success2 and success3 and success4
             
         except psycopg2.OperationalError as e:
             logger.error(f"数据库操作失败: {e}")
@@ -2668,9 +2777,13 @@ class SyncEngine:
                     "name": rule_name,
                     "key_": rule_key,
                     "type": 0,  # 0 表示 Zabbix agent 类型
-                    "delay": rule_config.get("delay", "1m"),
-                    "filter": rule_config.get("filter", {"evaltype": 0, "conditions": []})
+                    "delay": rule_config.get("delay", "1m")
                 }
+                
+                # Zabbix 5.0 API 对 filter 的支持有限，跳过 filter 条件以避免创建失败
+                filter_config = rule_config.get("filter", {})
+                if filter_config.get("conditions"):
+                    logger.warning(f"规则 {rule_name} 包含 filter 条件，但 Zabbix 5.0 API 不支持，将跳过 filter")
                 
                 # 尝试同时添加不同格式的接口参数，以适应不同 Zabbix 版本
                 if interface_id:
@@ -2678,12 +2791,6 @@ class SyncEngine:
                     rule_data["interfaceid"] = interface_id
                     # 某些 Zabbix 版本可能使用 interface
                     rule_data["interface"] = interface_id
-                
-                # 确保 filter 包含 evaltype 和 conditions
-                if "evaltype" not in rule_data["filter"]:
-                    rule_data["filter"]["evaltype"] = 0
-                if "conditions" not in rule_data["filter"]:
-                    rule_data["filter"]["conditions"] = []
                 
                 rule_id = None
                 if rule_key in current_rules_map:
@@ -2760,8 +2867,10 @@ class SyncEngine:
                 if not dry_run:
                     try:
                         # 删除规则（会级联删除关联的原型）
-                        self.zabbix_client.api.discoveryrule.delete([rule["ruleid"]])
-                        self.report_generator.log_change("deleted", "discovery_rule", rule["name"])
+                        delete_id = rule.get("itemid") or rule.get("ruleid")
+                        if delete_id:
+                            self.zabbix_client.api.discoveryrule.delete([delete_id])
+                            self.report_generator.log_change("deleted", "discovery_rule", rule["name"])
                     except ZabbixAPIException as e:
                         logger.error(f"删除 LLD 规则失败: {e}")
                 else:
@@ -3065,10 +3174,8 @@ class SyncEngine:
                 else:
                     # 创建新触发器原型
                     if not dry_run and rule_id != "temp_rule_id":
-                        # 确保传递ruleid参数
                         try:
                             proto_data = {
-                                "discoveryruleid": rule_id,
                                 "description": description,
                                 "expression": expression,
                                 "priority": priority
@@ -3232,16 +3339,15 @@ class ZabbixUltimateAutomator:
                 scenario_data = {
                     "name": item.get("name"),
                     "hostid": host_id,
-                    "agent": default_agent,
-                    "retries": default_retries,
-                    "applicationid": default_applicationid,
+                    "agent": str(default_agent),  # 转换为字符串类型
+                    "retries": str(default_retries),  # 转换为字符串类型
                     "steps": [{
                         "no": 1,
                         "name": item.get("name"),
                         "url": item.get("url"),
-                        "timeout": default_timeout,
+                        "timeout": str(default_timeout),  # 转换为字符串类型
                         "status_codes": item.get("status_code", "200"),
-                        "follow_redirects": default_follow_redirects
+                        "follow_redirects": str(default_follow_redirects)  # 转换为字符串类型
                     }]
                 }
                 
@@ -3285,12 +3391,13 @@ class ZabbixUltimateAutomator:
                     continue
                 
                 # 构建触发器数据
+                # 注意：Zabbix 5.0 API 创建触发器时不需要指定 hostid 或 hosts 参数
+                # 触发器会根据表达式中的主机引用自动关联到相应的主机
                 trigger_data = {
                     "description": f"Web 场景 {scenario_name} 失败",
                     "expression": f"{{{host_name}:web.test.fail[{scenario_name}].count(#3,0,ne)}}>2",
                     "priority": default_priority,
-                    "status": default_status,
-                    "hostid": host_id
+                    "status": default_status
                 }
                 
                 # 创建触发器
@@ -3313,7 +3420,7 @@ class ZabbixUltimateAutomator:
         Args:
             dry_run: 是否模拟运行
             workers: 并发线程数
-            initialize_reviews: 是否初始化两个复核表
+            initialize_reviews: 是否初始化四个复核表（items_review、triggers_review、item_prototypes_review 和 trigger_prototypes_review）
             initialize_items_review: 是否只初始化 items_review 表
             initialize_triggers_review: 是否只初始化 triggers_review 表
             initialize_webscenario_items_review: 是否初始化 webscenario_items_review 表
@@ -3423,7 +3530,7 @@ def main():
     # 操作模式选择
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument("--sync", action="store_true", help="执行同步操作")
-    mode_group.add_argument("--initialize-reviews", action="store_true", help="初始化复核表（items_review 和 triggers_review）")
+    mode_group.add_argument("--initialize-reviews", action="store_true", help="初始化复核表（items_review、triggers_review、item_prototypes_review 和 trigger_prototypes_review）")
     mode_group.add_argument("--initialize-items-review", action="store_true", help="只初始化 items_review 表")
     mode_group.add_argument("--initialize-triggers-review", action="store_true", help="只初始化 triggers_review 表")
     mode_group.add_argument("--initialize-webscenario-items-review", action="store_true", help="初始化 webscenario_items_review 表")
@@ -3473,11 +3580,14 @@ def main():
         'password': args.db_password
     }
     
-    # 如果是同步操作，需要 Zabbix API，否则提供空值
+    # 需要 Zabbix API 的操作
+    need_zabbix_api = args.sync or args.create_web_scenarios or args.create_web_scenario_triggers
+    
+    # 构建 Zabbix API 配置
     automator = ZabbixUltimateAutomator(
-        zabbix_url=args.url if args.sync else "",
-        username=args.username if args.sync else "",
-        password=args.password if args.sync else "",
+        zabbix_url=args.url if need_zabbix_api else "",
+        username=args.username if need_zabbix_api else "",
+        password=args.password if need_zabbix_api else "",
         db_config=db_config,
         dry_run=args.dry_run
     )

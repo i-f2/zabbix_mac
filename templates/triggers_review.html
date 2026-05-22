@@ -11,6 +11,8 @@
                 <th>表达式</th>
                 <th>优先级</th>
                 <th>模板</th>
+                <th>系统名称</th>
+                <th>模块名称</th>
                 <th>修改状态</th>
                 <th>确认状态</th>
                 <th>操作</th>
@@ -25,6 +27,8 @@
                     <td>{{ trigger.expression }}</td>
                     <td>{{ trigger.priority }}</td>
                     <td>{{ trigger.template_name }}</td>
+                    <td>{{ trigger.system or '' }}</td>
+                    <td>{{ trigger.subsystem or '' }}</td>
                     <td>{{ '已修改' if trigger.modified else '未修改' }}</td>
                     <td>{{ '已确认' if trigger.confirmed else '未确认' }}</td>
                     <td>

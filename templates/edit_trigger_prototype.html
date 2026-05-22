@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>编辑触发器原型</h1>
+    <div class="mt-4">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="description" class="form-label">描述</label>
+                <textarea class="form-control" id="description" name="description" required>{{ proto.description }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="expression" class="form-label">表达式</label>
+                <input type="text" class="form-control" id="expression" name="expression" value="{{ proto.expression }}" required>
+                <small class="form-text text-muted">例如: {host:system.cpu.util.last()}>90</small>
+            </div>
+            <div class="mb-3">
+                <label for="priority" class="form-label">优先级</label>
+                <select class="form-select" id="priority" name="priority" required>
+                    <option value="0" {% if proto.priority == 0 %}selected{% endif %}>Not classified</option>
+                    <option value="1" {% if proto.priority == 1 %}selected{% endif %}>Information</option>
+                    <option value="2" {% if proto.priority == 2 %}selected{% endif %}>Warning</option>
+                    <option value="3" {% if proto.priority == 3 %}selected{% endif %}>Average</option>
+                    <option value="4" {% if proto.priority == 4 %}selected{% endif %}>High</option>
+                    <option value="5" {% if proto.priority == 5 %}selected{% endif %}>Disaster</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0" {% if proto.status == 0 %}selected{% endif %}>启用</option>
+                    <option value="1" {% if proto.status == 1 %}selected{% endif %}>禁用</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">更新</button>
+            <a href="{{ url_for('trigger_prototypes') }}" class="btn btn-secondary">取消</a>
+        </form>
+    </div>
+{% endblock %}

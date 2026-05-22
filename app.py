@@ -81,16 +81,201 @@ def template_detail(template_id):
 @app.route('/item-prototypes')
 def item_prototypes():
     """监控项原型管理"""
-    # 由于已删除所有 mac 开头的表，返回空列表
-    prototypes = []
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("""
+            SELECT ip.*, dr.name as rule_name, dr.template_name
+            FROM item_prototypes ip
+            JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+            ORDER BY dr.template_name, dr.name, ip.name
+        """)
+        prototypes = cur.fetchall()
+    conn.close()
     return render_template('item_prototypes.html', prototypes=prototypes)
 
 @app.route('/trigger-prototypes')
 def trigger_prototypes():
     """触发器原型管理"""
-    # 由于已删除所有 mac 开头的表，返回空列表
-    prototypes = []
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("""
+            SELECT tp.*, dr.name as rule_name, dr.template_name
+            FROM trigger_prototypes tp
+            JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+            ORDER BY dr.template_name, dr.name, tp.description
+        """)
+        prototypes = cur.fetchall()
+    conn.close()
     return render_template('trigger_prototypes.html', prototypes=prototypes)
+
+@app.route('/item-prototype/edit/<int:proto_id>', methods=['GET', 'POST'])
+def edit_item_prototype(proto_id):
+    """编辑监控项原型"""
+    conn = get_db_connection()
+    
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM item_prototypes WHERE id = %s", (proto_id,))
+        proto = cur.fetchone()
+    
+    if not proto:
+        flash('监控项原型不存在')
+        return redirect(url_for('item_prototypes'))
+    
+    if request.method == 'POST':
+        name = request.form['name']
+        key = request.form['key']
+        value_type = int(request.form['value_type'])
+        delay = request.form['delay']
+        
+        description = request.form.get('description')
+        units = request.form.get('units')
+        multiplier = request.form.get('multiplier', 0)
+        delta = request.form.get('delta', 0)
+        history = request.form.get('history', 7)
+        trends = request.form.get('trends', 365)
+        status = request.form.get('status', 0)
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE item_prototypes SET name = %s, key = %s, value_type = %s, 
+                                               delay = %s, description = %s, units = %s, 
+                                               multiplier = %s, delta = %s, history = %s, 
+                                               trends = %s, status = %s
+                    WHERE id = %s
+                """, (name, key, value_type, delay, description, units, 
+                       multiplier, delta, history, trends, status, proto_id))
+            conn.commit()
+            flash('监控项原型更新成功')
+            return redirect(url_for('item_prototypes'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+    
+    conn.close()
+    return render_template('edit_item_prototype.html', proto=proto)
+
+@app.route('/item-prototype/confirm/<int:proto_id>')
+def confirm_item_prototype(proto_id):
+    """确认监控项原型 - 复制到 item_prototypes_review"""
+    conn = get_db_connection()
+    
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 获取原型数据
+            cur.execute("""
+                SELECT ip.*, dr.host_ip, dr.system, dr.subsystem, dr.template_name
+                FROM item_prototypes ip
+                JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+                WHERE ip.id = %s
+            """, (proto_id,))
+            proto = cur.fetchone()
+            
+            if not proto:
+                flash('监控项原型不存在')
+                return redirect(url_for('item_prototypes'))
+            
+            # 复制到复核表
+            cur.execute("""
+                INSERT INTO item_prototypes_review (
+                    item_prototype_id, discovery_rule_id, name, key, value_type, delay,
+                    description, units, multiplier, delta, history, trends, status,
+                    modified, confirmed, status_verification, host_ip, system, subsystem
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                proto['id'], proto['discovery_rule_id'], proto['name'], proto['key'],
+                proto['value_type'], proto['delay'], proto['description'], proto['units'],
+                proto['multiplier'], proto['delta'], proto['history'], proto['trends'],
+                proto['status'], False, False, 'pending',
+                proto['host_ip'], proto['system'], proto['subsystem']
+            ))
+        
+        conn.commit()
+        flash('监控项原型已添加到复核表')
+    except Exception as e:
+        conn.rollback()
+        flash(f'添加失败: {e}')
+    
+    conn.close()
+    return redirect(url_for('item_prototypes'))
+
+@app.route('/trigger-prototype/edit/<int:proto_id>', methods=['GET', 'POST'])
+def edit_trigger_prototype(proto_id):
+    """编辑触发器原型"""
+    conn = get_db_connection()
+    
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM trigger_prototypes WHERE id = %s", (proto_id,))
+        proto = cur.fetchone()
+    
+    if not proto:
+        flash('触发器原型不存在')
+        return redirect(url_for('trigger_prototypes'))
+    
+    if request.method == 'POST':
+        description = request.form['description']
+        expression = request.form['expression']
+        priority = int(request.form['priority'])
+        status = request.form.get('status', 0)
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE trigger_prototypes SET description = %s, expression = %s, priority = %s, status = %s
+                    WHERE id = %s
+                """, (description, expression, priority, status, proto_id))
+            conn.commit()
+            flash('触发器原型更新成功')
+            return redirect(url_for('trigger_prototypes'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+    
+    conn.close()
+    return render_template('edit_trigger_prototype.html', proto=proto)
+
+@app.route('/trigger-prototype/confirm/<int:proto_id>')
+def confirm_trigger_prototype(proto_id):
+    """确认触发器原型 - 复制到 trigger_prototypes_review"""
+    conn = get_db_connection()
+    
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 获取原型数据
+            cur.execute("""
+                SELECT tp.*, dr.host_ip, dr.system, dr.subsystem
+                FROM trigger_prototypes tp
+                JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+                WHERE tp.id = %s
+            """, (proto_id,))
+            proto = cur.fetchone()
+            
+            if not proto:
+                flash('触发器原型不存在')
+                return redirect(url_for('trigger_prototypes'))
+            
+            # 复制到复核表
+            cur.execute("""
+                INSERT INTO trigger_prototypes_review (
+                    trigger_prototype_id, discovery_rule_id, description, expression, 
+                    priority, status, modified, confirmed, status_verification, 
+                    host_ip, system, subsystem
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                proto['id'], proto['discovery_rule_id'], proto['description'],
+                proto['expression'], proto['priority'], proto['status'],
+                False, False, 'pending',
+                proto['host_ip'], proto['system'], proto['subsystem']
+            ))
+        
+        conn.commit()
+        flash('触发器原型已添加到复核表')
+    except Exception as e:
+        conn.rollback()
+        flash(f'添加失败: {e}')
+    
+    conn.close()
+    return redirect(url_for('trigger_prototypes'))
 
 @app.route('/items')
 def items():
@@ -107,13 +292,11 @@ def add_item():
     """添加监控项"""
     conn = get_db_connection()
     
-    # 获取模板列表
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT name FROM mac_templates ORDER BY name")
-        templates = [row['name'] for row in cur.fetchall()]
+        cur.execute("SELECT DISTINCT template_name FROM items ORDER BY template_name")
+        templates = [row['template_name'] for row in cur.fetchall()]
     
     if request.method == 'POST':
-        # 获取表单数据
         item_key = request.form['item_key']
         name = request.form['name']
         type = int(request.form['type'])
@@ -121,7 +304,6 @@ def add_item():
         delay = request.form['delay']
         template_name = request.form['template_name']
         
-        # 可选字段
         description = request.form.get('description')
         units = request.form.get('units')
         multiplier = request.form.get('multiplier', 0)
@@ -129,16 +311,19 @@ def add_item():
         history = request.form.get('history', 7)
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
+        master_item = request.form.get('master_item') or None
+        preprocessing = request.form.get('preprocessing') or None
         
-        # 插入数据
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO mac_items (item_key, name, type, value_type, delay, description, units, 
-                                          multiplier, delta, history, trends, status, template_name)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO items (item_key, name, type, value_type, delay, description, units, 
+                                          multiplier, delta, history, trends, status, template_name,
+                                          master_item, preprocessing)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (item_key, name, type, value_type, delay, description, units, 
-                       multiplier, delta, history, trends, status, template_name))
+                       multiplier, delta, history, trends, status, template_name,
+                       master_item, preprocessing))
             conn.commit()
             flash('监控项添加成功')
             return redirect(url_for('items'))
@@ -154,22 +339,19 @@ def edit_item(item_id):
     """编辑监控项"""
     conn = get_db_connection()
     
-    # 获取监控项信息
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM mac_items WHERE id = %s", (item_id,))
+        cur.execute("SELECT * FROM items WHERE id = %s", (item_id,))
         item = cur.fetchone()
     
     if not item:
         flash('监控项不存在')
         return redirect(url_for('items'))
     
-    # 获取模板列表
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT name FROM mac_templates ORDER BY name")
-        templates = [row['name'] for row in cur.fetchall()]
+        cur.execute("SELECT DISTINCT template_name FROM items ORDER BY template_name")
+        templates = [row['template_name'] for row in cur.fetchall()]
     
     if request.method == 'POST':
-        # 获取表单数据
         item_key = request.form['item_key']
         name = request.form['name']
         type = int(request.form['type'])
@@ -177,7 +359,6 @@ def edit_item(item_id):
         delay = request.form['delay']
         template_name = request.form['template_name']
         
-        # 可选字段
         description = request.form.get('description')
         units = request.form.get('units')
         multiplier = request.form.get('multiplier', 0)
@@ -185,18 +366,21 @@ def edit_item(item_id):
         history = request.form.get('history', 7)
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
+        master_item = request.form.get('master_item') or None
+        preprocessing = request.form.get('preprocessing') or None
         
-        # 更新数据
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    UPDATE mac_items SET item_key = %s, name = %s, type = %s, value_type = %s, 
+                    UPDATE items SET item_key = %s, name = %s, type = %s, value_type = %s, 
                                         delay = %s, description = %s, units = %s, 
                                         multiplier = %s, delta = %s, history = %s, 
-                                        trends = %s, status = %s, template_name = %s
+                                        trends = %s, status = %s, template_name = %s,
+                                        master_item = %s, preprocessing = %s
                     WHERE id = %s
                 """, (item_key, name, type, value_type, delay, description, units, 
-                       multiplier, delta, history, trends, status, template_name, item_id))
+                       multiplier, delta, history, trends, status, template_name,
+                       master_item, preprocessing, item_id))
             conn.commit()
             flash('监控项更新成功')
             return redirect(url_for('items'))
@@ -213,7 +397,7 @@ def delete_item(item_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM mac_items WHERE id = %s", (item_id,))
+            cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
         conn.commit()
         flash('监控项删除成功')
     except Exception as e:
@@ -227,7 +411,7 @@ def triggers():
     """触发器管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM mac_triggers ORDER BY template_name, name")
+        cur.execute("SELECT * FROM triggers ORDER BY template_name, name")
         triggers = cur.fetchall()
     conn.close()
     return render_template('triggers.html', triggers=triggers)
@@ -237,27 +421,23 @@ def add_trigger():
     """添加触发器"""
     conn = get_db_connection()
     
-    # 获取模板列表
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT name FROM mac_templates ORDER BY name")
-        templates = [row['name'] for row in cur.fetchall()]
+        cur.execute("SELECT DISTINCT template_name FROM triggers ORDER BY template_name")
+        templates = [row['template_name'] for row in cur.fetchall()]
     
     if request.method == 'POST':
-        # 获取表单数据
         name = request.form['name']
         expression = request.form['expression']
         priority = int(request.form['priority'])
         template_name = request.form['template_name']
         
-        # 可选字段
         description = request.form.get('description')
         status = request.form.get('status', 0)
         
-        # 插入数据
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO mac_triggers (name, expression, priority, description, status, template_name)
+                    INSERT INTO triggers (name, expression, priority, description, status, template_name)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (name, expression, priority, description, status, template_name))
             conn.commit()
@@ -275,36 +455,31 @@ def edit_trigger(trigger_id):
     """编辑触发器"""
     conn = get_db_connection()
     
-    # 获取触发器信息
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM mac_triggers WHERE id = %s", (trigger_id,))
+        cur.execute("SELECT * FROM triggers WHERE id = %s", (trigger_id,))
         trigger = cur.fetchone()
     
     if not trigger:
         flash('触发器不存在')
         return redirect(url_for('triggers'))
     
-    # 获取模板列表
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT name FROM mac_templates ORDER BY name")
-        templates = [row['name'] for row in cur.fetchall()]
+        cur.execute("SELECT DISTINCT template_name FROM triggers ORDER BY template_name")
+        templates = [row['template_name'] for row in cur.fetchall()]
     
     if request.method == 'POST':
-        # 获取表单数据
         name = request.form['name']
         expression = request.form['expression']
         priority = int(request.form['priority'])
         template_name = request.form['template_name']
         
-        # 可选字段
         description = request.form.get('description')
         status = request.form.get('status', 0)
         
-        # 更新数据
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    UPDATE mac_triggers SET name = %s, expression = %s, priority = %s, 
+                    UPDATE triggers SET name = %s, expression = %s, priority = %s, 
                                            description = %s, status = %s, template_name = %s
                     WHERE id = %s
                 """, (name, expression, priority, description, status, template_name, trigger_id))
@@ -324,7 +499,7 @@ def delete_trigger(trigger_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM mac_triggers WHERE id = %s", (trigger_id,))
+            cur.execute("DELETE FROM triggers WHERE id = %s", (trigger_id,))
         conn.commit()
         flash('触发器删除成功')
     except Exception as e:

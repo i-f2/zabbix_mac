@@ -12,6 +12,7 @@
                 <th>描述</th>
                 <th>优先级</th>
                 <th>状态</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody>
@@ -42,6 +43,10 @@
                     {% else %}
                     <span class="badge bg-secondary">禁用</span>
                     {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('edit_trigger_prototype', proto_id=proto.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                    <a href="{{ url_for('confirm_trigger_prototype', proto_id=proto.id) }}" class="btn btn-sm btn-success" onclick="return confirm('确认将此记录添加到复核表吗？');">确认</a>
                 </td>
             </tr>
             {% endfor %}

@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS items (
     status INTEGER DEFAULT 0,
     template_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    master_item VARCHAR(255),
+    preprocessing JSONB
 );
 
 -- 2. 触发器表

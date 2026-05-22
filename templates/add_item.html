@@ -89,6 +89,14 @@
                     <option value="1">禁用</option>
                 </select>
             </div>
+            <div class="mb-3">
+                <label for="master_item" class="form-label">主监控项</label>
+                <input type="text" class="form-control" id="master_item" name="master_item" placeholder="如: item.key">
+            </div>
+            <div class="mb-3">
+                <label for="preprocessing" class="form-label">预处理 (JSON格式)</label>
+                <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3" placeholder="[{\"type\": 0, \"params\": \"\"}]"></textarea>
+            </div>
             <button type="submit" class="btn btn-primary">添加</button>
             <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>
         </form>
