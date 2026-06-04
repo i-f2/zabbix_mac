@@ -1,0 +1,17 @@
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.discovery_rules -f zabbix_mac.discovery_rules.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.items -f zabbix_mac.items.20260603.sql
+
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.filter_conditions -f zabbix_mac.filter_conditions.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.host_extra_items -f zabbix_mac.host_extra_items.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.host_templates -f zabbix_mac.host_templates.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.hosts -f zabbix_mac.hosts.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.item_prototypes -f zabbix_mac.item_prototypes.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.item_prototypes_review -f zabbix_mac.item_prototypes_review.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.items_review -f zabbix_mac.items_review.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.templates -f zabbix_mac.templates.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.trigger_prototypes -f zabbix_mac.trigger_prototypes.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.trigger_prototypes_review -f zabbix_mac.trigger_prototypes_review.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.triggers -f zabbix_mac.triggers.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.triggers_review -f zabbix_mac.triggers_review.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.webscenario_items -f zabbix_mac.webscenario_items.20260603.sql
+/opt/local/lib/postgresql14/bin/pg_dump "host=localhost user=fan port=5432 dbname=zabbix_mac" -xO -t public.webscenario_items_review -f zabbix_mac.webscenario_items_review.20260603.sql
