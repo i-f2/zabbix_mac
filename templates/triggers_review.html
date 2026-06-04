@@ -15,6 +15,7 @@
                 <th>模块名称</th>
                 <th>修改状态</th>
                 <th>确认状态</th>
+                <th>状态核验</th>
                 <th>操作</th>
             </tr>
         </thead>
@@ -31,6 +32,15 @@
                     <td>{{ trigger.subsystem or '' }}</td>
                     <td>{{ '已修改' if trigger.modified else '未修改' }}</td>
                     <td>{{ '已确认' if trigger.confirmed else '未确认' }}</td>
+                    <td>
+                        {% if trigger.status_verification == 'verified' %}
+                            <span style="background-color:#28a745;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">已核验</span>
+                        {% elif trigger.status_verification == 'not_found' %}
+                            <span style="background-color:#dc3545;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">未找到</span>
+                        {% else %}
+                            <span style="background-color:#d3d3d3;color:#555;padding:2px 8px;border-radius:4px;font-size:12px">未核验</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not trigger.confirmed %}

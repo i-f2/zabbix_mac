@@ -3290,6 +3290,298 @@ class SyncEngine:
         logger.info("所有主机同步完成")
 
 
+class StatusVerifier:
+    """状态核验器 - 从 Zabbix 拉取实际状态并与复核表比对"""
+
+    def __init__(self, zabbix_client: ZabbixClient, db_config: Dict[str, Any]):
+        """初始化状态核验器
+
+        Args:
+            zabbix_client: Zabbix 客户端
+            db_config: 数据库配置
+        """
+        self.zabbix_client = zabbix_client
+        self.db_config = db_config
+        self.connection = None
+
+    def _get_db_connection(self):
+        """获取数据库连接"""
+        if self.connection and not self.connection.closed:
+            return self.connection
+
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                conn_params = {
+                    'host': self.db_config.get('host', 'localhost'),
+                    'port': self.db_config.get('port', 5432),
+                    'database': self.db_config.get('database', 'zabbix_mac'),
+                    'user': self.db_config.get('user', 'fan'),
+                    'password': self.db_config.get('password', '')
+                }
+                self.connection = psycopg2.connect(**conn_params)
+                self.connection.autocommit = True
+                self.connection.set_client_encoding('UTF8')
+                logger.info("StatusVerifier 成功连接到数据库")
+                return self.connection
+            except psycopg2.OperationalError as e:
+                logger.error(f"数据库连接失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    time.sleep(RETRY_DELAY)
+                else:
+                    raise
+            except Exception as e:
+                logger.error(f"连接数据库时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    time.sleep(RETRY_DELAY)
+                else:
+                    raise
+
+    def verify_items(self, host_ip: str) -> Dict[str, int]:
+        """核验单个主机的监控项
+
+        Args:
+            host_ip: 主机 IP（Zabbix 中的 host name）
+
+        Returns:
+            统计字典 {'verified': n, 'mismatch': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+
+        # 1. 从 DB 获取该 host_ip 的所有 items_review 记录
+        conn = self._get_db_connection()
+        review_items = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, item_key, name, type, value_type, delay FROM items_review WHERE host_ip = %s",
+                (host_ip,)
+            )
+            review_items = cur.fetchall()
+
+        if not review_items:
+            logger.info(f"主机 {host_ip} 的 items_review 表中没有记录，跳过监控项核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_ip} 的 {len(review_items)} 个监控项...")
+
+        # 2. 获取 Zabbix 主机 ID
+        host_id = self.zabbix_client.get_host_id(host_ip)
+        if not host_id:
+            logger.warning(f"主机 {host_ip} 在 Zabbix 中不存在，所有监控项标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE items_review SET status_verification = 'not_found' WHERE host_ip = %s",
+                    (host_ip,)
+                )
+            stats['not_found'] = len(review_items)
+            return stats
+
+        # 3. 从 Zabbix 拉取实际监控项
+        try:
+            zabbix_items = self.zabbix_client.api.item.get(
+                hostids=host_id,
+                output=["itemid", "key_", "name", "type", "value_type", "delay"]
+            )
+            zabbix_items_map = {item["key_"]: item for item in zabbix_items}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_items)} 个监控项")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取监控项失败: {e}")
+            return stats
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取监控项时发生未知错误: {e}")
+            return stats
+
+        # 4. 逐条比对
+        updates = []
+        for ritem in review_items:
+            item_key = ritem['item_key']
+            if item_key not in zabbix_items_map:
+                updates.append(('not_found', ritem['id']))
+                stats['not_found'] += 1
+                logger.debug(f"  监控项 {item_key}: not_found")
+            else:
+                zitem = zabbix_items_map[item_key]
+                # 比对关键字段：name, type, value_type, delay
+                z_name = str(zitem.get('name', ''))
+                z_type = int(zitem.get('type', -1))
+                z_value_type = int(zitem.get('value_type', -1))
+                z_delay = str(zitem.get('delay', ''))
+
+                r_name = str(ritem.get('name', ''))
+                r_type = int(ritem.get('type', -1))
+                r_value_type = int(ritem.get('value_type', -1))
+                r_delay = str(ritem.get('delay', ''))
+
+                mismatch_fields = []
+                if z_name != r_name:
+                    mismatch_fields.append(f"name: '{r_name}' vs '{z_name}'")
+                if z_type != r_type:
+                    mismatch_fields.append(f"type: {r_type} vs {z_type}")
+                if z_value_type != r_value_type:
+                    mismatch_fields.append(f"value_type: {r_value_type} vs {z_value_type}")
+                if z_delay.rstrip('s') != r_delay.rstrip('s'):
+                    mismatch_fields.append(f"delay: '{r_delay}' vs '{z_delay}'")
+
+                if mismatch_fields:
+                    updates.append(('mismatch', ritem['id']))
+                    stats['mismatch'] += 1
+                    logger.info(f"  监控项 {item_key}: mismatch — {', '.join(mismatch_fields)}")
+                else:
+                    updates.append(('verified', ritem['id']))
+                    stats['verified'] += 1
+
+        # 5. 批量更新
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE items_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_ip} 监控项核验完成: verified={stats['verified']}, "
+                    f"mismatch={stats['mismatch']}, not_found={stats['not_found']}")
+        return stats
+
+    def verify_triggers(self, host_ip: str) -> Dict[str, int]:
+        """核验单个主机的触发器（仅核验存在性）
+
+        Args:
+            host_ip: 主机 IP（Zabbix 中的 host name）
+
+        Returns:
+            统计字典 {'verified': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'not_found': 0}
+
+        # 1. 从 DB 获取该 host_ip 的所有 triggers_review 记录
+        conn = self._get_db_connection()
+        review_triggers = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, name FROM triggers_review WHERE host_ip = %s",
+                (host_ip,)
+            )
+            review_triggers = cur.fetchall()
+
+        if not review_triggers:
+            logger.info(f"主机 {host_ip} 的 triggers_review 表中没有记录，跳过触发器核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_ip} 的 {len(review_triggers)} 个触发器...")
+
+        # 2. 获取 Zabbix 主机 ID
+        host_id = self.zabbix_client.get_host_id(host_ip)
+        if not host_id:
+            logger.warning(f"主机 {host_ip} 在 Zabbix 中不存在，所有触发器标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE triggers_review SET status_verification = 'not_found' WHERE host_ip = %s",
+                    (host_ip,)
+                )
+            stats['not_found'] = len(review_triggers)
+            return stats
+
+        # 3. 从 Zabbix 拉取实际触发器
+        try:
+            zabbix_triggers = self.zabbix_client.api.trigger.get(
+                hostids=host_id,
+                output=["triggerid", "description"]
+            )
+            zabbix_triggers_set = {trigger["description"] for trigger in zabbix_triggers}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_triggers)} 个触发器")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取触发器失败: {e}")
+            return stats
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取触发器时发生未知错误: {e}")
+            return stats
+
+        # 4. 逐条比对（仅存在性检查）
+        updates = []
+        for rtrigger in review_triggers:
+            trigger_name = rtrigger['name']
+            if trigger_name in zabbix_triggers_set:
+                updates.append(('verified', rtrigger['id']))
+                stats['verified'] += 1
+            else:
+                updates.append(('not_found', rtrigger['id']))
+                stats['not_found'] += 1
+                logger.debug(f"  触发器 {trigger_name}: not_found")
+
+        # 5. 批量更新
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE triggers_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_ip} 触发器核验完成: verified={stats['verified']}, "
+                    f"not_found={stats['not_found']}")
+        return stats
+
+    def verify_all(self):
+        """核验所有主机的复核表
+
+        遍历 items_review 和 triggers_review 中出现的所有唯一 host_ip，
+        对每个主机执行监控项和触发器核验，最后打印汇总报告。
+        """
+        conn = self._get_db_connection()
+
+        # 收集所有需要核验的 host_ip
+        host_ips = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT host_ip FROM items_review
+                UNION
+                SELECT DISTINCT host_ip FROM triggers_review
+                ORDER BY host_ip
+            """)
+            rows = cur.fetchall()
+            host_ips = [row['host_ip'] for row in rows]
+
+        if not host_ips:
+            logger.warning("复核表中没有任何记录，跳过核验")
+            return
+
+        logger.info(f"=" * 60)
+        logger.info(f"开始核验 {len(host_ips)} 台主机的复核表状态")
+        logger.info(f"=" * 60)
+
+        total_item_stats = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+        total_trigger_stats = {'verified': 0, 'not_found': 0}
+
+        for host_ip in host_ips:
+            logger.info(f"\n--- 核验主机: {host_ip} ---")
+
+            # 核验监控项
+            item_stats = self.verify_items(host_ip)
+            total_item_stats['verified'] += item_stats['verified']
+            total_item_stats['mismatch'] += item_stats['mismatch']
+            total_item_stats['not_found'] += item_stats['not_found']
+
+            # 核验触发器
+            trigger_stats = self.verify_triggers(host_ip)
+            total_trigger_stats['verified'] += trigger_stats['verified']
+            total_trigger_stats['not_found'] += trigger_stats['not_found']
+
+        # 打印汇总报告
+        logger.info(f"\n" + "=" * 60)
+        logger.info("状态核验汇总报告")
+        logger.info("=" * 60)
+        logger.info(f"监控项核验: verified={total_item_stats['verified']}, "
+                    f"mismatch={total_item_stats['mismatch']}, "
+                    f"not_found={total_item_stats['not_found']}")
+        logger.info(f"触发器核验: verified={total_trigger_stats['verified']}, "
+                    f"not_found={total_trigger_stats['not_found']}")
+        logger.info(f"总计核验记录: {sum(total_item_stats.values()) + sum(total_trigger_stats.values())}")
+        logger.info("=" * 60)
+
+        # 关闭数据库连接
+        if self.connection and not self.connection.closed:
+            self.connection.close()
+            self.connection = None
+
+
 class ZabbixUltimateAutomator:
     """Zabbix 自动化主类"""
     
@@ -3308,6 +3600,13 @@ class ZabbixUltimateAutomator:
         self.report_generator = ReportGenerator()
         self.sync_engine = SyncEngine(self.zabbix_client, self.config_loader, self.report_generator)
         self.dry_run = dry_run
+
+    def verify_status(self):
+        """核验复核表状态 — 从 Zabbix 拉取实际状态并与 items_review、triggers_review 对比"""
+        logger.info("开始状态核验...")
+        verifier = StatusVerifier(self.zabbix_client, self.config_loader.db_config)
+        verifier.verify_all()
+        logger.info("状态核验完成")
     
     def create_web_scenarios(self):
         """从 webscenario_items_review 表创建 web scenario"""
@@ -3409,14 +3708,15 @@ class ZabbixUltimateAutomator:
         except Exception as e:
             logger.error(f"为 web scenario 创建触发器失败: {e}")
     
-    def run(self, dry_run: bool = False, workers: int = 5, initialize_reviews: bool = False, 
+    def run(self, dry_run: bool = False, workers: int = 5, initialize_reviews: bool = False,
             initialize_items_review: bool = False, initialize_triggers_review: bool = False,
             initialize_webscenario_items_review: bool = False,
             export_items_review: str = None, export_triggers_review: str = None,
             import_items_review: str = None, import_triggers_review: str = None,
-            create_web_scenarios: bool = False, create_web_scenario_triggers: bool = False):
+            create_web_scenarios: bool = False, create_web_scenario_triggers: bool = False,
+            verify_status: bool = False):
         """运行同步或初始化复核表
-        
+
         Args:
             dry_run: 是否模拟运行
             workers: 并发线程数
@@ -3430,7 +3730,12 @@ class ZabbixUltimateAutomator:
             import_triggers_review: 从指定 Excel 文件导入数据到 triggers_review 表
             create_web_scenarios: 是否从 webscenario_items_review 表创建 web scenario
             create_web_scenario_triggers: 是否为 web scenario 创建触发器
+            verify_status: 是否核验复核表状态（从 Zabbix 拉取实际状态对比）
         """
+        if verify_status:
+            self.verify_status()
+            return
+
         if initialize_reviews:
             logger.info("开始初始化复核表...")
             success = self.config_loader.initialize_review_tables()
@@ -3540,6 +3845,7 @@ def main():
     mode_group.add_argument("--import-triggers-review", type=str, metavar="FILE", help="从指定 Excel 文件导入数据到 triggers_review 表")
     mode_group.add_argument("--create-web-scenarios", action="store_true", help="从 webscenario_items_review 表创建 web scenario")
     mode_group.add_argument("--create-web-scenario-triggers", action="store_true", help="为 web scenario 创建触发器")
+    mode_group.add_argument("--verify-status", action="store_true", help="从 Zabbix 拉取实际状态核验复核表（items_review、triggers_review）")
     
     # Zabbix API 配置
     parser.add_argument("--url", help="Zabbix API URL")
@@ -3560,10 +3866,10 @@ def main():
     args = parser.parse_args()
     
     # 验证参数
-    if args.sync or args.create_web_scenarios or args.create_web_scenario_triggers:
-        # 同步操作、创建 web scenario 和创建 web scenario 触发器需要 Zabbix API 配置
+    if args.sync or args.create_web_scenarios or args.create_web_scenario_triggers or args.verify_status:
+        # 同步操作、创建 web scenario、创建 web scenario 触发器 和 状态核验 需要 Zabbix API 配置
         if not args.url or not args.username or not args.password:
-            parser.error("--sync、--create-web-scenarios 或 --create-web-scenario-triggers 操作需要 --url、--username 和 --password 参数")
+            parser.error("--sync、--create-web-scenarios、--create-web-scenario-triggers 或 --verify-status 操作需要 --url、--username 和 --password 参数")
     elif (args.initialize_reviews or args.initialize_items_review or args.initialize_triggers_review or
           args.initialize_webscenario_items_review or
           args.export_items_review or args.export_triggers_review or
@@ -3581,7 +3887,7 @@ def main():
     }
     
     # 需要 Zabbix API 的操作
-    need_zabbix_api = args.sync or args.create_web_scenarios or args.create_web_scenario_triggers
+    need_zabbix_api = args.sync or args.create_web_scenarios or args.create_web_scenario_triggers or args.verify_status
     
     # 构建 Zabbix API 配置
     automator = ZabbixUltimateAutomator(
@@ -3613,6 +3919,8 @@ def main():
         automator.run(create_web_scenarios=True)
     elif args.create_web_scenario_triggers:
         automator.run(create_web_scenario_triggers=True)
+    elif args.verify_status:
+        automator.run(verify_status=True)
     else:
         automator.run(dry_run=args.dry_run, workers=args.workers, initialize_reviews=False)
 
