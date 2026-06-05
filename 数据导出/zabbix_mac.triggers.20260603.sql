@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: triggers; Type: TABLE; Schema: public; Owner: -
+-- Name: triggers; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.triggers (
+CREATE TABLE zabbix_mac.triggers (
     id integer NOT NULL,
     name character varying(255) NOT NULL,
     expression text NOT NULL,
@@ -42,10 +43,10 @@ CREATE TABLE public.triggers (
 
 
 --
--- Name: triggers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: triggers_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.triggers_id_seq
+CREATE SEQUENCE zabbix_mac.triggers_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -55,24 +56,24 @@ CREATE SEQUENCE public.triggers_id_seq
 
 
 --
--- Name: triggers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: triggers_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.triggers_id_seq OWNED BY public.triggers.id;
-
-
---
--- Name: triggers id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.triggers ALTER COLUMN id SET DEFAULT nextval('public.triggers_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.triggers_id_seq OWNED BY zabbix_mac.triggers.id;
 
 
 --
--- Data for Name: triggers; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: triggers id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.triggers (id, name, expression, priority, description, status, template_name, created_at, updated_at, system, subsystem) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.triggers ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.triggers_id_seq'::regclass);
+
+
+--
+-- Data for Name: triggers; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.triggers (id, name, expression, priority, description, status, template_name, created_at, updated_at, system, subsystem) FROM stdin;
 1	{HOST.NAME}_{HOST.IP} CPU使用率 (over 100% for 5m)	{host:system.cpu.util.last()}>100	3	\N	0	21001	2026-04-17 09:02:07.059233	2026-04-17 09:02:07.059233	上市系统	上市日常监管模块
 2	{HOST.NAME}_{HOST.IP} Configured max number of open filedescriptors is too low (< 256)	{host:kernel.maxfiles.last()}<256	1	\N	0	21001	2026-04-17 09:02:07.059233	2026-04-17 09:02:07.059233	上市系统	上市日常监管模块
 4	{HOST.NAME}_{HOST.IP} System name has changed (new name: {ITEM.VALUE})	{host:system.hostname.diff()}=1 and {host:system.hostname.strlen()}>0	1	\N	0	21001	2026-04-17 09:02:07.059233	2026-04-17 09:02:07.059233	上市系统	上市日常监管模块
@@ -94,25 +95,25 @@ COPY public.triggers (id, name, expression, priority, description, status, templ
 
 
 --
--- Name: triggers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: triggers_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.triggers_id_seq', 17, true);
+SELECT pg_catalog.setval('zabbix_mac.triggers_id_seq', 17, true);
 
 
 --
--- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.triggers
+ALTER TABLE ONLY zabbix_mac.triggers
     ADD CONSTRAINT triggers_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_triggers_template; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_triggers_template; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_triggers_template ON public.triggers USING btree (template_name);
+CREATE INDEX idx_triggers_template ON zabbix_mac.triggers USING btree (template_name);
 
 
 --

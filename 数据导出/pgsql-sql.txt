@@ -1,0 +1,16 @@
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.discovery_rules.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.items.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.filter_conditions.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.host_extra_items.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.host_templates.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.hosts.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.item_prototypes.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.item_prototypes_review.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.items_review.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.templates.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.trigger_prototypes.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.trigger_prototypes_review.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.triggers.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.triggers_review.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.webscenario_items.20260603.sql
+/opt/local/bin/psql14 -U postgres -d ops -f zabbix_mac.webscenario_items_review.20260603.sql

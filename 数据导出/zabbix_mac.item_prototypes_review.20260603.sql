@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: item_prototypes_review; Type: TABLE; Schema: public; Owner: -
+-- Name: item_prototypes_review; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.item_prototypes_review (
+CREATE TABLE zabbix_mac.item_prototypes_review (
     id integer NOT NULL,
     item_prototype_id integer NOT NULL,
     discovery_rule_id integer NOT NULL,
@@ -53,10 +54,10 @@ CREATE TABLE public.item_prototypes_review (
 
 
 --
--- Name: item_prototypes_review_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: item_prototypes_review_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.item_prototypes_review_id_seq
+CREATE SEQUENCE zabbix_mac.item_prototypes_review_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -66,24 +67,24 @@ CREATE SEQUENCE public.item_prototypes_review_id_seq
 
 
 --
--- Name: item_prototypes_review_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: item_prototypes_review_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.item_prototypes_review_id_seq OWNED BY public.item_prototypes_review.id;
-
-
---
--- Name: item_prototypes_review id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.item_prototypes_review ALTER COLUMN id SET DEFAULT nextval('public.item_prototypes_review_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.item_prototypes_review_id_seq OWNED BY zabbix_mac.item_prototypes_review.id;
 
 
 --
--- Data for Name: item_prototypes_review; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: item_prototypes_review id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.item_prototypes_review (id, item_prototype_id, discovery_rule_id, name, key, value_type, delay, description, units, multiplier, delta, history, trends, status, modified, confirmed, status_verification, created_at, updated_at, host_ip, system, subsystem) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.item_prototypes_review ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.item_prototypes_review_id_seq'::regclass);
+
+
+--
+-- Data for Name: item_prototypes_review; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.item_prototypes_review (id, item_prototype_id, discovery_rule_id, name, key, value_type, delay, description, units, multiplier, delta, history, trends, status, modified, confirmed, status_verification, created_at, updated_at, host_ip, system, subsystem) FROM stdin;
 175	11	2	{#FSNAME}: Space utilization	vfs.fs.size[{#FSNAME},pused]	0	1m	\N	\N	0	0	7	365	0	f	f	pending	2026-04-30 17:26:59.89368	2026-04-30 17:26:59.89368	10.24.3.12	上市系统	上市日常监管模块
 176	11	2	{#FSNAME}: Space utilization	vfs.fs.size[{#FSNAME},pused]	0	1m	\N	\N	0	0	7	365	0	f	f	pending	2026-04-30 17:26:59.89368	2026-04-30 17:26:59.89368	10.24.3.23	上市系统	上市日常监管模块
 177	12	2	{#FSNAME}: Total space	vfs.fs.size[{#FSNAME},total]	3	1m	\N	\N	0	0	7	365	0	f	f	pending	2026-04-30 17:26:59.89368	2026-04-30 17:26:59.89368	Zabbix server	上市系统	上市日常监管模块
@@ -127,55 +128,55 @@ COPY public.item_prototypes_review (id, item_prototype_id, discovery_rule_id, na
 
 
 --
--- Name: item_prototypes_review_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: item_prototypes_review_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.item_prototypes_review_id_seq', 182, true);
+SELECT pg_catalog.setval('zabbix_mac.item_prototypes_review_id_seq', 182, true);
 
 
 --
--- Name: item_prototypes_review item_prototypes_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: item_prototypes_review item_prototypes_review_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.item_prototypes_review
+ALTER TABLE ONLY zabbix_mac.item_prototypes_review
     ADD CONSTRAINT item_prototypes_review_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_item_prototypes_review_confirmed; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_item_prototypes_review_confirmed; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_item_prototypes_review_confirmed ON public.item_prototypes_review USING btree (confirmed);
-
-
---
--- Name: idx_item_prototypes_review_host_ip; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_item_prototypes_review_host_ip ON public.item_prototypes_review USING btree (host_ip);
+CREATE INDEX idx_item_prototypes_review_confirmed ON zabbix_mac.item_prototypes_review USING btree (confirmed);
 
 
 --
--- Name: idx_item_prototypes_review_prototype; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_item_prototypes_review_host_ip; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_item_prototypes_review_prototype ON public.item_prototypes_review USING btree (item_prototype_id);
-
-
---
--- Name: item_prototypes_review item_prototypes_review_discovery_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.item_prototypes_review
-    ADD CONSTRAINT item_prototypes_review_discovery_rule_id_fkey FOREIGN KEY (discovery_rule_id) REFERENCES public.discovery_rules(id) ON DELETE CASCADE;
+CREATE INDEX idx_item_prototypes_review_host_ip ON zabbix_mac.item_prototypes_review USING btree (host_ip);
 
 
 --
--- Name: item_prototypes_review item_prototypes_review_item_prototype_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: idx_item_prototypes_review_prototype; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.item_prototypes_review
-    ADD CONSTRAINT item_prototypes_review_item_prototype_id_fkey FOREIGN KEY (item_prototype_id) REFERENCES public.item_prototypes(id) ON DELETE CASCADE;
+CREATE INDEX idx_item_prototypes_review_prototype ON zabbix_mac.item_prototypes_review USING btree (item_prototype_id);
+
+
+--
+-- Name: item_prototypes_review item_prototypes_review_discovery_rule_id_fkey; Type: FK CONSTRAINT; Schema: zabbix_mac; Owner: -
+--
+
+ALTER TABLE ONLY zabbix_mac.item_prototypes_review
+    ADD CONSTRAINT item_prototypes_review_discovery_rule_id_fkey FOREIGN KEY (discovery_rule_id) REFERENCES zabbix_mac.discovery_rules(id) ON DELETE CASCADE;
+
+
+--
+-- Name: item_prototypes_review item_prototypes_review_item_prototype_id_fkey; Type: FK CONSTRAINT; Schema: zabbix_mac; Owner: -
+--
+
+ALTER TABLE ONLY zabbix_mac.item_prototypes_review
+    ADD CONSTRAINT item_prototypes_review_item_prototype_id_fkey FOREIGN KEY (item_prototype_id) REFERENCES zabbix_mac.item_prototypes(id) ON DELETE CASCADE;
 
 
 --

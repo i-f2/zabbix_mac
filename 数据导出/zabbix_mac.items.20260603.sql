@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: items; Type: TABLE; Schema: public; Owner: -
+-- Name: items; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.items (
+CREATE TABLE zabbix_mac.items (
     id integer NOT NULL,
     item_key character varying(255) NOT NULL,
     name character varying(255) NOT NULL,
@@ -49,10 +50,10 @@ CREATE TABLE public.items (
 
 
 --
--- Name: items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: items_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.items_id_seq
+CREATE SEQUENCE zabbix_mac.items_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -62,24 +63,24 @@ CREATE SEQUENCE public.items_id_seq
 
 
 --
--- Name: items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: items_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.items_id_seq OWNED BY public.items.id;
-
-
---
--- Name: items id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.items ALTER COLUMN id SET DEFAULT nextval('public.items_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.items_id_seq OWNED BY zabbix_mac.items.id;
 
 
 --
--- Data for Name: items; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: items id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.items (id, item_key, name, type, value_type, delay, description, units, multiplier, delta, history, trends, status, template_name, created_at, updated_at, master_item, preprocessing) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.items ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.items_id_seq'::regclass);
+
+
+--
+-- Data for Name: items; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.items (id, item_key, name, type, value_type, delay, description, units, multiplier, delta, history, trends, status, template_name, created_at, updated_at, master_item, preprocessing) FROM stdin;
 22	system.swap.size[,free]	Free swap space	0	3	1m		B	0	0	7	365	0	21001	2026-04-29 16:17:34.133078	2026-04-29 16:17:34.133078	\N	\N
 24	system.swap.size[,total]	Total swap space	0	3	1m		B	0	0	7	365	0	21001	2026-04-29 16:20:27.054296	2026-04-29 16:20:27.054296	\N	\N
 26	vm.memory.size[pavailable]	Available memory in %	0	0	1m		%	0	0	7	365	0	21001	2026-04-29 16:22:09.324243	2026-04-29 16:22:09.324243	\N	\N
@@ -126,47 +127,47 @@ COPY public.items (id, item_key, name, type, value_type, delay, description, uni
 
 
 --
--- Name: items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: items_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.items_id_seq', 66, true);
+SELECT pg_catalog.setval('zabbix_mac.items_id_seq', 66, true);
 
 
 --
--- Name: items items_item_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: items items_item_key_key; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.items
+ALTER TABLE ONLY zabbix_mac.items
     ADD CONSTRAINT items_item_key_key UNIQUE (item_key);
 
 
 --
--- Name: items items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: items items_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.items
+ALTER TABLE ONLY zabbix_mac.items
     ADD CONSTRAINT items_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_items_item_key; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_items_item_key; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_items_item_key ON public.items USING btree (item_key);
-
-
---
--- Name: idx_items_master_item; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_items_master_item ON public.items USING btree (master_item);
+CREATE INDEX idx_items_item_key ON zabbix_mac.items USING btree (item_key);
 
 
 --
--- Name: idx_items_template; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_items_master_item; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_items_template ON public.items USING btree (template_name);
+CREATE INDEX idx_items_master_item ON zabbix_mac.items USING btree (master_item);
+
+
+--
+-- Name: idx_items_template; Type: INDEX; Schema: zabbix_mac; Owner: -
+--
+
+CREATE INDEX idx_items_template ON zabbix_mac.items USING btree (template_name);
 
 
 --

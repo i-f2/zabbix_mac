@@ -18,10 +18,11 @@ app.secret_key = 'supersecretkey'
 DB_CONFIG = {
     'host': 'localhost',
     'port': 5432,
-    'database': 'zabbix_mac',
-    'user': 'fan',
+    'database': 'ops',
+    'user': 'postgres',
     'password': '',
-    'client_encoding': 'utf8'
+    'client_encoding': 'utf8',
+    'options': '-c search_path=zabbix_mac'
 }
 
 def get_db_connection():
@@ -965,4 +966,4 @@ def unconfirm_trigger_prototype_review(review_id):
     return redirect(url_for('trigger_prototypes_review'))
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

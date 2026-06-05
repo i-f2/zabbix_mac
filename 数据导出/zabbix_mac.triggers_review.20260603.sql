@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: triggers_review; Type: TABLE; Schema: public; Owner: -
+-- Name: triggers_review; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.triggers_review (
+CREATE TABLE zabbix_mac.triggers_review (
     id integer NOT NULL,
     trigger_id integer NOT NULL,
     name character varying(255) NOT NULL,
@@ -47,10 +48,10 @@ CREATE TABLE public.triggers_review (
 
 
 --
--- Name: triggers_review_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: triggers_review_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.triggers_review_id_seq
+CREATE SEQUENCE zabbix_mac.triggers_review_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -60,24 +61,24 @@ CREATE SEQUENCE public.triggers_review_id_seq
 
 
 --
--- Name: triggers_review_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: triggers_review_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.triggers_review_id_seq OWNED BY public.triggers_review.id;
-
-
---
--- Name: triggers_review id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.triggers_review ALTER COLUMN id SET DEFAULT nextval('public.triggers_review_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.triggers_review_id_seq OWNED BY zabbix_mac.triggers_review.id;
 
 
 --
--- Data for Name: triggers_review; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: triggers_review id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.triggers_review (id, trigger_id, name, expression, priority, description, status, template_name, modified, confirmed, status_verification, created_at, updated_at, host_ip, system, subsystem) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.triggers_review ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.triggers_review_id_seq'::regclass);
+
+
+--
+-- Data for Name: triggers_review; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.triggers_review (id, trigger_id, name, expression, priority, description, status, template_name, modified, confirmed, status_verification, created_at, updated_at, host_ip, system, subsystem) FROM stdin;
 245	1	{HOST.NAME}_{HOST.IP} CPU使用率 (over 100% for 5m)	{host:system.cpu.util.last()}>100	3	\N	0	21001	f	f	pending	2026-04-30 17:26:59.886658	2026-04-30 17:26:59.886658	Zabbix server	上市系统	上市日常监管模块
 246	2	{HOST.NAME}_{HOST.IP} Configured max number of open filedescriptors is too low (< 256)	{host:kernel.maxfiles.last()}<256	1	\N	0	21001	f	f	pending	2026-04-30 17:26:59.886658	2026-04-30 17:26:59.886658	Zabbix server	上市系统	上市日常监管模块
 247	4	{HOST.NAME}_{HOST.IP} System name has changed (new name: {ITEM.VALUE})	{host:system.hostname.diff()}=1 and {host:system.hostname.strlen()}>0	1	\N	0	21001	f	f	pending	2026-04-30 17:26:59.886658	2026-04-30 17:26:59.886658	Zabbix server	上市系统	上市日常监管模块
@@ -133,39 +134,39 @@ COPY public.triggers_review (id, trigger_id, name, expression, priority, descrip
 
 
 --
--- Name: triggers_review_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: triggers_review_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.triggers_review_id_seq', 295, true);
+SELECT pg_catalog.setval('zabbix_mac.triggers_review_id_seq', 295, true);
 
 
 --
--- Name: triggers_review triggers_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: triggers_review triggers_review_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.triggers_review
+ALTER TABLE ONLY zabbix_mac.triggers_review
     ADD CONSTRAINT triggers_review_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_triggers_review_confirmed; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_triggers_review_confirmed; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_triggers_review_confirmed ON public.triggers_review USING btree (confirmed);
-
-
---
--- Name: idx_triggers_review_host_ip; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_triggers_review_host_ip ON public.triggers_review USING btree (host_ip);
+CREATE INDEX idx_triggers_review_confirmed ON zabbix_mac.triggers_review USING btree (confirmed);
 
 
 --
--- Name: idx_triggers_review_trigger; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_triggers_review_host_ip; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_triggers_review_trigger ON public.triggers_review USING btree (trigger_id);
+CREATE INDEX idx_triggers_review_host_ip ON zabbix_mac.triggers_review USING btree (host_ip);
+
+
+--
+-- Name: idx_triggers_review_trigger; Type: INDEX; Schema: zabbix_mac; Owner: -
+--
+
+CREATE INDEX idx_triggers_review_trigger ON zabbix_mac.triggers_review USING btree (trigger_id);
 
 
 --

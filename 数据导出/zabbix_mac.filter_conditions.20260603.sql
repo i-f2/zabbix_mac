@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: filter_conditions; Type: TABLE; Schema: public; Owner: -
+-- Name: filter_conditions; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.filter_conditions (
+CREATE TABLE zabbix_mac.filter_conditions (
     id integer NOT NULL,
     discovery_rule_id integer NOT NULL,
     macro character varying(255) NOT NULL,
@@ -37,10 +38,10 @@ CREATE TABLE public.filter_conditions (
 
 
 --
--- Name: filter_conditions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: filter_conditions_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.filter_conditions_id_seq
+CREATE SEQUENCE zabbix_mac.filter_conditions_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -50,24 +51,24 @@ CREATE SEQUENCE public.filter_conditions_id_seq
 
 
 --
--- Name: filter_conditions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: filter_conditions_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.filter_conditions_id_seq OWNED BY public.filter_conditions.id;
-
-
---
--- Name: filter_conditions id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.filter_conditions ALTER COLUMN id SET DEFAULT nextval('public.filter_conditions_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.filter_conditions_id_seq OWNED BY zabbix_mac.filter_conditions.id;
 
 
 --
--- Data for Name: filter_conditions; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: filter_conditions id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.filter_conditions (id, discovery_rule_id, macro, value, operator, created_at) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.filter_conditions ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.filter_conditions_id_seq'::regclass);
+
+
+--
+-- Data for Name: filter_conditions; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.filter_conditions (id, discovery_rule_id, macro, value, operator, created_at) FROM stdin;
 1	1	{#DEVTYPE}	disk	MATCHES_REGEX	2026-04-17 09:02:07.059233
 2	1	{#DEVNAME}	.+	MATCHES_REGEX	2026-04-17 09:02:07.059233
 3	1	{#DEVNAME}	^(loop[0-9]*|sd[a-z][0-9]+|nbd[0-9]+|sr[0-9]+|fd[0-9]+|dm-[0-9]+|ram[0-9]+|ploop[a-z0-9]+|md[0-9]*|hcp[0-9]*|zram[0-9]*)$	NOT_MATCHES_REGEX	2026-04-17 09:02:07.059233
@@ -79,33 +80,33 @@ COPY public.filter_conditions (id, discovery_rule_id, macro, value, operator, cr
 
 
 --
--- Name: filter_conditions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: filter_conditions_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.filter_conditions_id_seq', 7, true);
+SELECT pg_catalog.setval('zabbix_mac.filter_conditions_id_seq', 7, true);
 
 
 --
--- Name: filter_conditions filter_conditions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: filter_conditions filter_conditions_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.filter_conditions
+ALTER TABLE ONLY zabbix_mac.filter_conditions
     ADD CONSTRAINT filter_conditions_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_filter_conditions_rule; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_filter_conditions_rule; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_filter_conditions_rule ON public.filter_conditions USING btree (discovery_rule_id);
+CREATE INDEX idx_filter_conditions_rule ON zabbix_mac.filter_conditions USING btree (discovery_rule_id);
 
 
 --
--- Name: filter_conditions filter_conditions_discovery_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: filter_conditions filter_conditions_discovery_rule_id_fkey; Type: FK CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.filter_conditions
-    ADD CONSTRAINT filter_conditions_discovery_rule_id_fkey FOREIGN KEY (discovery_rule_id) REFERENCES public.discovery_rules(id) ON DELETE CASCADE;
+ALTER TABLE ONLY zabbix_mac.filter_conditions
+    ADD CONSTRAINT filter_conditions_discovery_rule_id_fkey FOREIGN KEY (discovery_rule_id) REFERENCES zabbix_mac.discovery_rules(id) ON DELETE CASCADE;
 
 
 --

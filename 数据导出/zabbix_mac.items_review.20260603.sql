@@ -7,12 +7,13 @@
 -- Dumped from database version 14.22
 -- Dumped by pg_dump version 14.22
 
+\connect ops
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'SQL_ASCII';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+SELECT pg_catalog.set_config('search_path', 'zabbix_mac', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -23,10 +24,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: items_review; Type: TABLE; Schema: public; Owner: -
+-- Name: items_review; Type: TABLE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE TABLE public.items_review (
+CREATE TABLE zabbix_mac.items_review (
     id integer NOT NULL,
     item_id integer NOT NULL,
     item_key character varying(255) NOT NULL,
@@ -56,10 +57,10 @@ CREATE TABLE public.items_review (
 
 
 --
--- Name: items_review_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: items_review_id_seq; Type: SEQUENCE; Schema: zabbix_mac; Owner: -
 --
 
-CREATE SEQUENCE public.items_review_id_seq
+CREATE SEQUENCE zabbix_mac.items_review_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -69,24 +70,24 @@ CREATE SEQUENCE public.items_review_id_seq
 
 
 --
--- Name: items_review_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: items_review_id_seq; Type: SEQUENCE OWNED BY; Schema: zabbix_mac; Owner: -
 --
 
-ALTER SEQUENCE public.items_review_id_seq OWNED BY public.items_review.id;
-
-
---
--- Name: items_review id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.items_review ALTER COLUMN id SET DEFAULT nextval('public.items_review_id_seq'::regclass);
+ALTER SEQUENCE zabbix_mac.items_review_id_seq OWNED BY zabbix_mac.items_review.id;
 
 
 --
--- Data for Name: items_review; Type: TABLE DATA; Schema: public; Owner: -
+-- Name: items_review id; Type: DEFAULT; Schema: zabbix_mac; Owner: -
 --
 
-COPY public.items_review (id, item_id, item_key, name, type, value_type, delay, description, units, multiplier, delta, history, trends, status, template_name, modified, confirmed, status_verification, created_at, updated_at, host_ip, master_item, preprocessing, system, subsystem) FROM stdin;
+ALTER TABLE ONLY zabbix_mac.items_review ALTER COLUMN id SET DEFAULT nextval('zabbix_mac.items_review_id_seq'::regclass);
+
+
+--
+-- Data for Name: items_review; Type: TABLE DATA; Schema: zabbix_mac; Owner: -
+--
+
+COPY zabbix_mac.items_review (id, item_id, item_key, name, type, value_type, delay, description, units, multiplier, delta, history, trends, status, template_name, modified, confirmed, status_verification, created_at, updated_at, host_ip, master_item, preprocessing, system, subsystem) FROM stdin;
 746	22	system.swap.size[,free]	Free swap space	0	3	1m		B	0	0	7	365	0	21001	f	f	pending	2026-04-30 17:26:59.866883	2026-04-30 17:26:59.866883	Zabbix server	\N	\N	上市系统	上市日常监管模块
 747	24	system.swap.size[,total]	Total swap space	0	3	1m		B	0	0	7	365	0	21001	f	f	pending	2026-04-30 17:26:59.866883	2026-04-30 17:26:59.866883	Zabbix server	\N	\N	上市系统	上市日常监管模块
 748	26	vm.memory.size[pavailable]	Available memory in %	0	0	1m		%	0	0	7	365	0	21001	f	f	pending	2026-04-30 17:26:59.866883	2026-04-30 17:26:59.866883	Zabbix server	\N	\N	上市系统	上市日常监管模块
@@ -217,54 +218,54 @@ COPY public.items_review (id, item_id, item_key, name, type, value_type, delay, 
 
 
 --
--- Name: items_review_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: items_review_id_seq; Type: SEQUENCE SET; Schema: zabbix_mac; Owner: -
 --
 
-SELECT pg_catalog.setval('public.items_review_id_seq', 871, true);
+SELECT pg_catalog.setval('zabbix_mac.items_review_id_seq', 871, true);
 
 
 --
--- Name: items_review items_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: items_review items_review_pkey; Type: CONSTRAINT; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.items_review
+ALTER TABLE ONLY zabbix_mac.items_review
     ADD CONSTRAINT items_review_pkey PRIMARY KEY (id);
 
 
 --
--- Name: idx_items_review_confirmed; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_items_review_confirmed; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_items_review_confirmed ON public.items_review USING btree (confirmed);
-
-
---
--- Name: idx_items_review_host_ip; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_items_review_host_ip ON public.items_review USING btree (host_ip);
+CREATE INDEX idx_items_review_confirmed ON zabbix_mac.items_review USING btree (confirmed);
 
 
 --
--- Name: idx_items_review_item; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_items_review_host_ip; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-CREATE INDEX idx_items_review_item ON public.items_review USING btree (item_id);
-
-
---
--- Name: idx_items_review_master_item; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_items_review_master_item ON public.items_review USING btree (master_item);
+CREATE INDEX idx_items_review_host_ip ON zabbix_mac.items_review USING btree (host_ip);
 
 
 --
--- Name: items_review items_review_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: idx_items_review_item; Type: INDEX; Schema: zabbix_mac; Owner: -
 --
 
-ALTER TABLE ONLY public.items_review
-    ADD CONSTRAINT items_review_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.items(id) ON DELETE CASCADE;
+CREATE INDEX idx_items_review_item ON zabbix_mac.items_review USING btree (item_id);
+
+
+--
+-- Name: idx_items_review_master_item; Type: INDEX; Schema: zabbix_mac; Owner: -
+--
+
+CREATE INDEX idx_items_review_master_item ON zabbix_mac.items_review USING btree (master_item);
+
+
+--
+-- Name: items_review items_review_item_id_fkey; Type: FK CONSTRAINT; Schema: zabbix_mac; Owner: -
+--
+
+ALTER TABLE ONLY zabbix_mac.items_review
+    ADD CONSTRAINT items_review_item_id_fkey FOREIGN KEY (item_id) REFERENCES zabbix_mac.items(id) ON DELETE CASCADE;
 
 
 --
