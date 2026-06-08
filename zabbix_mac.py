@@ -1255,21 +1255,35 @@ class ConfigLoader:
                         cond_rows = cur2.fetchall()
                         logger.info(f"规则 {row['name']} 有 {len(cond_rows)} 个过滤条件")
                         
-                        OPERATOR_MAP = {
-                            'EQUALS': 0,
-                            'NOT_EQUAL': 1,
-                            'CONTAINS': 2,
-                            'NOT_CONTAINS': 3,
-                            'MATCHES_REGEX': 4,
-                            'NOT_MATCHES_REGEX': 5
-                        }
-                        
+                        # Zabbix API 发现规则过滤条件运算符:
+                        #   8 = 匹配正则 (CONDITION_OPERATOR_REGEXP)
+                        #   9 = 不匹配正则 (CONDITION_OPERATOR_NOT_REGEXP)
+                        # 其他运算符需要转换为正则模式
                         for cond_row in cond_rows:
                             operator_str = cond_row['operator']
-                            operator_num = OPERATOR_MAP.get(operator_str, 0)
+                            value = cond_row['value']
+
+                            if operator_str == 'MATCHES_REGEX':
+                                operator_num = 8
+                            elif operator_str == 'NOT_MATCHES_REGEX':
+                                operator_num = 9
+                            elif operator_str == 'EQUALS':
+                                operator_num = 8
+                                value = f'^{value}$'
+                            elif operator_str == 'NOT_EQUAL':
+                                operator_num = 9
+                                value = f'^{value}$'
+                            elif operator_str == 'CONTAINS':
+                                operator_num = 8
+                            elif operator_str == 'NOT_CONTAINS':
+                                operator_num = 9
+                            else:
+                                logger.warning(f"未知的过滤运算符: {operator_str}，默认使用匹配正则")
+                                operator_num = 8
+
                             rule_config['filter']['conditions'].append({
                                 "macro": cond_row['macro'],
-                                "value": cond_row['value'],
+                                "value": value,
                                 "operator": operator_num
                             })
                     
@@ -2779,11 +2793,17 @@ class SyncEngine:
                     "type": 0,  # 0 表示 Zabbix agent 类型
                     "delay": rule_config.get("delay", "1m")
                 }
-                
-                # Zabbix 5.0 API 对 filter 的支持有限，跳过 filter 条件以避免创建失败
+
+                # 添加 filter 过滤条件（如果存在）
                 filter_config = rule_config.get("filter", {})
                 if filter_config.get("conditions"):
-                    logger.warning(f"规则 {rule_name} 包含 filter 条件，但 Zabbix 5.0 API 不支持，将跳过 filter")
+                    rule_data["filter"] = {
+                        "evaltype": filter_config.get("evaltype", 0),
+                        "conditions": filter_config["conditions"]
+                    }
+                    logger.info(f"规则 {rule_name} 包含 {len(filter_config['conditions'])} 个过滤条件")
+                    for cond in filter_config["conditions"]:
+                        logger.debug(f"  过滤条件: macro={cond['macro']}, value={cond['value']}, operator={cond['operator']}")
                 
                 # 尝试同时添加不同格式的接口参数，以适应不同 Zabbix 版本
                 if interface_id:
