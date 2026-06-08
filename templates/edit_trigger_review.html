@@ -33,6 +33,14 @@
             <label for="template_name" class="form-label">模板名称</label>
             <input type="text" class="form-control" id="template_name" name="template_name" value="{{ trigger.template_name }}" required>
         </div>
+        <div class="mb-3">
+            <label for="system" class="form-label">系统名称</label>
+            <input type="text" class="form-control" id="system" name="system" value="{{ trigger.system or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="subsystem" class="form-label">模块名称</label>
+            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ trigger.subsystem or '' }}">
+        </div>
         <button type="submit" class="btn btn-primary">保存</button>
         <a href="{{ url_for('triggers_review') }}" class="btn btn-secondary">取消</a>
     </form>

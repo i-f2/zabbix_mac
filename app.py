@@ -1056,11 +1056,13 @@ def add_item_from_review():
         history = request.form.get('history', 7)
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
+        system = request.form.get('system', '').strip() or None
+        subsystem = request.form.get('subsystem', '').strip() or None
         master_item = request.form.get('master_item') or None
         preprocessing = request.form.get('preprocessing') or None
 
         with conn.cursor() as cur:
-            # 1. 写入主表 items，返回新 ID
+            # 1. 写入主表 items，返回新 ID（items 表无 system/subsystem 字段）
             cur.execute("""
                 INSERT INTO items (item_key, name, type, value_type, delay, description, units,
                                    multiplier, delta, history, trends, status, template_name,
@@ -1072,17 +1074,19 @@ def add_item_from_review():
                    master_item, preprocessing))
             new_item_id = cur.fetchone()[0]
 
-            # 2. 写入复核表 items_review
+            # 2. 写入复核表 items_review（含 system/subsystem）
             cur.execute("""
                 INSERT INTO items_review (
                     item_id, host_ip, item_key, name, type, value_type, delay,
                     description, units, multiplier, delta, history, trends,
                     status, template_name, master_item, preprocessing,
+                    system, subsystem,
                     modified, confirmed, status_verification
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (new_item_id, host_ip, item_key, name, type_val, value_type, delay,
                    description, units, multiplier, delta, history, trends, status,
                    template_name, master_item, preprocessing,
+                   system, subsystem,
                    False, False, 'pending'))
 
         conn.commit()
@@ -1199,16 +1203,20 @@ def edit_trigger_review(review_id):
         # 可选字段
         description = request.form.get('description')
         status = request.form.get('status', 0)
-        
+        system = request.form.get('system', '').strip() or None
+        subsystem = request.form.get('subsystem', '').strip() or None
+
         # 更新数据
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    UPDATE triggers_review SET name = %s, expression = %s, priority = %s, 
+                    UPDATE triggers_review SET name = %s, expression = %s, priority = %s,
                                            description = %s, status = %s, template_name = %s,
-                                           host_ip = %s, modified = true
+                                           host_ip = %s, system = %s, subsystem = %s,
+                                           modified = true
                     WHERE id = %s
-                """, (name, expression, priority, description, status, template_name, host_ip, review_id))
+                """, (name, expression, priority, description, status, template_name,
+                      host_ip, system, subsystem, review_id))
             conn.commit()
             flash('记录更新成功')
             return redirect(url_for('triggers_review'))
@@ -1263,25 +1271,29 @@ def add_trigger_from_review():
 
         description = request.form.get('description')
         status = request.form.get('status', 0)
+        system = request.form.get('system', '').strip() or None
+        subsystem = request.form.get('subsystem', '').strip() or None
 
         with conn.cursor() as cur:
-            # 1. 写入主表 triggers，返回新 ID
+            # 1. 写入主表 triggers（triggers 表有 system/subsystem 字段）
             cur.execute("""
-                INSERT INTO triggers (name, expression, priority, description, status, template_name)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO triggers (name, expression, priority, description, status, template_name, system, subsystem)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (name, expression, priority, description, status, template_name))
+            """, (name, expression, priority, description, status, template_name, system, subsystem))
             new_trigger_id = cur.fetchone()[0]
 
-            # 2. 写入复核表 triggers_review
+            # 2. 写入复核表 triggers_review（含 system/subsystem）
             cur.execute("""
                 INSERT INTO triggers_review (
                     trigger_id, host_ip, name, expression, priority, description,
                     status, template_name,
+                    system, subsystem,
                     modified, confirmed, status_verification
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (new_trigger_id, host_ip, name, expression, priority, description,
                    status, template_name,
+                   system, subsystem,
                    False, False, 'pending'))
 
         conn.commit()
