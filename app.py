@@ -7,6 +7,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 """
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+import os
 import psycopg2
 from psycopg2.extras import DictCursor
 import json
@@ -23,6 +24,30 @@ DB_CONFIG = {
     'password': '',
     'client_encoding': 'utf8',
     'options': '-c search_path=zabbix_mac'
+}
+
+# Zabbix 环境机房配置（从环境变量读取，未配置则为空字符串）
+ZABBIX_ENVIRONMENTS = {
+    '深交所证联网': {
+        'url': os.environ.get('ZABBIX_SZSE_ZW_URL', ''),
+        'username': os.environ.get('ZABBIX_SZSE_ZW_USER', ''),
+        'password': os.environ.get('ZABBIX_SZSE_ZW_PASS', ''),
+    },
+    '深交所互联网': {
+        'url': os.environ.get('ZABBIX_SZSE_HLW_URL', ''),
+        'username': os.environ.get('ZABBIX_SZSE_HLW_USER', ''),
+        'password': os.environ.get('ZABBIX_SZSE_HLW_PASS', ''),
+    },
+    '上交所证联网': {
+        'url': os.environ.get('ZABBIX_SSE_ZW_URL', ''),
+        'username': os.environ.get('ZABBIX_SSE_ZW_USER', ''),
+        'password': os.environ.get('ZABBIX_SSE_ZW_PASS', ''),
+    },
+    '上交所互联网': {
+        'url': os.environ.get('ZABBIX_SSE_HLW_URL', ''),
+        'username': os.environ.get('ZABBIX_SSE_HLW_USER', ''),
+        'password': os.environ.get('ZABBIX_SSE_HLW_PASS', ''),
+    },
 }
 
 def get_db_connection():
@@ -734,13 +759,190 @@ def delete_host(host_id):
 
 @app.route('/items-review')
 def items_review():
-    """监控项复核表管理"""
+    """监控项复核表管理 — 支持 ip/system/subsystem 过滤"""
+    ip = request.args.get('ip', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM items_review ORDER BY id")
+        query = "SELECT * FROM items_review WHERE 1=1"
+        params = []
+        if ip:
+            query += " AND host_ip ILIKE %s"
+            params.append(f'%{ip}%')
+        if system:
+            query += " AND system ILIKE %s"
+            params.append(f'%{system}%')
+        if subsystem:
+            query += " AND subsystem ILIKE %s"
+            params.append(f'%{subsystem}%')
+        query += " ORDER BY id"
+        cur.execute(query, params)
         items = cur.fetchall()
+
+        # 获取 system / subsystem 去重值供 datalist 下拉建议
+        cur.execute("SELECT DISTINCT system FROM items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM items_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+
     conn.close()
-    return render_template('items_review.html', items=items)
+    return render_template('items_review.html', items=items,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems)
+
+
+@app.route('/items-review/initialize', methods=['POST'])
+def initialize_items_review():
+    """初始化 items_review 表：清空并重新从 items × hosts 填充"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM items_review")
+            deleted = cur.rowcount
+            cur.execute("""
+                INSERT INTO items_review (
+                    item_id, host_ip, item_key, name, type, value_type, delay,
+                    description, units, multiplier, delta, history, trends,
+                    status, template_name, master_item, preprocessing, system, subsystem,
+                    modified, confirmed, status_verification
+                )
+                SELECT
+                    i.id,
+                    h.name as host_ip,
+                    i.item_key,
+                    i.name,
+                    i.type,
+                    i.value_type,
+                    i.delay,
+                    i.description,
+                    i.units,
+                    i.multiplier,
+                    i.delta,
+                    i.history,
+                    i.trends,
+                    i.status,
+                    i.template_name,
+                    i.master_item,
+                    i.preprocessing,
+                    h.system,
+                    h.subsystem,
+                    false,
+                    false,
+                    'pending'
+                FROM items i
+                CROSS JOIN hosts h
+                WHERE i.template_name = '21001'
+            """)
+            inserted = cur.rowcount
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'items_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/items-review/sync', methods=['POST'])
+def sync_items_to_zabbix():
+    """将已确认的监控项同步至指定环境机房的 Zabbix Server"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL，请设置环境变量'}), 500
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM items_review WHERE confirmed = TRUE ORDER BY host_ip, item_key")
+            confirmed_items = cur.fetchall()
+    finally:
+        conn.close()
+
+    if not confirmed_items:
+        return jsonify({'success': True, 'message': '没有已确认的监控项需要同步', 'synced_count': 0})
+
+    # 调用 Zabbix API 逐条同步
+    from zabbix_mac import ZabbixClient, ZabbixAPIException
+
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+    created = 0
+    updated = 0
+    errors = []
+
+    for row in confirmed_items:
+        try:
+            host_ip = row['host_ip']
+            host_id = client.get_host_id(host_ip)
+            if not host_id:
+                errors.append(f'主机 {host_ip} 在 Zabbix 中不存在')
+                continue
+
+            interface_id = client.get_host_interface_id(host_id)
+            if not interface_id:
+                errors.append(f'主机 {host_ip} 无可用接口')
+                continue
+
+            item_data = {
+                'hostid': host_id,
+                'key_': row['item_key'],
+                'name': row['name'],
+                'type': row['type'],
+                'value_type': row['value_type'],
+                'delay': row['delay'],
+                'interfaceid': interface_id,
+            }
+            if row.get('description'):
+                item_data['description'] = row['description']
+            if row.get('units'):
+                item_data['units'] = row['units']
+            if row.get('history'):
+                item_data['history'] = str(row['history'])
+            if row.get('trends'):
+                item_data['trends'] = str(row['trends'])
+            if row.get('status'):
+                item_data['status'] = row['status']
+            if row.get('master_item'):
+                item_data['master_item'] = row['master_item']
+            if row.get('preprocessing'):
+                item_data['preprocessing'] = row['preprocessing']
+
+            # 检查是否已存在
+            existing_items = client.get_managed_items(host_id)
+            existing_keys = {item['key_']: item for item in existing_items}
+
+            if row['item_key'] in existing_keys:
+                existing = existing_keys[row['item_key']]
+                target_fp = client.calculate_fingerprint(item_data)
+                current_fp = client.calculate_fingerprint(existing)
+                if target_fp != current_fp:
+                    client.update_item(existing['itemid'], item_data)
+                    updated += 1
+            else:
+                client.create_item(item_data)
+                created += 1
+
+        except ZabbixAPIException as e:
+            errors.append(f'{host_ip}/{row["item_key"]}: Zabbix API 错误 - {e}')
+        except Exception as e:
+            errors.append(f'{host_ip}/{row["item_key"]}: {e}')
+
+    msg = f'已成功同步至{environment} Zabbix：新建 {created}，更新 {updated}'
+    if errors:
+        msg += f'，{len(errors)} 个失败'
+        return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
+                        'errors': errors[:10]})
+    return jsonify({'success': True, 'message': msg, 'synced_count': created + updated})
 
 @app.route('/item-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_item_review(review_id):
@@ -835,13 +1037,83 @@ def unconfirm_item_review(review_id):
 
 @app.route('/triggers-review')
 def triggers_review():
-    """触发器复核表管理"""
+    """触发器复核表管理 — 支持 ip/system/subsystem 过滤"""
+    ip = request.args.get('ip', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM triggers_review ORDER BY id")
+        query = "SELECT * FROM triggers_review WHERE 1=1"
+        params = []
+        if ip:
+            query += " AND host_ip ILIKE %s"
+            params.append(f'%{ip}%')
+        if system:
+            query += " AND system ILIKE %s"
+            params.append(f'%{system}%')
+        if subsystem:
+            query += " AND subsystem ILIKE %s"
+            params.append(f'%{subsystem}%')
+        query += " ORDER BY id"
+        cur.execute(query, params)
         triggers = cur.fetchall()
+
+        # datalist 数据
+        cur.execute("SELECT DISTINCT system FROM triggers_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM triggers_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+
     conn.close()
-    return render_template('triggers_review.html', triggers=triggers)
+    return render_template('triggers_review.html', triggers=triggers,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems)
+
+
+@app.route('/triggers-review/initialize', methods=['POST'])
+def initialize_triggers_review():
+    """初始化 triggers_review 表：清空并重新从 triggers × hosts 填充"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM triggers_review")
+            deleted = cur.rowcount
+            cur.execute("""
+                INSERT INTO triggers_review (
+                    trigger_id, host_ip, name, expression, priority, description,
+                    status, template_name, system, subsystem,
+                    modified, confirmed, status_verification
+                )
+                SELECT
+                    tr.id,
+                    h.name as host_ip,
+                    tr.name,
+                    tr.expression,
+                    tr.priority,
+                    tr.description,
+                    tr.status,
+                    tr.template_name,
+                    h.system,
+                    h.subsystem,
+                    false,
+                    false,
+                    'pending'
+                FROM triggers tr
+                CROSS JOIN hosts h
+                WHERE tr.template_name = '21001'
+            """)
+            inserted = cur.rowcount
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'triggers_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
 
 @app.route('/trigger-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_trigger_review(review_id):

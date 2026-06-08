@@ -3,7 +3,38 @@
 {% block page_title %}触发器复核表管理{% endblock %}
 
 {% block toolbar %}
-<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+<div class="d-flex flex-wrap align-items-center gap-2">
+    <!-- 初始化按钮 -->
+    <button id="initTriggersReviewBtn" class="btn btn-outline-warning" onclick="initTriggersReview()" title="清空并重新初始化 triggers_review 表">
+        <i class="bi bi-arrow-counterclockwise"></i> 初始化
+    </button>
+
+    <div class="ms-auto">
+        <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+</div>
+
+<!-- 筛选器行 -->
+<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('triggers_review') }}">
+    <input type="text" name="ip" class="form-control form-control-sm" placeholder="主机IP" style="width: 140px;" value="{{ request.args.get('ip', '') }}">
+
+    <input type="text" name="system" class="form-control form-control-sm" placeholder="系统名称" style="width: 140px;"
+           list="systemList" autocomplete="off" value="{{ request.args.get('system', '') }}">
+    <datalist id="systemList">
+        {% for s in distinct_systems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <input type="text" name="subsystem" class="form-control form-control-sm" placeholder="模块名称" style="width: 140px;"
+           list="subsystemList" autocomplete="off" value="{{ request.args.get('subsystem', '') }}">
+    <datalist id="subsystemList">
+        {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    {% if request.args %}
+    <a href="{{ url_for('triggers_review') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    {% endif %}
+</form>
 {% endblock %}
 
 {% block content %}
@@ -72,4 +103,27 @@
         <span class="page-info">共 {{ triggers|length }} 条</span>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function initTriggersReview() {
+    var btn = document.getElementById('initTriggersReviewBtn');
+    if (!btn) return;
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
+    try {
+        var res = await fetch('/triggers-review/initialize', { method: 'POST' });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('初始化请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+</script>
 {% endblock %}
