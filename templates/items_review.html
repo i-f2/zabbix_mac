@@ -23,6 +23,11 @@
         </select>
     </div>
 
+    <!-- 添加监控项按钮 -->
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal" title="手动添加监控项">
+        <i class="bi bi-plus-lg"></i> 添加监控项
+    </button>
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -123,6 +128,128 @@
         <span class="page-info">共 {{ items|length }} 条</span>
     </div>
 </div>
+
+<!-- 添加监控项 Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1" aria-labelledby="addItemModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addItemModalLabel">添加监控项</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addItemForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="itemKey" class="form-label">键值</label>
+                    <input type="text" class="form-control" id="itemKey" name="item_key" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="itemName" class="form-label">名称</label>
+                    <input type="text" class="form-control" id="itemName" name="name" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="itemType" class="form-label">类型</label>
+                    <select class="form-select" id="itemType" name="type" required>
+                        <option value="0">Zabbix agent</option>
+                        <option value="2">Zabbix trapper</option>
+                        <option value="3">Simple check</option>
+                        <option value="5">Zabbix internal</option>
+                        <option value="7">Zabbix agent (active)</option>
+                        <option value="8">Zabbix aggregate</option>
+                        <option value="9">Web item</option>
+                        <option value="10">External check</option>
+                        <option value="11">Database monitor</option>
+                        <option value="12">IPMI agent</option>
+                        <option value="13">SSH agent</option>
+                        <option value="14">TELNET agent</option>
+                        <option value="15">Calculated</option>
+                        <option value="16">JMX agent</option>
+                        <option value="17">SNMP trap</option>
+                        <option value="18">Dependent item</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="itemValueType" class="form-label">值类型</label>
+                    <select class="form-select" id="itemValueType" name="value_type" required>
+                        <option value="0">Numeric (float)</option>
+                        <option value="1">Character</option>
+                        <option value="2">Log</option>
+                        <option value="3">Numeric (unsigned)</option>
+                        <option value="4">Text</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="itemDelay" class="form-label">更新间隔</label>
+                    <input type="text" class="form-control" id="itemDelay" name="delay" value="1m" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="itemTemplate" class="form-label">模板</label>
+                    <select class="form-select" id="itemTemplate" name="template_name" required>
+                        <option value="21001">21001</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="itemHostIp" class="form-label">主机 IP</label>
+                    <input type="text" class="form-control" id="itemHostIp" name="host_ip" placeholder="如: 10.24.3.12" required>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="itemDesc" class="form-label">描述</label>
+                <textarea class="form-control" id="itemDesc" name="description" rows="2"></textarea>
+            </div>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label for="itemUnits" class="form-label">单位</label>
+                    <input type="text" class="form-control" id="itemUnits" name="units">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="itemMultiplier" class="form-label">乘数</label>
+                    <input type="number" class="form-control" id="itemMultiplier" name="multiplier" value="0">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="itemDelta" class="form-label">Delta</label>
+                    <input type="number" class="form-control" id="itemDelta" name="delta" value="0">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="itemStatus" class="form-label">状态</label>
+                    <select class="form-select" id="itemStatus" name="status">
+                        <option value="0">启用</option>
+                        <option value="1">禁用</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="itemHistory" class="form-label">历史保留(天)</label>
+                    <input type="number" class="form-control" id="itemHistory" name="history" value="7">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="itemTrends" class="form-label">趋势保留(天)</label>
+                    <input type="number" class="form-control" id="itemTrends" name="trends" value="365">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="itemMasterItem" class="form-label">主监控项</label>
+                <input type="text" class="form-control" id="itemMasterItem" name="master_item" placeholder="如: item.key">
+            </div>
+            <div class="mb-3">
+                <label for="itemPreprocessing" class="form-label">预处理 (JSON)</label>
+                <textarea class="form-control" id="itemPreprocessing" name="preprocessing" rows="2" placeholder='[{"type": 0, "params": ""}]'></textarea>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="submitAddItemBtn" onclick="submitAddItem()">添加</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts_extra %}
@@ -140,6 +267,30 @@ async function initItemsReview() {
         if (data.success) setTimeout(function () { location.reload(); }, 1500);
     } catch (e) {
         showToast('初始化请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function submitAddItem() {
+    var btn = document.getElementById('submitAddItemBtn');
+    var form = document.getElementById('addItemForm');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 提交中...';
+    try {
+        var formData = new FormData(form);
+        var res = await fetch('/item-review/add', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('addItemModal'));
+            modal.hide();
+            setTimeout(function () { location.reload(); }, 800);
+        }
+    } catch (e) {
+        showToast('添加失败: ' + e.message, 'danger');
     } finally {
         btn.disabled = false;
         btn.innerHTML = orig;

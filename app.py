@@ -1035,6 +1035,65 @@ def unconfirm_item_review(review_id):
     conn.close()
     return redirect(url_for('items_review'))
 
+
+@app.route('/item-review/add', methods=['POST'])
+def add_item_from_review():
+    """从复核页面添加监控项：写入 items 主表 + items_review 复核表"""
+    conn = get_db_connection()
+    try:
+        item_key = request.form['item_key']
+        name = request.form['name']
+        type_val = int(request.form['type'])
+        value_type = int(request.form['value_type'])
+        delay = request.form['delay']
+        template_name = request.form['template_name']
+        host_ip = request.form.get('host_ip', '').strip()
+
+        description = request.form.get('description')
+        units = request.form.get('units')
+        multiplier = request.form.get('multiplier', 0)
+        delta = request.form.get('delta', 0)
+        history = request.form.get('history', 7)
+        trends = request.form.get('trends', 365)
+        status = request.form.get('status', 0)
+        master_item = request.form.get('master_item') or None
+        preprocessing = request.form.get('preprocessing') or None
+
+        with conn.cursor() as cur:
+            # 1. 写入主表 items，返回新 ID
+            cur.execute("""
+                INSERT INTO items (item_key, name, type, value_type, delay, description, units,
+                                   multiplier, delta, history, trends, status, template_name,
+                                   master_item, preprocessing)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (item_key, name, type_val, value_type, delay, description, units,
+                   multiplier, delta, history, trends, status, template_name,
+                   master_item, preprocessing))
+            new_item_id = cur.fetchone()[0]
+
+            # 2. 写入复核表 items_review
+            cur.execute("""
+                INSERT INTO items_review (
+                    item_id, host_ip, item_key, name, type, value_type, delay,
+                    description, units, multiplier, delta, history, trends,
+                    status, template_name, master_item, preprocessing,
+                    modified, confirmed, status_verification
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_item_id, host_ip, item_key, name, type_val, value_type, delay,
+                   description, units, multiplier, delta, history, trends, status,
+                   template_name, master_item, preprocessing,
+                   False, False, 'pending'))
+
+        conn.commit()
+        return jsonify({'success': True, 'message': '监控项添加成功'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/triggers-review')
 def triggers_review():
     """触发器复核表管理 — 支持 ip/system/subsystem 过滤"""
@@ -1189,6 +1248,50 @@ def unconfirm_trigger_review(review_id):
         flash(f'取消确认失败: {e}')
     conn.close()
     return redirect(url_for('triggers_review'))
+
+
+@app.route('/trigger-review/add', methods=['POST'])
+def add_trigger_from_review():
+    """从复核页面添加触发器：写入 triggers 主表 + triggers_review 复核表"""
+    conn = get_db_connection()
+    try:
+        name = request.form['name']
+        expression = request.form['expression']
+        priority = int(request.form['priority'])
+        template_name = request.form['template_name']
+        host_ip = request.form.get('host_ip', '').strip()
+
+        description = request.form.get('description')
+        status = request.form.get('status', 0)
+
+        with conn.cursor() as cur:
+            # 1. 写入主表 triggers，返回新 ID
+            cur.execute("""
+                INSERT INTO triggers (name, expression, priority, description, status, template_name)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (name, expression, priority, description, status, template_name))
+            new_trigger_id = cur.fetchone()[0]
+
+            # 2. 写入复核表 triggers_review
+            cur.execute("""
+                INSERT INTO triggers_review (
+                    trigger_id, host_ip, name, expression, priority, description,
+                    status, template_name,
+                    modified, confirmed, status_verification
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (new_trigger_id, host_ip, name, expression, priority, description,
+                   status, template_name,
+                   False, False, 'pending'))
+
+        conn.commit()
+        return jsonify({'success': True, 'message': '触发器添加成功'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 
 @app.route('/item-prototypes-review')
 def item_prototypes_review():

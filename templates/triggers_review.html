@@ -9,6 +9,11 @@
         <i class="bi bi-arrow-counterclockwise"></i> 初始化
     </button>
 
+    <!-- 新增触发器按钮 -->
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTriggerModal" title="手动新增触发器">
+        <i class="bi bi-plus-lg"></i> 新增触发器
+    </button>
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -103,10 +108,99 @@
         <span class="page-info">共 {{ triggers|length }} 条</span>
     </div>
 </div>
+
+<!-- 新增触发器 Modal -->
+<div class="modal fade" id="addTriggerModal" tabindex="-1" aria-labelledby="addTriggerModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addTriggerModalLabel">新增触发器</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addTriggerForm">
+            <div class="mb-3">
+                <label for="triggerName" class="form-label">名称</label>
+                <input type="text" class="form-control" id="triggerName" name="name" required>
+            </div>
+            <div class="mb-3">
+                <label for="triggerExpression" class="form-label">表达式</label>
+                <input type="text" class="form-control" id="triggerExpression" name="expression" required>
+                <small class="form-text text-muted">例如: {host:system.cpu.util.last()}&gt;90</small>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="triggerPriority" class="form-label">优先级</label>
+                    <select class="form-select" id="triggerPriority" name="priority" required>
+                        <option value="0">Not classified</option>
+                        <option value="1">Information</option>
+                        <option value="2">Warning</option>
+                        <option value="3">Average</option>
+                        <option value="4">High</option>
+                        <option value="5">Disaster</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="triggerStatus" class="form-label">状态</label>
+                    <select class="form-select" id="triggerStatus" name="status">
+                        <option value="0">启用</option>
+                        <option value="1">禁用</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="triggerTemplate" class="form-label">模板</label>
+                    <select class="form-select" id="triggerTemplate" name="template_name" required>
+                        <option value="21001">21001</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="triggerHostIp" class="form-label">主机 IP</label>
+                    <input type="text" class="form-control" id="triggerHostIp" name="host_ip" placeholder="如: 10.24.3.12" required>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="triggerDesc" class="form-label">描述</label>
+                <textarea class="form-control" id="triggerDesc" name="description" rows="2"></textarea>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="submitAddTriggerBtn" onclick="submitAddTrigger()">添加</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts_extra %}
 <script>
+async function submitAddTrigger() {
+    var btn = document.getElementById('submitAddTriggerBtn');
+    var form = document.getElementById('addTriggerForm');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 提交中...';
+    try {
+        var formData = new FormData(form);
+        var res = await fetch('/trigger-review/add', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('addTriggerModal'));
+            modal.hide();
+            setTimeout(function () { location.reload(); }, 800);
+        }
+    } catch (e) {
+        showToast('添加失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
 async function initTriggersReview() {
     var btn = document.getElementById('initTriggersReviewBtn');
     if (!btn) return;
