@@ -1260,7 +1260,7 @@ def unconfirm_trigger_review(review_id):
 
 @app.route('/trigger-review/add', methods=['POST'])
 def add_trigger_from_review():
-    """从复核页面添加触发器：写入 triggers 主表 + triggers_review 复核表"""
+    """从复核页面添加触发器：仅写入 triggers_review 复核表（不改动 triggers 主表）"""
     conn = get_db_connection()
     try:
         name = request.form['name']
@@ -1275,15 +1275,20 @@ def add_trigger_from_review():
         subsystem = request.form.get('subsystem', '').strip() or None
 
         with conn.cursor() as cur:
-            # 1. 写入主表 triggers（triggers 表有 system/subsystem 字段）
-            cur.execute("""
-                INSERT INTO triggers (name, expression, priority, description, status, template_name, system, subsystem)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (name, expression, priority, description, status, template_name, system, subsystem))
-            new_trigger_id = cur.fetchone()[0]
+            # 从 triggers 主表查找同模板的已有触发器作为 FK 引用（不改动 triggers 表）
+            cur.execute(
+                "SELECT id FROM triggers WHERE template_name = %s LIMIT 1",
+                (template_name,)
+            )
+            ref = cur.fetchone()
+            if not ref:
+                return jsonify({
+                    'success': False,
+                    'message': f'模板 {template_name} 下无已有触发器可作为引用，请先在触发器管理中创建'
+                }), 400
+            ref_trigger_id = ref[0]
 
-            # 2. 写入复核表 triggers_review（含 system/subsystem）
+            # 写入复核表 triggers_review（system/subsystem 仅存此处）
             cur.execute("""
                 INSERT INTO triggers_review (
                     trigger_id, host_ip, name, expression, priority, description,
@@ -1291,7 +1296,7 @@ def add_trigger_from_review():
                     system, subsystem,
                     modified, confirmed, status_verification
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (new_trigger_id, host_ip, name, expression, priority, description,
+            """, (ref_trigger_id, host_ip, name, expression, priority, description,
                    status, template_name,
                    system, subsystem,
                    False, False, 'pending'))
