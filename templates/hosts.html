@@ -4,6 +4,9 @@
 
 {% block toolbar %}
 <a href="{{ url_for('add_host') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加主机</a>
+<button id="syncHostsBtn" class="btn btn-outline-primary" onclick="syncHosts()" title="从 sub_assets 同步主机资产">
+    <i class="bi bi-arrow-repeat"></i> 同步
+</button>
 <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
 {% endblock %}
 

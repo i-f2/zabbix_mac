@@ -157,3 +157,49 @@ document.addEventListener('DOMContentLoaded', function () {
         row.style.cursor = 'pointer';
     });
 });
+
+// ========================================================
+// 主机资产同步
+// ========================================================
+async function syncHosts() {
+    const btn = document.getElementById('syncHostsBtn');
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+
+    // Loading 状态
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
+
+    try {
+        const response = await fetch('/host/sync', { method: 'POST' });
+        const data = await response.json();
+
+        showToast(data.message, data.success ? 'success' : 'danger');
+
+        if (data.success) {
+            // 延迟刷新，让用户看到 toast
+            setTimeout(function () { location.reload(); }, 1500);
+        }
+    } catch (error) {
+        showToast('同步请求失败: ' + error.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
+// 通用 toast 通知函数
+function showToast(message, type) {
+    var toastEl = document.createElement('div');
+    toastEl.className = 'toast align-items-center text-white bg-' + type + ' border-0 position-fixed bottom-0 end-0 m-3';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.innerHTML =
+        '<div class="d-flex">' +
+            '<div class="toast-body">' + message + '</div>' +
+            '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
+        '</div>';
+    document.body.appendChild(toastEl);
+    var toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+    toast.show();
+    toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+}

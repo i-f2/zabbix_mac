@@ -595,6 +595,60 @@ def hosts():
     conn.close()
     return render_template('hosts.html', hosts=hosts)
 
+
+@app.route('/host/sync', methods=['POST'])
+def sync_hosts():
+    """从 ops.sub_assets 同步主机资产到 zabbix_mac.hosts
+
+    增量发现：通过 LEFT JOIN 对比源表与目标表，找出新增或变更的记录。
+    幂等性：使用 ON CONFLICT (name) DO UPDATE 保证重复执行不产生重复数据。
+    事务控制：整批操作在一个事务中，失败即 rollback。
+    """
+    conn = get_db_connection()
+    synced_count = 0
+
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 增量发现：LEFT JOIN 对比，找出新增或变更的记录
+            cur.execute("""
+                SELECT sa.system, sa.subsystem, sa.hostname, sa.ip, sa.template_id
+                FROM ops.sub_assets sa
+                LEFT JOIN hosts h ON sa.ip = h.name
+                WHERE h.id IS NULL
+                   OR h.system IS DISTINCT FROM sa.system
+                   OR h.subsystem IS DISTINCT FROM sa.subsystem
+                   OR h.template_name IS DISTINCT FROM sa.template_id::varchar
+            """)
+            to_sync = cur.fetchall()
+
+            # 2. 逐条 UPSERT 到 zabbix_mac.hosts
+            for row in to_sync:
+                cur.execute("""
+                    INSERT INTO hosts (name, system, subsystem, template_name, description)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (name)
+                    DO UPDATE SET
+                        system = EXCLUDED.system,
+                        subsystem = EXCLUDED.subsystem,
+                        template_name = EXCLUDED.template_name,
+                        description = EXCLUDED.description,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (row['ip'], row['system'], row['subsystem'],
+                      row['template_id'], row['hostname']))
+                synced_count += 1
+
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'同步成功：成功同步 {synced_count} 台主机',
+            'synced_count': synced_count
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 @app.route('/host/add', methods=['GET', 'POST'])
 def add_host():
     """添加主机"""
