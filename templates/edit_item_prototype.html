@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
 
+{% block page_title %}编辑监控项原型{% endblock %}
+
 {% block content %}
-    <h1>编辑监控项原型</h1>
-    <div class="mt-4">
+<div class="form-card">
         <form method="POST">
             <div class="mb-3">
                 <label for="name" class="form-label">名称</label>
@@ -60,5 +61,5 @@
             <button type="submit" class="btn btn-primary">更新</button>
             <a href="{{ url_for('item_prototypes') }}" class="btn btn-secondary">取消</a>
         </form>
-    </div>
+</div>
 {% endblock %}

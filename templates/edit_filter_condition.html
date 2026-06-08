@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block page_title %}编辑过滤条件{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <form method="POST">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="discovery_rule_id" class="form-label">所属自动发现规则 *</label>
+                <select class="form-select" id="discovery_rule_id" name="discovery_rule_id" required>
+                    <option value="">-- 请选择 --</option>
+                    {% for dr in discovery_rules %}
+                    <option value="{{ dr.id }}" {% if cond.discovery_rule_id == dr.id %}selected{% endif %}>
+                        {{ dr.template_name }} / {{ dr.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="macro" class="form-label">宏 (Macro) *</label>
+                <input type="text" class="form-control" id="macro" name="macro" value="{{ cond.macro }}" required placeholder="例如: {#MACRO}">
+            </div>
+            <div class="col-md-12">
+                <label for="value" class="form-label">值 (Value) *</label>
+                <input type="text" class="form-control" id="value" name="value" value="{{ cond.value }}" required placeholder="正则表达式或具体值">
+            </div>
+            <div class="col-md-6">
+                <label for="operator" class="form-label">操作符</label>
+                <select class="form-select" id="operator" name="operator">
+                    <option value="MATCHES_REGEX" {% if cond.operator == 'MATCHES_REGEX' %}selected{% endif %}>匹配正则 (MATCHES_REGEX)</option>
+                    <option value="NOT_MATCHES_REGEX" {% if cond.operator == 'NOT_MATCHES_REGEX' %}selected{% endif %}>不匹配正则 (NOT_MATCHES_REGEX)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> 保存修改</button>
+            <a href="{{ url_for('filter_conditions') }}" class="btn btn-outline-secondary ms-2"><i class="bi bi-x-lg"></i> 取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

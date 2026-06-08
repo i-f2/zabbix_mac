@@ -1,7 +1,9 @@
 {% extends 'base.html' %}
 
+{% block page_title %}编辑监控项原型复核记录{% endblock %}
+
 {% block content %}
-    <h1>编辑监控项原型复核记录</h1>
+<div class="form-card">
     <form method="post">
         <div class="mb-3">
             <label for="host_ip" class="form-label">主机 IP</label>
@@ -54,4 +56,5 @@
         <button type="submit" class="btn btn-primary">保存</button>
         <a href="{{ url_for('item_prototypes_review') }}" class="btn btn-secondary">取消</a>
     </form>
+</div>
 {% endblock %}

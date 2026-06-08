@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block page_title %}搜索结果{% if query %}：{{ query }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="data-card">
+    <div class="card-body-padding">
+        {% if query %}
+        <p class="text-muted mb-4">
+            <i class="bi bi-search"></i> 搜索 "<strong>{{ query }}</strong>" 的结果如下：
+        </p>
+        <div id="searchResults" class="search-results-page">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">搜索中...</span>
+                </div>
+                <p class="text-muted mt-2">正在搜索...</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon"><i class="bi bi-search"></i></div>
+            <div class="empty-title">请输入搜索关键词</div>
+            <div class="empty-desc">在顶部搜索框中输入关键词，搜索监控项、触发器、主机、模板和自动发现规则。</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var query = {{ query|tojson }};
+    if (!query) return;
+
+    var container = document.getElementById('searchResults');
+
+    fetch('/api/search?q=' + encodeURIComponent(query))
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var results = data.results;
+            if (!results || results.length === 0) {
+                container.innerHTML = '<div class="empty-state">' +
+                    '<div class="empty-icon"><i class="bi bi-inbox"></i></div>' +
+                    '<div class="empty-title">未找到匹配结果</div>' +
+                    '<div class="empty-desc">未找到与 "<strong>' + escapeHtml(query) + '</strong>" 相关的任何结果。<br>请尝试其他关键词。</div>' +
+                    '</div>';
+                return;
+            }
+
+            // Group results by type
+            var grouped = {};
+            var typeOrder = ['item', 'trigger', 'host', 'template', 'discovery_rule'];
+            var typeLabels = {
+                'item': '监控项',
+                'trigger': '触发器',
+                'host': '主机',
+                'template': '模板',
+                'discovery_rule': '自动发现规则'
+            };
+            var typeIcons = {
+                'item': 'bi-graph-up',
+                'trigger': 'bi-exclamation-triangle',
+                'host': 'bi-hdd-stack',
+                'template': 'bi-files',
+                'discovery_rule': 'bi-search'
+            };
+
+            results.forEach(function(r) {
+                if (!grouped[r.type]) grouped[r.type] = [];
+                grouped[r.type].push(r);
+            });
+
+            var html = '';
+            typeOrder.forEach(function(type) {
+                if (!grouped[type] || grouped[type].length === 0) return;
+                html += '<div class="search-result-category">';
+                html += '<h5><i class="' + (typeIcons[type] || 'bi-dot') + '"></i> ' + typeLabels[type] + ' (' + grouped[type].length + ')</h5>';
+                grouped[type].forEach(function(r) {
+                    html += '<a href="' + r.url + '" class="search-result-item">';
+                    html += '<span class="result-badge">' + r.type_label + '</span>';
+                    html += '<div class="result-name">' + escapeHtml(r.name) + '</div>';
+                    if (r.detail) {
+                        html += '<div class="result-detail">' + escapeHtml(r.detail) + '</div>';
+                    }
+                    html += '</a>';
+                });
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        })
+        .catch(function(err) {
+            container.innerHTML = '<div class="alert alert-danger">搜索请求失败：' + escapeHtml(err.message) + '</div>';
+        });
+});
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

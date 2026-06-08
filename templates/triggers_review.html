@@ -1,26 +1,33 @@
 {% extends 'base.html' %}
 
+{% block page_title %}触发器复核表管理{% endblock %}
+
+{% block toolbar %}
+<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+{% endblock %}
+
 {% block content %}
-    <h1>触发器复核表管理</h1>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>主机 IP</th>
-                <th>名称</th>
-                <th>表达式</th>
-                <th>优先级</th>
-                <th>模板</th>
-                <th>系统名称</th>
-                <th>模块名称</th>
-                <th>修改状态</th>
-                <th>确认状态</th>
-                <th>状态核验</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for trigger in triggers %}
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>主机 IP</th>
+                    <th>名称</th>
+                    <th>表达式</th>
+                    <th>优先级</th>
+                    <th>模板</th>
+                    <th>系统名称</th>
+                    <th>模块名称</th>
+                    <th>修改状态</th>
+                    <th>确认状态</th>
+                    <th>状态核验</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trigger in triggers %}
                 <tr>
                     <td>{{ trigger.id }}</td>
                     <td>{{ trigger.host_ip }}</td>
@@ -34,11 +41,11 @@
                     <td>{{ '已确认' if trigger.confirmed else '未确认' }}</td>
                     <td>
                         {% if trigger.status_verification == 'verified' %}
-                            <span style="background-color:#28a745;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">已核验</span>
+                            <span class="status-badge verified">已核验</span>
                         {% elif trigger.status_verification == 'not_found' %}
-                            <span style="background-color:#dc3545;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">未找到</span>
+                            <span class="status-badge not-found">未找到</span>
                         {% else %}
-                            <span style="background-color:#d3d3d3;color:#555;padding:2px 8px;border-radius:4px;font-size:12px">未核验</span>
+                            <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
                     <td>
@@ -50,7 +57,19 @@
                         {% endif %}
                     </td>
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if triggers|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无复核记录</div>
+        <div class="empty-desc">当前没有待复核的触发器记录。</div>
+    </div>
+    {% endif %}
+    <div class="pagination-area">
+        <span class="page-info">共 {{ triggers|length }} 条</span>
+    </div>
+</div>
 {% endblock %}

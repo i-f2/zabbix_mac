@@ -1,22 +1,29 @@
 {% extends 'base.html' %}
 
+{% block page_title %}触发器原型复核表管理{% endblock %}
+
+{% block toolbar %}
+<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+{% endblock %}
+
 {% block content %}
-    <h1>触发器原型复核表管理</h1>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>主机 IP</th>
-                <th>描述</th>
-                <th>表达式</th>
-                <th>优先级</th>
-                <th>修改状态</th>
-                <th>确认状态</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for prototype in prototypes %}
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>主机 IP</th>
+                    <th>描述</th>
+                    <th>表达式</th>
+                    <th>优先级</th>
+                    <th>修改状态</th>
+                    <th>确认状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prototype in prototypes %}
                 <tr>
                     <td>{{ prototype.id }}</td>
                     <td>{{ prototype.host_ip }}</td>
@@ -34,7 +41,19 @@
                         {% endif %}
                     </td>
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if prototypes|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无复核记录</div>
+        <div class="empty-desc">当前没有待复核的触发器原型记录。</div>
+    </div>
+    {% endif %}
+    <div class="pagination-area">
+        <span class="page-info">共 {{ prototypes|length }} 条</span>
+    </div>
+</div>
 {% endblock %}

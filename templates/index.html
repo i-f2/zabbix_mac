@@ -1,7 +1,12 @@
 {% extends 'base.html' %}
 
+{% block page_title %}系统概览{% endblock %}
+
+{% block page_header_extra %}
+<a href="{{ url_for('system_info') }}">查看详情 <i class="bi bi-arrow-right"></i></a>
+{% endblock %}
+
 {% block content %}
-    <h1 class="mb-4">系统信息</h1>
     
     <div class="row mb-4">
         <div class="col-md-3">

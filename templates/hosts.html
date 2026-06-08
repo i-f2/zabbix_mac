@@ -1,10 +1,16 @@
 {% extends 'base.html' %}
 
+{% block page_title %}主机管理{% endblock %}
+
+{% block toolbar %}
+<a href="{{ url_for('add_host') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加主机</a>
+<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+{% endblock %}
+
 {% block content %}
-    <h1>主机管理</h1>
-    <div class="mt-4">
-        <a href="{{ url_for('add_host') }}" class="btn btn-primary mb-3">添加主机</a>
-        <table class="table table-striped">
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -36,4 +42,15 @@
             </tbody>
         </table>
     </div>
+    {% if hosts|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无主机数据</div>
+        <div class="empty-desc">当前未查询到主机，您可以<a href="{{ url_for('add_host') }}">添加第一台主机</a>。</div>
+    </div>
+    {% endif %}
+    <div class="pagination-area">
+        <span class="page-info">共 {{ hosts|length }} 条</span>
+    </div>
+</div>
 {% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block page_title %}编辑自动发现规则{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <form method="POST">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="name" class="form-label">名称 *</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ rule.name }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="key" class="form-label">键值 *</label>
+                <input type="text" class="form-control" id="key" name="key" value="{{ rule.key }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="delay" class="form-label">更新间隔 *</label>
+                <input type="text" class="form-control" id="delay" name="delay" value="{{ rule.delay }}" required placeholder="例如: 30s, 1m, 5m">
+            </div>
+            <div class="col-md-6">
+                <label for="template_name" class="form-label">模板名称 *</label>
+                <input type="text" class="form-control" id="template_name" name="template_name" value="{{ rule.template_name }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="evaltype" class="form-label">评估类型</label>
+                <select class="form-select" id="evaltype" name="evaltype">
+                    <option value="0" {% if rule.evaltype == 0 %}selected{% endif %}>AND/OR</option>
+                    <option value="1" {% if rule.evaltype == 1 %}selected{% endif %}>AND</option>
+                    <option value="2" {% if rule.evaltype == 2 %}selected{% endif %}>OR</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0" {% if rule.status == 0 %}selected{% endif %}>启用</option>
+                    <option value="1" {% if rule.status == 1 %}selected{% endif %}>禁用</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> 保存修改</button>
+            <a href="{{ url_for('discovery_rules') }}" class="btn btn-outline-secondary ms-2"><i class="bi bi-x-lg"></i> 取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

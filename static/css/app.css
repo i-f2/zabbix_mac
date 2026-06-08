@@ -1,0 +1,671 @@
+/* ============================================================
+   Zabbix MaC 管理界面 - 自定义样式
+   基于 Bootstrap 5.3 + Bootstrap Icons
+   ============================================================ */
+
+/* --- CSS Variables --- */
+:root {
+    --sidebar-width: 200px;
+    --navbar-height: 60px;
+    --sidebar-bg: #fff;
+    --sidebar-active-bg: #ecf5ff;
+    --sidebar-active-color: #409eff;
+    --sidebar-active-border: #409eff;
+    --sidebar-hover-bg: #f5f7fa;
+    --content-bg: #f5f7fa;
+    --navbar-bg: #fff;
+    --navbar-border: #e4e7ed;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --text-primary: #303133;
+    --text-secondary: #909399;
+    --text-muted: #c0c4cc;
+}
+
+/* --- Reset --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    background: var(--content-bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ============================================================
+   Top Navbar
+   ============================================================ */
+.app-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--navbar-height);
+    background: var(--navbar-bg);
+    border-bottom: 1px solid var(--navbar-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 1030;
+}
+
+.app-navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.app-navbar-left .btn-sidebar-toggle {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.app-navbar-left .btn-sidebar-toggle:hover {
+    background: #f0f0f0;
+}
+
+.app-navbar-left .brand-logo {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.app-navbar-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    max-width: 480px;
+    margin: 0 24px;
+}
+
+.global-search-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.global-search-wrap .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 16px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.global-search-wrap .global-search-input {
+    width: 100%;
+    height: 36px;
+    padding: 6px 16px 6px 40px;
+    border: 1px solid #dcdfe6;
+    border-radius: 20px;
+    background: #f5f7fa;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.global-search-wrap .global-search-input:focus {
+    border-color: var(--sidebar-active-border);
+    background: #fff;
+}
+
+.app-navbar-right {
+    flex-shrink: 0;
+}
+
+.app-navbar-right .btn-avatar {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    line-height: 1;
+}
+
+.app-navbar-right .btn-avatar:hover {
+    color: var(--sidebar-active-color);
+}
+
+/* ============================================================
+   Layout Wrapper (below navbar)
+   ============================================================ */
+.app-layout-wrapper {
+    display: flex;
+    margin-top: var(--navbar-height);
+    min-height: calc(100vh - var(--navbar-height));
+}
+
+/* ============================================================
+   Left Sidebar
+   ============================================================ */
+.app-sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--navbar-border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: width 0.3s, min-width 0.3s;
+    position: relative;
+}
+
+/* Collapsed state */
+body.sidebar-collapsed .app-sidebar {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+}
+
+body.sidebar-collapsed .app-main {
+    margin-left: 0;
+}
+
+.sidebar-nav {
+    padding: 8px 0;
+    width: var(--sidebar-width);
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: var(--navbar-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 1015;
+}
+
+/* --- Menu Group Title --- */
+.sidebar-menu-group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 20px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.sidebar-menu-group-title i {
+    font-size: 14px;
+}
+
+.sidebar-menu-group-title:first-child {
+    padding-top: 12px;
+}
+
+/* --- Menu Item --- */
+.sidebar-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.sidebar-menu-item:hover {
+    background: var(--sidebar-hover-bg);
+    color: var(--sidebar-active-color);
+    text-decoration: none;
+}
+
+.sidebar-menu-item.active {
+    background: var(--sidebar-active-bg);
+    color: var(--sidebar-active-color);
+    font-weight: 600;
+    border-left-color: var(--sidebar-active-border);
+}
+
+.sidebar-menu-item i {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   Main Content Area
+   ============================================================ */
+.app-main {
+    flex: 1;
+    margin-left: 0;
+    background: var(--content-bg);
+    padding: 20px 24px;
+    overflow-y: auto;
+    transition: margin-left 0.3s;
+    min-height: calc(100vh - var(--navbar-height));
+}
+
+/* --- Breadcrumb Bar --- */
+.breadcrumb-bar {
+    margin-bottom: 16px;
+}
+
+.breadcrumb-bar .breadcrumb {
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.breadcrumb-bar .breadcrumb .breadcrumb-item a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.breadcrumb-bar .breadcrumb .breadcrumb-item a:hover {
+    color: var(--sidebar-active-color);
+}
+
+.breadcrumb-bar .breadcrumb .breadcrumb-item.active {
+    color: var(--text-primary);
+}
+
+.page-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.page-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.page-header-extra {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.page-header-extra a {
+    color: var(--sidebar-active-color);
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.page-header-extra a:hover {
+    text-decoration: underline;
+}
+
+/* --- Toolbar --- */
+.toolbar-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.toolbar-area .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-area .btn-group-custom {
+    display: inline-flex;
+}
+
+.toolbar-area .input-group-search {
+    max-width: 320px;
+}
+
+.toolbar-spacer {
+    flex: 1;
+}
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.toolbar-actions .btn-icon {
+    background: none;
+    border: 1px solid #dcdfe6;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.toolbar-actions .btn-icon:hover {
+    color: var(--sidebar-active-color);
+    border-color: var(--sidebar-active-color);
+}
+
+/* ============================================================
+   Data Card
+   ============================================================ */
+.data-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+}
+
+.data-card .card-body-padding {
+    padding: 20px;
+}
+
+/* --- Table inside data card --- */
+.data-card .table {
+    margin-bottom: 0;
+    font-size: 14px;
+}
+
+.data-card .table > thead {
+    background: #f5f7fa;
+}
+
+.data-card .table > thead > tr > th {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid #ebeef5;
+    padding: 12px 16px;
+    white-space: nowrap;
+}
+
+.data-card .table > tbody > tr > td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #ebeef5;
+}
+
+.data-card .table > tbody > tr:hover {
+    background: #f5f7fa;
+}
+
+/* ============================================================
+   Empty State
+   ============================================================ */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-state .empty-icon {
+    font-size: 56px;
+    color: #c0c4cc;
+    margin-bottom: 16px;
+}
+
+.empty-state .empty-title {
+    font-size: 16px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.empty-state .empty-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+.empty-state .empty-desc a {
+    color: var(--sidebar-active-color);
+}
+
+/* ============================================================
+   Pagination
+   ============================================================ */
+.pagination-area {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-top: 1px solid #ebeef5;
+}
+
+.pagination-area .page-info {
+    margin-right: 8px;
+}
+
+.pagination-area .btn-page {
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    color: var(--text-primary);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.5;
+    transition: all 0.2s;
+}
+
+.pagination-area .btn-page:hover:not(:disabled) {
+    color: var(--sidebar-active-color);
+    border-color: var(--sidebar-active-color);
+}
+
+.pagination-area .btn-page:disabled {
+    color: #c0c4cc;
+    cursor: not-allowed;
+}
+
+.pagination-area .page-current {
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0 4px;
+}
+
+.pagination-area .page-size-select {
+    padding: 4px 8px;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: #fff;
+    cursor: pointer;
+}
+
+/* ============================================================
+   Status Badges
+   ============================================================ */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.status-badge.verified {
+    background-color: #28a745;
+}
+
+.status-badge.mismatch {
+    background-color: #dc3545;
+}
+
+.status-badge.not-found {
+    background-color: #dc3545;
+}
+
+.status-badge.pending {
+    background-color: #d3d3d3;
+    color: #555;
+}
+
+/* --- Bootstrap badge extensions --- */
+.badge-status-enabled {
+    background-color: #28a745;
+}
+
+.badge-status-disabled {
+    background-color: #6c757d;
+}
+
+/* ============================================================
+   Search Results
+   ============================================================ */
+.search-results-page {
+    max-width: 800px;
+}
+
+.search-result-category {
+    margin-bottom: 24px;
+}
+
+.search-result-category h5 {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.search-result-item {
+    display: block;
+    padding: 10px 16px;
+    background: #fff;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+.search-result-item:hover {
+    border-color: var(--sidebar-active-border);
+    background: var(--sidebar-active-bg);
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.search-result-item .result-name {
+    font-weight: 500;
+}
+
+.search-result-item .result-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.search-result-item .result-badge {
+    float: right;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #ecf5ff;
+    color: var(--sidebar-active-color);
+}
+
+/* ============================================================
+   Form Styles
+   ============================================================ */
+.form-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: var(--card-shadow);
+    padding: 24px;
+}
+
+.form-card .form-label {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+/* ============================================================
+   Responsive - Mobile
+   ============================================================ */
+@media (max-width: 768px) {
+    .app-sidebar {
+        position: fixed;
+        top: var(--navbar-height);
+        left: 0;
+        bottom: 0;
+        z-index: 1020;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    }
+
+    body.sidebar-collapsed .app-sidebar {
+        width: 0;
+        min-width: 0;
+        border-right: none;
+    }
+
+    .app-main {
+        margin-left: 0 !important;
+        padding: 16px;
+    }
+
+    .app-navbar-center {
+        max-width: 240px;
+        margin: 0 12px;
+    }
+
+    .app-navbar-left .brand-logo {
+        font-size: 15px;
+    }
+
+    .toolbar-area {
+        gap: 6px;
+    }
+
+    .toolbar-area .input-group-search {
+        max-width: 200px;
+    }
+}
+
+/* ============================================================
+   Utility Classes
+   ============================================================ */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.text-mono {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+}
+
+.truncate {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

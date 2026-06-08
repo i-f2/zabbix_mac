@@ -6,7 +6,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 基于 Flask 的 Web 应用，用于管理 PostgreSQL 中的监控配置数据
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 import psycopg2
 from psycopg2.extras import DictCursor
 import json
@@ -30,6 +30,81 @@ def get_db_connection():
     conn = psycopg2.connect(**DB_CONFIG)
     conn.set_client_encoding('utf8')
     return conn
+
+@app.context_processor
+def inject_active_menu():
+    """为所有模板注入当前活跃菜单项"""
+    endpoint = request.endpoint
+    menu_map = {
+        'index': 'system_info',
+        'system_info': 'system_info',
+        'templates': 'templates',
+        'template_detail': 'templates',
+        'items': 'items',
+        'add_item': 'items',
+        'edit_item': 'items',
+        'triggers': 'triggers',
+        'add_trigger': 'triggers',
+        'edit_trigger': 'triggers',
+        'item_prototypes': 'item_prototypes',
+        'edit_item_prototype': 'item_prototypes',
+        'trigger_prototypes': 'trigger_prototypes',
+        'edit_trigger_prototype': 'trigger_prototypes',
+        'items_review': 'items_review',
+        'edit_item_review': 'items_review',
+        'triggers_review': 'triggers_review',
+        'edit_trigger_review': 'triggers_review',
+        'item_prototypes_review': 'item_prototypes_review',
+        'edit_item_prototype_review': 'item_prototypes_review',
+        'trigger_prototypes_review': 'trigger_prototypes_review',
+        'edit_trigger_prototype_review': 'trigger_prototypes_review',
+        'hosts': 'hosts',
+        'add_host': 'hosts',
+        'edit_host': 'hosts',
+        'discovery_rules': 'discovery_rules',
+        'edit_discovery_rule': 'discovery_rules',
+        'filter_conditions': 'filter_conditions',
+        'edit_filter_condition': 'filter_conditions',
+    }
+    return {'active_menu': menu_map.get(endpoint, '')}
+
+@app.context_processor
+def inject_breadcrumb():
+    """为所有模板注入面包屑导航数据"""
+    endpoint = request.endpoint
+    breadcrumb_map = {
+        'index': [('首页', url_for('index'))],
+        'system_info': [('系统信息', url_for('system_info'))],
+        'templates': [('预定义模版管理', None), ('模板管理', url_for('templates'))],
+        'template_detail': [('预定义模版管理', None), ('模板管理', url_for('templates')), ('模板详情', None)],
+        'items': [('预定义模版管理', None), ('监控项管理', url_for('items'))],
+        'add_item': [('预定义模版管理', None), ('监控项管理', url_for('items')), ('添加监控项', None)],
+        'edit_item': [('预定义模版管理', None), ('监控项管理', url_for('items')), ('编辑监控项', None)],
+        'triggers': [('预定义模版管理', None), ('触发器管理', url_for('triggers'))],
+        'add_trigger': [('预定义模版管理', None), ('触发器管理', url_for('triggers')), ('添加触发器', None)],
+        'edit_trigger': [('预定义模版管理', None), ('触发器管理', url_for('triggers')), ('编辑触发器', None)],
+        'item_prototypes': [('预定义模版管理', None), ('监控项原型管理', url_for('item_prototypes'))],
+        'edit_item_prototype': [('预定义模版管理', None), ('监控项原型管理', url_for('item_prototypes')), ('编辑监控项原型', None)],
+        'trigger_prototypes': [('预定义模版管理', None), ('触发器原型管理', url_for('trigger_prototypes'))],
+        'edit_trigger_prototype': [('预定义模版管理', None), ('触发器原型管理', url_for('trigger_prototypes')), ('编辑触发器原型', None)],
+        'items_review': [('复核表管理', None), ('监控项复核', url_for('items_review'))],
+        'edit_item_review': [('复核表管理', None), ('监控项复核', url_for('items_review')), ('编辑复核记录', None)],
+        'triggers_review': [('复核表管理', None), ('触发器复核', url_for('triggers_review'))],
+        'edit_trigger_review': [('复核表管理', None), ('触发器复核', url_for('triggers_review')), ('编辑复核记录', None)],
+        'item_prototypes_review': [('复核表管理', None), ('监控项原型复核', url_for('item_prototypes_review'))],
+        'edit_item_prototype_review': [('复核表管理', None), ('监控项原型复核', url_for('item_prototypes_review')), ('编辑复核记录', None)],
+        'trigger_prototypes_review': [('复核表管理', None), ('触发器原型复核', url_for('trigger_prototypes_review'))],
+        'edit_trigger_prototype_review': [('复核表管理', None), ('触发器原型复核', url_for('trigger_prototypes_review')), ('编辑复核记录', None)],
+        'hosts': [('主机管理', url_for('hosts'))],
+        'add_host': [('主机管理', url_for('hosts')), ('添加主机', None)],
+        'edit_host': [('主机管理', url_for('hosts')), ('编辑主机', None)],
+        'discovery_rules': [('预定义模版管理', None), ('自动发现规则列表', url_for('discovery_rules'))],
+        'edit_discovery_rule': [('预定义模版管理', None), ('自动发现规则列表', url_for('discovery_rules')), ('编辑规则', None)],
+        'filter_conditions': [('预定义模版管理', None), ('自动发现过滤规则管理', url_for('filter_conditions'))],
+        'edit_filter_condition': [('预定义模版管理', None), ('自动发现过滤规则管理', url_for('filter_conditions')), ('编辑过滤条件', None)],
+    }
+    return {'page_breadcrumb': breadcrumb_map.get(endpoint, [])}
+
 
 @app.route('/')
 def index():
@@ -88,7 +163,7 @@ def item_prototypes():
             SELECT ip.*, dr.name as rule_name, dr.template_name
             FROM item_prototypes ip
             JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-            ORDER BY dr.template_name, dr.name, ip.name
+            ORDER BY ip.id
         """)
         prototypes = cur.fetchall()
     conn.close()
@@ -103,7 +178,7 @@ def trigger_prototypes():
             SELECT tp.*, dr.name as rule_name, dr.template_name
             FROM trigger_prototypes tp
             JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-            ORDER BY dr.template_name, dr.name, tp.description
+            ORDER BY tp.id
         """)
         prototypes = cur.fetchall()
     conn.close()
@@ -283,7 +358,7 @@ def items():
     """监控项管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM items ORDER BY template_name, item_key")
+        cur.execute("SELECT * FROM items ORDER BY id")
         items = cur.fetchall()
     conn.close()
     return render_template('items.html', items=items)
@@ -412,7 +487,7 @@ def triggers():
     """触发器管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM triggers ORDER BY template_name, name")
+        cur.execute("SELECT * FROM triggers ORDER BY id")
         triggers = cur.fetchall()
     conn.close()
     return render_template('triggers.html', triggers=triggers)
@@ -515,7 +590,7 @@ def hosts():
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
         # 直接从hosts表读取template_name
-        cur.execute("SELECT * FROM hosts ORDER BY name")
+        cur.execute("SELECT * FROM hosts ORDER BY id")
         hosts = cur.fetchall()
     conn.close()
     return render_template('hosts.html', hosts=hosts)
@@ -608,7 +683,7 @@ def items_review():
     """监控项复核表管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM items_review ORDER BY host_ip, item_key")
+        cur.execute("SELECT * FROM items_review ORDER BY id")
         items = cur.fetchall()
     conn.close()
     return render_template('items_review.html', items=items)
@@ -709,7 +784,7 @@ def triggers_review():
     """触发器复核表管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM triggers_review ORDER BY host_ip, name")
+        cur.execute("SELECT * FROM triggers_review ORDER BY id")
         triggers = cur.fetchall()
     conn.close()
     return render_template('triggers_review.html', triggers=triggers)
@@ -794,7 +869,7 @@ def item_prototypes_review():
     """监控项原型复核表管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM item_prototypes_review ORDER BY host_ip, name")
+        cur.execute("SELECT * FROM item_prototypes_review ORDER BY id")
         prototypes = cur.fetchall()
     conn.close()
     return render_template('item_prototypes_review.html', prototypes=prototypes)
@@ -887,7 +962,7 @@ def trigger_prototypes_review():
     """触发器原型复核表管理"""
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY host_ip, description")
+        cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY id")
         prototypes = cur.fetchall()
     conn.close()
     return render_template('trigger_prototypes_review.html', prototypes=prototypes)
@@ -964,6 +1039,228 @@ def unconfirm_trigger_prototype_review(review_id):
         flash(f'取消确认失败: {e}')
     conn.close()
     return redirect(url_for('trigger_prototypes_review'))
+
+# ============================================================
+# 自动发现规则管理
+# ============================================================
+
+@app.route('/discovery-rules')
+def discovery_rules():
+    """自动发现规则列表"""
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("""
+            SELECT dr.*,
+                   (SELECT COUNT(*) FROM filter_conditions fc WHERE fc.discovery_rule_id = dr.id) as filter_count
+            FROM discovery_rules dr
+            ORDER BY dr.id
+        """)
+        rules = cur.fetchall()
+    conn.close()
+    return render_template('discovery_rules.html', rules=rules)
+
+@app.route('/discovery-rule/edit/<int:rule_id>', methods=['GET', 'POST'])
+def edit_discovery_rule(rule_id):
+    """编辑自动发现规则"""
+    conn = get_db_connection()
+
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM discovery_rules WHERE id = %s", (rule_id,))
+        rule = cur.fetchone()
+
+    if not rule:
+        flash('自动发现规则不存在')
+        return redirect(url_for('discovery_rules'))
+
+    if request.method == 'POST':
+        name = request.form['name']
+        key = request.form['key']
+        delay = request.form['delay']
+        evaltype = int(request.form.get('evaltype', 0))
+        status = int(request.form.get('status', 0))
+        template_name = request.form['template_name']
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE discovery_rules
+                    SET name = %s, key = %s, delay = %s, evaltype = %s, status = %s, template_name = %s
+                    WHERE id = %s
+                """, (name, key, delay, evaltype, status, template_name, rule_id))
+            conn.commit()
+            flash('自动发现规则更新成功')
+            return redirect(url_for('discovery_rules'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+
+    conn.close()
+    return render_template('edit_discovery_rule.html', rule=rule)
+
+
+# ============================================================
+# 自动发现过滤规则管理
+# ============================================================
+
+@app.route('/filter-conditions')
+def filter_conditions():
+    """自动发现过滤规则管理列表"""
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("""
+            SELECT fc.*, dr.name as rule_name, dr.template_name
+            FROM filter_conditions fc
+            JOIN discovery_rules dr ON fc.discovery_rule_id = dr.id
+            ORDER BY fc.id
+        """)
+        conditions = cur.fetchall()
+    conn.close()
+    return render_template('filter_conditions.html', conditions=conditions)
+
+@app.route('/filter-condition/edit/<int:cond_id>', methods=['GET', 'POST'])
+def edit_filter_condition(cond_id):
+    """编辑过滤条件"""
+    conn = get_db_connection()
+
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM filter_conditions WHERE id = %s", (cond_id,))
+        cond = cur.fetchone()
+
+    if not cond:
+        flash('过滤条件不存在')
+        return redirect(url_for('filter_conditions'))
+
+    # 获取所有自动发现规则用于下拉选择
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT id, name, template_name FROM discovery_rules ORDER BY template_name, name")
+        discovery_rules_list = cur.fetchall()
+
+    if request.method == 'POST':
+        macro = request.form['macro']
+        value = request.form['value']
+        operator = request.form['operator']
+        discovery_rule_id = int(request.form['discovery_rule_id'])
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE filter_conditions
+                    SET macro = %s, value = %s, operator = %s, discovery_rule_id = %s
+                    WHERE id = %s
+                """, (macro, value, operator, discovery_rule_id, cond_id))
+            conn.commit()
+            flash('过滤条件更新成功')
+            return redirect(url_for('filter_conditions'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+
+    conn.close()
+    return render_template('edit_filter_condition.html', cond=cond, discovery_rules=discovery_rules_list)
+
+
+# ============================================================
+# 全局搜索
+# ============================================================
+
+@app.route('/api/search')
+def api_search():
+    """全局搜索 API - 搜索监控项、触发器、主机、模板、自动发现规则"""
+    q = request.args.get('q', '').strip()
+    if not q or len(q) < 2:
+        return jsonify({'results': []})
+
+    search_term = f'%{q}%'
+    conn = get_db_connection()
+    results = []
+
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 搜索监控项
+            cur.execute(
+                "SELECT id, name, item_key, template_name, 'item' as type FROM items WHERE name ILIKE %s OR item_key ILIKE %s LIMIT 10",
+                (search_term, search_term)
+            )
+            for row in cur.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'detail': row['item_key'],
+                    'type': 'item',
+                    'type_label': '监控项',
+                    'url': url_for('edit_item', item_id=row['id'])
+                })
+
+            # 搜索触发器
+            cur.execute(
+                "SELECT id, name, expression, template_name, 'trigger' as type FROM triggers WHERE name ILIKE %s OR expression ILIKE %s LIMIT 10",
+                (search_term, search_term)
+            )
+            for row in cur.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'detail': (row['expression'] or '')[:50],
+                    'type': 'trigger',
+                    'type_label': '触发器',
+                    'url': url_for('edit_trigger', trigger_id=row['id'])
+                })
+
+            # 搜索主机
+            cur.execute(
+                "SELECT id, name, template_name, 'host' as type FROM hosts WHERE name ILIKE %s OR template_name ILIKE %s LIMIT 10",
+                (search_term, search_term)
+            )
+            for row in cur.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'detail': row.get('template_name', ''),
+                    'type': 'host',
+                    'type_label': '主机',
+                    'url': url_for('edit_host', host_id=row['id'])
+                })
+
+            # 搜索模板
+            cur.execute(
+                "SELECT id, name, 'template' as type FROM templates WHERE name ILIKE %s LIMIT 10",
+                (search_term,)
+            )
+            for row in cur.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'detail': '',
+                    'type': 'template',
+                    'type_label': '模板',
+                    'url': url_for('template_detail', template_id=row['id'])
+                })
+
+            # 搜索自动发现规则
+            cur.execute(
+                "SELECT id, name, key, template_name, 'discovery_rule' as type FROM discovery_rules WHERE name ILIKE %s OR key ILIKE %s LIMIT 10",
+                (search_term, search_term)
+            )
+            for row in cur.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'name': row['name'],
+                    'detail': row['key'],
+                    'type': 'discovery_rule',
+                    'type_label': '自动发现规则',
+                    'url': url_for('edit_discovery_rule', rule_id=row['id'])
+                })
+    finally:
+        conn.close()
+
+    return jsonify({'results': results, 'query': q})
+
+@app.route('/search')
+def search():
+    """全局搜索结果页"""
+    q = request.args.get('q', '')
+    return render_template('search.html', query=q)
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)

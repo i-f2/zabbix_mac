@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
 
+{% block page_title %}添加监控项{% endblock %}
+
 {% block content %}
-    <h1>添加监控项</h1>
-    <div class="mt-4">
+<div class="form-card">
         <form method="POST">
             <div class="mb-3">
                 <label for="item_key" class="form-label">键值</label>
@@ -100,5 +101,5 @@
             <button type="submit" class="btn btn-primary">添加</button>
             <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>
         </form>
-    </div>
+</div>
 {% endblock %}

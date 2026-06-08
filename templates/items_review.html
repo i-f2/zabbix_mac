@@ -1,7 +1,14 @@
 {% extends 'base.html' %}
 
+{% block page_title %}监控项复核表管理{% endblock %}
+
+{% block toolbar %}
+<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+{% endblock %}
+
 {% block content %}
-    <h1>监控项复核表管理</h1>
+<div class="data-card">
+    <div class="table-responsive">
     <table class="table table-striped">
         <thead>
             <tr>
@@ -38,13 +45,13 @@
                     <td>{{ '已确认' if item.confirmed else '未确认' }}</td>
                     <td>
                         {% if item.status_verification == 'verified' %}
-                            <span style="background-color:#28a745;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">已核验</span>
+                            <span class="status-badge verified">已核验</span>
                         {% elif item.status_verification == 'mismatch' %}
-                            <span style="background-color:#dc3545;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">不一致</span>
+                            <span class="status-badge mismatch">不一致</span>
                         {% elif item.status_verification == 'not_found' %}
-                            <span style="background-color:#dc3545;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">未找到</span>
+                            <span class="status-badge not-found">未找到</span>
                         {% else %}
-                            <span style="background-color:#d3d3d3;color:#555;padding:2px 8px;border-radius:4px;font-size:12px">未核验</span>
+                            <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
                     <td>
@@ -59,4 +66,16 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
+    {% if items|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无复核记录</div>
+        <div class="empty-desc">当前没有待复核的监控项记录。</div>
+    </div>
+    {% endif %}
+    <div class="pagination-area">
+        <span class="page-info">共 {{ items|length }} 条</span>
+    </div>
+</div>
 {% endblock %}
