@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_pagination.html' import render as pg %}
 
 {% block page_title %}主机管理{% endblock %}
 
@@ -52,8 +53,6 @@
         <div class="empty-desc">当前未查询到主机，您可以<a href="{{ url_for('add_host') }}">添加第一台主机</a>。</div>
     </div>
     {% endif %}
-    <div class="pagination-area">
-        <span class="page-info">共 {{ hosts|length }} 条</span>
-    </div>
+    {{ pg(page, per_page, total, total_pages) }}
 </div>
 {% endblock %}

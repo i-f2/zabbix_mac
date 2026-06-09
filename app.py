@@ -186,32 +186,52 @@ def template_detail(template_id):
 @app.route('/item-prototypes')
 def item_prototypes():
     """监控项原型管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT COUNT(*) FROM item_prototypes")
+        total = cur.fetchone()['count']
         cur.execute("""
             SELECT ip.*, dr.name as rule_name, dr.template_name
             FROM item_prototypes ip
             JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-            ORDER BY ip.id
-        """)
+            ORDER BY ip.id LIMIT %s OFFSET %s
+        """, (per_page, offset))
         prototypes = cur.fetchall()
     conn.close()
-    return render_template('item_prototypes.html', prototypes=prototypes)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('item_prototypes.html', prototypes=prototypes,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/trigger-prototypes')
 def trigger_prototypes():
     """触发器原型管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT COUNT(*) FROM trigger_prototypes")
+        total = cur.fetchone()['count']
         cur.execute("""
             SELECT tp.*, dr.name as rule_name, dr.template_name
             FROM trigger_prototypes tp
             JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-            ORDER BY tp.id
-        """)
+            ORDER BY tp.id LIMIT %s OFFSET %s
+        """, (per_page, offset))
         prototypes = cur.fetchall()
     conn.close()
-    return render_template('trigger_prototypes.html', prototypes=prototypes)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('trigger_prototypes.html', prototypes=prototypes,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/item-prototype/edit/<int:proto_id>', methods=['GET', 'POST'])
 def edit_item_prototype(proto_id):
@@ -385,12 +405,21 @@ def confirm_trigger_prototype(proto_id):
 @app.route('/items')
 def items():
     """监控项管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM items ORDER BY id")
+        cur.execute("SELECT COUNT(*) FROM items")
+        total = cur.fetchone()['count']
+        cur.execute("SELECT * FROM items ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
         items = cur.fetchall()
     conn.close()
-    return render_template('items.html', items=items)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('items.html', items=items, page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/item/add', methods=['GET', 'POST'])
 def add_item():
@@ -514,12 +543,21 @@ def delete_item(item_id):
 @app.route('/triggers')
 def triggers():
     """触发器管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM triggers ORDER BY id")
+        cur.execute("SELECT COUNT(*) FROM triggers")
+        total = cur.fetchone()['count']
+        cur.execute("SELECT * FROM triggers ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
         triggers = cur.fetchall()
     conn.close()
-    return render_template('triggers.html', triggers=triggers)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('triggers.html', triggers=triggers, page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/trigger/add', methods=['GET', 'POST'])
 def add_trigger():
@@ -616,13 +654,21 @@ def delete_trigger(trigger_id):
 @app.route('/hosts')
 def hosts():
     """主机管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        # 直接从hosts表读取template_name
-        cur.execute("SELECT * FROM hosts ORDER BY id")
+        cur.execute("SELECT COUNT(*) FROM hosts")
+        total = cur.fetchone()['count']
+        cur.execute("SELECT * FROM hosts ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
         hosts = cur.fetchall()
     conn.close()
-    return render_template('hosts.html', hosts=hosts)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('hosts.html', hosts=hosts, page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 
 @app.route('/host/sync', methods=['POST'])
@@ -763,27 +809,27 @@ def delete_host(host_id):
 
 @app.route('/items-review')
 def items_review():
-    """监控项复核表管理 — 支持 ip/system/subsystem 过滤"""
+    """监控项复核表管理 — 支持 ip/system/subsystem 过滤 + 分页"""
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        query = "SELECT * FROM items_review WHERE 1=1"
+        where_clause = " WHERE 1=1"
         params = []
         if ip:
-            query += " AND host_ip ILIKE %s"
+            where_clause += " AND host_ip ILIKE %s"
             params.append(f'%{ip}%')
         if system:
-            query += " AND system ILIKE %s"
+            where_clause += " AND system ILIKE %s"
             params.append(f'%{system}%')
         if subsystem:
-            query += " AND subsystem ILIKE %s"
+            where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
-        query += " ORDER BY id"
-        cur.execute(query, params)
-        items = cur.fetchall()
 
         # 获取 system / subsystem 去重值供 datalist 下拉建议
         cur.execute("SELECT DISTINCT system FROM items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
@@ -791,10 +837,23 @@ def items_review():
         cur.execute("SELECT DISTINCT subsystem FROM items_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
 
+        # COUNT
+        cur.execute(f"SELECT COUNT(*) FROM items_review{where_clause}", params)
+        total = cur.fetchone()['count']
+
+        # DATA with pagination
+        cur.execute(f"SELECT * FROM items_review{where_clause} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
+        items = cur.fetchall()
+
     conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
     return render_template('items_review.html', items=items,
                            distinct_systems=distinct_systems,
-                           distinct_subsystems=distinct_subsystems)
+                           distinct_subsystems=distinct_subsystems,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 
 @app.route('/items-review/initialize', methods=['POST'])
@@ -1104,27 +1163,27 @@ def add_item_from_review():
 
 @app.route('/triggers-review')
 def triggers_review():
-    """触发器复核表管理 — 支持 ip/system/subsystem 过滤"""
+    """触发器复核表管理 — 支持 ip/system/subsystem 过滤 + 分页"""
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        query = "SELECT * FROM triggers_review WHERE 1=1"
+        where_clause = " WHERE 1=1"
         params = []
         if ip:
-            query += " AND host_ip ILIKE %s"
+            where_clause += " AND host_ip ILIKE %s"
             params.append(f'%{ip}%')
         if system:
-            query += " AND system ILIKE %s"
+            where_clause += " AND system ILIKE %s"
             params.append(f'%{system}%')
         if subsystem:
-            query += " AND subsystem ILIKE %s"
+            where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
-        query += " ORDER BY id"
-        cur.execute(query, params)
-        triggers = cur.fetchall()
 
         # datalist 数据
         cur.execute("SELECT DISTINCT system FROM triggers_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
@@ -1132,10 +1191,23 @@ def triggers_review():
         cur.execute("SELECT DISTINCT subsystem FROM triggers_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
 
+        # COUNT
+        cur.execute(f"SELECT COUNT(*) FROM triggers_review{where_clause}", params)
+        total = cur.fetchone()['count']
+
+        # DATA with pagination
+        cur.execute(f"SELECT * FROM triggers_review{where_clause} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
+        triggers = cur.fetchall()
+
     conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
     return render_template('triggers_review.html', triggers=triggers,
                            distinct_systems=distinct_systems,
-                           distinct_subsystems=distinct_subsystems)
+                           distinct_subsystems=distinct_subsystems,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 
 @app.route('/triggers-review/initialize', methods=['POST'])
@@ -1476,12 +1548,22 @@ def import_triggers_review():
 @app.route('/item-prototypes-review')
 def item_prototypes_review():
     """监控项原型复核表管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM item_prototypes_review ORDER BY id")
+        cur.execute("SELECT COUNT(*) FROM item_prototypes_review")
+        total = cur.fetchone()['count']
+        cur.execute("SELECT * FROM item_prototypes_review ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
         prototypes = cur.fetchall()
     conn.close()
-    return render_template('item_prototypes_review.html', prototypes=prototypes)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('item_prototypes_review.html', prototypes=prototypes,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/item-prototype-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_item_prototype_review(review_id):
@@ -1569,12 +1651,22 @@ def unconfirm_item_prototype_review(review_id):
 @app.route('/trigger-prototypes-review')
 def trigger_prototypes_review():
     """触发器原型复核表管理"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY id")
+        cur.execute("SELECT COUNT(*) FROM trigger_prototypes_review")
+        total = cur.fetchone()['count']
+        cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
         prototypes = cur.fetchall()
     conn.close()
-    return render_template('trigger_prototypes_review.html', prototypes=prototypes)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('trigger_prototypes_review.html', prototypes=prototypes,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/trigger-prototype-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_trigger_prototype_review(review_id):
@@ -1656,17 +1748,27 @@ def unconfirm_trigger_prototype_review(review_id):
 @app.route('/discovery-rules')
 def discovery_rules():
     """自动发现规则列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT COUNT(*) FROM discovery_rules")
+        total = cur.fetchone()['count']
         cur.execute("""
             SELECT dr.*,
                    (SELECT COUNT(*) FROM filter_conditions fc WHERE fc.discovery_rule_id = dr.id) as filter_count
             FROM discovery_rules dr
-            ORDER BY dr.id
-        """)
+            ORDER BY dr.id LIMIT %s OFFSET %s
+        """, (per_page, offset))
         rules = cur.fetchall()
     conn.close()
-    return render_template('discovery_rules.html', rules=rules)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('discovery_rules.html', rules=rules,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/discovery-rule/edit/<int:rule_id>', methods=['GET', 'POST'])
 def edit_discovery_rule(rule_id):
@@ -1714,17 +1816,27 @@ def edit_discovery_rule(rule_id):
 @app.route('/filter-conditions')
 def filter_conditions():
     """自动发现过滤规则管理列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT COUNT(*) FROM filter_conditions")
+        total = cur.fetchone()['count']
         cur.execute("""
             SELECT fc.*, dr.name as rule_name, dr.template_name
             FROM filter_conditions fc
             JOIN discovery_rules dr ON fc.discovery_rule_id = dr.id
-            ORDER BY fc.id
-        """)
+            ORDER BY fc.id LIMIT %s OFFSET %s
+        """, (per_page, offset))
         conditions = cur.fetchall()
     conn.close()
-    return render_template('filter_conditions.html', conditions=conditions)
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('filter_conditions.html', conditions=conditions,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
 
 @app.route('/filter-condition/edit/<int:cond_id>', methods=['GET', 'POST'])
 def edit_filter_condition(cond_id):
