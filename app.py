@@ -6,10 +6,14 @@ Zabbix Monitor as Code (MaC) 管理界面
 基于 Flask 的 Web 应用，用于管理 PostgreSQL 中的监控配置数据
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 import os
+import ast
+import tempfile
+from datetime import datetime
 import psycopg2
 from psycopg2.extras import DictCursor
+import pandas as pd
 import json
 
 app = Flask(__name__)
@@ -1306,6 +1310,165 @@ def add_trigger_from_review():
     except Exception as e:
         conn.rollback()
         return jsonify({'success': False, 'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+# ============================================================
+# 复核表导出 / 导入 Excel
+# ============================================================
+
+@app.route('/items-review/export')
+def export_items_review():
+    """导出 items_review 表到 Excel 文件"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM items_review ORDER BY host_ip, item_key")
+            rows = cur.fetchall()
+        if not rows:
+            return jsonify({'success': False, 'message': 'items_review 表为空'}), 400
+
+        df = pd.DataFrame([dict(r) for r in rows])
+        # 写入临时文件
+        tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        df.to_excel(tmp.name, index=False, engine='openpyxl')
+        tmp.close()
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(tmp.name, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'items_review_{timestamp}.xlsx')
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/items-review/import', methods=['POST'])
+def import_items_review():
+    """从 Excel 文件导入数据到 items_review 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM items_review")
+            deleted = cur.rowcount
+
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            inserted = 0
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                cur.execute(
+                    f"INSERT INTO items_review ({column_names}) VALUES ({placeholders})",
+                    values
+                )
+                inserted += 1
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'items_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/triggers-review/export')
+def export_triggers_review():
+    """导出 triggers_review 表到 Excel 文件"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM triggers_review ORDER BY host_ip, name")
+            rows = cur.fetchall()
+        if not rows:
+            return jsonify({'success': False, 'message': 'triggers_review 表为空'}), 400
+
+        df = pd.DataFrame([dict(r) for r in rows])
+        tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        df.to_excel(tmp.name, index=False, engine='openpyxl')
+        tmp.close()
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(tmp.name, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'triggers_review_{timestamp}.xlsx')
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/triggers-review/import', methods=['POST'])
+def import_triggers_review():
+    """从 Excel 文件导入数据到 triggers_review 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM triggers_review")
+            deleted = cur.rowcount
+
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            inserted = 0
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                cur.execute(
+                    f"INSERT INTO triggers_review ({column_names}) VALUES ({placeholders})",
+                    values
+                )
+                inserted += 1
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'triggers_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
     finally:
         conn.close()
 

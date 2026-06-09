@@ -14,6 +14,11 @@
         <i class="bi bi-plus-lg"></i> 新增触发器
     </button>
 
+    <!-- 导出/导入按钮 -->
+    <a href="/triggers-review/export" class="btn btn-outline-success" title="导出 triggers_review 为 Excel"><i class="bi bi-download"></i> 导出</a>
+    <button class="btn btn-outline-info" onclick="document.getElementById('importTriggersFile').click()" title="从 Excel 导入 triggers_review"><i class="bi bi-upload"></i> 导入</button>
+    <input type="file" id="importTriggersFile" accept=".xlsx" style="display:none" onchange="importTriggersReview(this)">
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -187,6 +192,22 @@
 
 {% block scripts_extra %}
 <script>
+async function importTriggersReview(input) {
+    if (!input.files.length) return;
+    if (!confirm('将清空 triggers_review 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+    try {
+        var res = await fetch('/triggers-review/import', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'danger');
+    }
+    input.value = '';
+}
+
 async function submitAddTrigger() {
     var btn = document.getElementById('submitAddTriggerBtn');
     var form = document.getElementById('addTriggerForm');
