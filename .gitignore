@@ -43,6 +43,9 @@ dist/
 tmp/
 temp/
 
+# 部署相关
+database_update/*.log
+
 # 其他
 *.bak
 *.tmp

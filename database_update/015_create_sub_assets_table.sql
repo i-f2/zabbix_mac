@@ -1,5 +1,5 @@
--- 创建 ops schema 和 sub_assets 表（本地开发环境初始化）
--- 生产环境 sub_assets 表已存在，此脚本仅用于本地开发
+-- 015: 创建 ops schema 和 sub_assets 资产表
+-- Zabbix Monitor as Code (MaC) 数据库模式
 
 CREATE SCHEMA IF NOT EXISTS ops;
 

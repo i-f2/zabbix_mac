@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TEST_DB_CONFIG = {
     'host': os.environ.get('TEST_DB_HOST', 'localhost'),
     'port': int(os.environ.get('TEST_DB_PORT', 5432)),
-    'database': os.environ.get('TEST_DB_NAME', 'zabbix_mac'),
-    'user': os.environ.get('TEST_DB_USER', 'fan'),
+    'database': os.environ.get('TEST_DB_NAME', 'ops'),
+    'user': os.environ.get('TEST_DB_USER', 'postgres'),
     'password': os.environ.get('TEST_DB_PASSWORD', ''),
     'client_encoding': 'utf8'
 }

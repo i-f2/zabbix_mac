@@ -1,5 +1,7 @@
--- 创建 webscenario_items_review 表
-CREATE TABLE IF NOT EXISTS webscenario_items_review (
+-- 014: 创建 Web 场景监控项复核表
+-- Zabbix Monitor as Code (MaC) 数据库模式
+
+CREATE TABLE IF NOT EXISTS zabbix_mac.webscenario_items_review (
     id SERIAL PRIMARY KEY,
     system VARCHAR(100) NOT NULL,
     subsystem VARCHAR(100) NOT NULL,
@@ -14,10 +16,8 @@ CREATE TABLE IF NOT EXISTS webscenario_items_review (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 创建索引
-CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_system ON webscenario_items_review(system);
-CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_subsystem ON webscenario_items_review(subsystem);
-CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_host ON webscenario_items_review(host);
+CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_system ON zabbix_mac.webscenario_items_review(system);
+CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_subsystem ON zabbix_mac.webscenario_items_review(subsystem);
+CREATE INDEX IF NOT EXISTS idx_webscenario_items_review_host ON zabbix_mac.webscenario_items_review(host);
 
--- 提交事务
 COMMIT;
