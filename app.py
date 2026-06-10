@@ -16,43 +16,19 @@ from psycopg2.extras import DictCursor
 import pandas as pd
 import json
 
+from config_loader import load_config, get_db_config, get_zabbix_environments
+
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'
+
+# 加载外部配置（环境变量 > config.yaml > 内置默认值）
+_config = load_config()
+app.secret_key = _config['app']['secret_key']
 
 # 数据库连接配置
-DB_CONFIG = {
-    'host': 'localhost',
-    'port': 5432,
-    'database': 'ops',
-    'user': 'postgres',
-    'password': '',
-    'client_encoding': 'utf8',
-    'options': '-c search_path=zabbix_mac'
-}
+DB_CONFIG = get_db_config(_config)
 
-# Zabbix 环境机房配置（从环境变量读取，未配置则为空字符串）
-ZABBIX_ENVIRONMENTS = {
-    '深交所证联网': {
-        'url': os.environ.get('ZABBIX_SZSE_ZW_URL', ''),
-        'username': os.environ.get('ZABBIX_SZSE_ZW_USER', ''),
-        'password': os.environ.get('ZABBIX_SZSE_ZW_PASS', ''),
-    },
-    '深交所互联网': {
-        'url': os.environ.get('ZABBIX_SZSE_HLW_URL', ''),
-        'username': os.environ.get('ZABBIX_SZSE_HLW_USER', ''),
-        'password': os.environ.get('ZABBIX_SZSE_HLW_PASS', ''),
-    },
-    '上交所证联网': {
-        'url': os.environ.get('ZABBIX_SSE_ZW_URL', ''),
-        'username': os.environ.get('ZABBIX_SSE_ZW_USER', ''),
-        'password': os.environ.get('ZABBIX_SSE_ZW_PASS', ''),
-    },
-    '上交所互联网': {
-        'url': os.environ.get('ZABBIX_SSE_HLW_URL', ''),
-        'username': os.environ.get('ZABBIX_SSE_HLW_USER', ''),
-        'password': os.environ.get('ZABBIX_SSE_HLW_PASS', ''),
-    },
-}
+# Zabbix 环境机房配置
+ZABBIX_ENVIRONMENTS = get_zabbix_environments(_config)
 
 def get_db_connection():
     """获取数据库连接"""
@@ -1984,4 +1960,8 @@ def search():
 
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(
+        debug=_config['app']['debug'],
+        host=_config['app']['host'],
+        port=_config['app']['port'],
+    )

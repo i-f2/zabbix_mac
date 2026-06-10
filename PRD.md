@@ -82,8 +82,9 @@
 |------|------|
 | `app.py` | Flask Web 应用，含全部路由和业务逻辑 |
 | `zabbix_mac.py` | 核心引擎：同步、核验、导入导出 |
-| `CODE_WIKI.md` | 项目技术文档 |
-| `ZABBIX_MAC_USAGE_MANUAL.md` | 使用手册 |
+| `config_loader.py` | 配置加载模块（支持 YAML 文件 + 环境变量覆盖） |
+| `config.yaml.example` | 配置文件模板（实际部署复制为 config.yaml） |
+| `CODE_WIKI.md` | 项目技术文档（含 CLI 使用手册） |
 
 ---
 
@@ -246,9 +247,11 @@ Zabbix MaC
 
 ### 5.2 安全
 
-- Zabbix API 凭据通过环境变量注入，不硬编码
+- 配置外置化：数据库/Zabbix API/Flask 密钥等配置通过 `config.yaml` 外部文件管理
+- 敏感信息支持环境变量覆盖（优先级: 环境变量 > 配置文件 > 内置默认值）
+- Flask secret_key 不再硬编码，由配置文件或 `APP_SECRET_KEY` 环境变量注入
 - Flask debug 模式已关闭（生产部署）
-- Web 应用监听 `0.0.0.0:5001`
+- Web 应用监听 `0.0.0.0:5000`
 
 ### 5.3 兼容性
 
@@ -275,19 +278,56 @@ Zabbix MaC
 
 ### 6.1 依赖
 
-- Python 3.12 + pip 包（`requirements.txt`，离线包在 `packs/` 目录）
-- PostgreSQL 12（Docker Compose 提供）
-- Zabbix Server 5.0（Docker Compose 提供）
+- Python 3.12 + pip 包（`requirements-linux-x86.txt` 用于生产，`requirements-macos-arm.txt` 用于开发）
+- PostgreSQL 12
+- Zabbix Server 5.0
 
-### 6.2 部署步骤
+### 6.2 部署方式
 
-1. 启动 Docker Compose 环境: `docker-compose up -d`（PostgreSQL + Zabbix Server）
-2. 安装 Python 依赖: `pip install -r requirements.txt`（或从 `packs/` 离线安装）
-3. 导入数据库表结构和数据: 执行 `数据导出/` 下的 SQL 文件
-4. 启动 Web 服务: `python app.py`（监听端口 5001）
-5. 配置环境变量（各机房 Zabbix API 凭据）
+#### 方式一：容器化部署（推荐）
 
-### 6.3 环境变量
+```bash
+# 1. 构建镜像（Intel Mac 上）
+docker build -t zabbix-mac:latest .
+
+# 2. 准备配置文件
+cp config.yaml.example config.yaml
+# 编辑 config.yaml 填入实际数据库/Zabbix 连接信息
+
+# 3. 启动容器（挂载外部配置）
+docker run -d -p 5000:5000 \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  --name zabbix-mac \
+  zabbix-mac:latest
+```
+
+#### 方式二：直接部署
+
+```bash
+# 1. 安装 Python 依赖
+pip install -r requirements-linux-x86.txt
+
+# 2. 准备配置
+cp config.yaml.example config.yaml
+# 编辑 config.yaml
+
+# 3. 数据库迁移
+cd database_update/
+./apply_migrations.sh <DB_HOST> <DB_PORT> <DB_NAME> <DB_USER>
+
+# 4. 启动 Web 服务
+python app.py   # 默认监听 5000 端口
+```
+
+### 6.3 配置管理
+
+所有配置集中在 `config.yaml` 文件中（模板: `config.yaml.example`），支持：
+- **YAML 文件配置**：数据库连接、Zabbix 机房信息、同步参数、Flask 设置
+- **环境变量覆盖**：`DB_*`、`APP_*`、`ZABBIX_*` 等环境变量可覆盖 YAML 中的对应值
+- **优先级**：命令行参数 > 环境变量 > config.yaml > 内置默认值
+- 容器部署时通过 `-v` 挂载外部配置文件
+
+### 6.4 环境变量
 
 ```bash
 ZABBIX_SZSE_ZW_URL      # 深交所证联网 API URL
@@ -329,3 +369,4 @@ ZABBIX_SSE_HLW_PASS
 | 2026-06-05 | — | Flask + PostgreSQL 环境就绪 |
 | 2026-06-08 | — | 主机资产同步、复核表增强、Excel 导入导出 |
 | 2026-06-09 | v1.0.0 | 部署支持（SQL 导出 + pip 离线包）、Bug 修复、全列表页面分页功能 |
+| 2026-06-10 | v1.0.0 | 配置外置化：抽取 config.yaml + config_loader.py；Dockerfile 容器化；database_update/ 迁移体系；Flask 端口改为 5000；合并 CODE_WIKI.md 文档 |

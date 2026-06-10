@@ -3850,7 +3850,16 @@ class ZabbixUltimateAutomator:
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="Zabbix Monitor as Code 自动化工具")
+    # 加载外部配置（优先从 --config 指定路径，否则 APP_CONFIG 环境变量，否则 config.yaml）
+    import config_loader
+    # 先用临时 parser 解析 --config，剩下的参数留给主 parser
+    import argparse as argparse_module
+    _pre_parser = argparse_module.ArgumentParser(add_help=False)
+    _pre_parser.add_argument('--config', default=None, help='配置文件路径（默认: config.yaml）')
+    _pre_args, _remaining = _pre_parser.parse_known_args()
+    cfg = config_loader.load_config(_pre_args.config)
+
+    parser = argparse_module.ArgumentParser(description="Zabbix Monitor as Code 自动化工具")
     
     # 操作模式选择
     mode_group = parser.add_mutually_exclusive_group(required=True)
@@ -3867,6 +3876,9 @@ def main():
     mode_group.add_argument("--create-web-scenario-triggers", action="store_true", help="为 web scenario 创建触发器")
     mode_group.add_argument("--verify-status", action="store_true", help="从 Zabbix 拉取实际状态核验复核表（items_review、triggers_review）")
     
+    # 配置文件
+    parser.add_argument("--config", default=None, help="配置文件路径（默认: config.yaml，支持环境变量 APP_CONFIG 覆盖）")
+
     # Zabbix API 配置
     parser.add_argument("--url", help="Zabbix API URL")
     parser.add_argument("--username", help="Zabbix 用户名")
@@ -3874,14 +3886,15 @@ def main():
     
     # 同步操作参数
     parser.add_argument("--dry-run", action="store_true", help="模拟运行，不实际执行操作")
-    parser.add_argument("--workers", type=int, default=5, help="并发线程数")
-    
-    # 数据库配置参数
-    parser.add_argument("--db-host", default="localhost", help="PostgreSQL 主机地址")
-    parser.add_argument("--db-port", type=int, default=5432, help="PostgreSQL 端口")
-    parser.add_argument("--db-name", default="zabbix_mac", help="PostgreSQL 数据库名称")
-    parser.add_argument("--db-user", default="fan", help="PostgreSQL 用户名")
-    parser.add_argument("--db-password", default="", help="PostgreSQL 密码")
+    parser.add_argument("--workers", type=int, default=cfg['sync']['default_workers'], help="并发线程数")
+
+    # 数据库配置参数（默认值从配置文件读取）
+    db_cfg = cfg['database']
+    parser.add_argument("--db-host", default=db_cfg['host'], help="PostgreSQL 主机地址")
+    parser.add_argument("--db-port", type=int, default=db_cfg['port'], help="PostgreSQL 端口")
+    parser.add_argument("--db-name", default=db_cfg['name'], help="PostgreSQL 数据库名称")
+    parser.add_argument("--db-user", default=db_cfg['user'], help="PostgreSQL 用户名")
+    parser.add_argument("--db-password", default=db_cfg['password'], help="PostgreSQL 密码")
     
     args = parser.parse_args()
     

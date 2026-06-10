@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir -r requirements-linux-x86.txt
 # 复制应用代码
 COPY app.py .
 COPY zabbix_mac.py .
+COPY config_loader.py .
+COPY config.yaml.example .
 COPY templates/ ./templates/
 COPY static/ ./static/
 

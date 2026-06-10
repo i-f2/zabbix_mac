@@ -1,0 +1,59 @@
+# =============================================================================
+# Zabbix Monitor as Code (MaC) 配置文件模板
+# =============================================================================
+# 部署时复制为 config.yaml 并修改实际值，敏感信息建议通过环境变量覆盖。
+# 容器挂载: docker run -v /path/to/config.yaml:/app/config.yaml ...
+# 环境变量覆盖优先级: 环境变量 > config.yaml > 内置默认值
+# =============================================================================
+
+# --- Flask 应用配置 ---
+app:
+  secret_key: "change-me-in-production"
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+# --- 数据库配置 ---
+# 对应环境变量: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+database:
+  host: "localhost"
+  port: 5432
+  name: "ops"
+  user: "postgres"
+  password: ""
+  client_encoding: "utf8"
+  schema: "zabbix_mac"
+
+# --- Zabbix 环境（机房）配置 ---
+# 凭据可通过对应环境变量覆盖（向后兼容现有变量名）:
+#   ZABBIX_SZSE_ZW_URL / ZABBIX_SZSE_ZW_USER / ZABBIX_SZSE_ZW_PASS
+#   ZABBIX_SZSE_HLW_URL / ZABBIX_SZSE_HLW_USER / ZABBIX_SZSE_HLW_PASS
+#   ZABBIX_SSE_ZW_URL  / ZABBIX_SSE_ZW_USER  / ZABBIX_SSE_ZW_PASS
+#   ZABBIX_SSE_HLW_URL / ZABBIX_SSE_HLW_USER / ZABBIX_SSE_HLW_PASS
+zabbix_environments:
+  - key: szse_zw
+    name: "深交所证联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: szse_hlw
+    name: "深交所互联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: sse_zw
+    name: "上交所证联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: sse_hlw
+    name: "上交所互联网"
+    url: ""
+    username: ""
+    password: ""
+
+# --- 同步引擎配置 ---
+sync:
+  default_workers: 5
+  max_retry_attempts: 3
+  retry_delay: 2
