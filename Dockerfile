@@ -10,13 +10,14 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 # 安装系统依赖（psycopg2 编译需要 libpq-dev 和 gcc）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i.bak 's#http://deb.debian.org#https://mirrors.cloud.tencent.com#g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc && \
     rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖（利用 Docker 缓存层）
 COPY requirements-linux-x86.txt .
-RUN pip install --no-cache-dir -r requirements-linux-x86.txt
+RUN pip install --no-cache-dir -i https://mirrors.cloud.tencent.com/pypi/simple -r requirements-linux-x86.txt
 
 # 复制应用代码
 COPY app.py .
