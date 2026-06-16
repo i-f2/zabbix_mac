@@ -518,17 +518,16 @@ body.sidebar-collapsed .app-main {
 /* Left frozen columns */
 .col-sticky-l1 { left: 0; }
 .col-sticky-l2 { left: 50px; }
-.col-sticky-l3 { left: 190px; }
-.col-sticky-l4 { left: 390px; }
 
-/* Right frozen column */
-.col-sticky-r { right: 0; }
+/* Right frozen columns (stacked from right edge inward) */
+.col-sticky-r1 { right: 0; }       /* 状态核验 — rightmost */
+.col-sticky-r2 { right: 80px; }    /* 确认状态 */
+.col-sticky-r3 { right: 160px; }   /* 修改状态 */
 
-/* Fixed widths for frozen columns (ensures left offsets stay correct) */
-.col-fw-id  { width: 50px;  min-width: 50px; }
-.col-fw-ip  { width: 140px; min-width: 140px; }
-.col-fw-key { width: 200px; min-width: 200px; }
-.col-fw-name { width: 200px; min-width: 200px; }
+/* Fixed widths for frozen columns */
+.col-fw-id     { width: 50px;  min-width: 50px; }
+.col-fw-ip     { width: 140px; min-width: 140px; }
+.col-fw-status { width: 80px;  min-width: 80px; }
 
 /* Opaque backgrounds prevent scrolling content from showing through */
 .table tbody .col-sticky {
