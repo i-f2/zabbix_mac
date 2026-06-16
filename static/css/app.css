@@ -519,6 +519,7 @@ body.sidebar-collapsed .app-main {
 .col-sticky-l1 { left: 0; }
 .col-sticky-l2 { left: 50px; }
 .col-sticky-l3 { left: 190px; }
+.col-sticky-l4 { left: 390px; }
 
 /* Right frozen column */
 .col-sticky-r { right: 0; }
@@ -527,6 +528,7 @@ body.sidebar-collapsed .app-main {
 .col-fw-id  { width: 50px;  min-width: 50px; }
 .col-fw-ip  { width: 140px; min-width: 140px; }
 .col-fw-key { width: 200px; min-width: 200px; }
+.col-fw-name { width: 200px; min-width: 200px; }
 
 /* Opaque backgrounds prevent scrolling content from showing through */
 .table tbody .col-sticky {
