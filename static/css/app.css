@@ -36,6 +36,11 @@ body {
     overflow-x: hidden;
 }
 
+/* --- Defensive: hide Bootstrap modals when CSS fails to load --- */
+.modal {
+    display: none;
+}
+
 /* ============================================================
    Top Navbar
    ============================================================ */
