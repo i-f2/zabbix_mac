@@ -89,10 +89,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
         for (let i = 0; i < routes.length; i++) {
             const route = routes[i].trim();
-            // Match: exact route name in URL path
-            if (route && currentPath.indexOf('/' + route) !== -1) {
-                matched = true;
-                break;
+            // Match: route name as a complete path segment (word-boundary aware)
+            if (route) {
+                const pattern = '/' + route;
+                const idx = currentPath.indexOf(pattern);
+                if (idx !== -1) {
+                    const nextChar = currentPath[idx + pattern.length];
+                    if (nextChar === undefined || nextChar === '/' || nextChar === '?') {
+                        matched = true;
+                        break;
+                    }
+                }
             }
             // Special case: index page
             if (route === 'index' && (currentPath === '/' || currentPath === '')) {
