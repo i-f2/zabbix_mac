@@ -505,6 +505,41 @@ body.sidebar-collapsed .app-main {
 }
 
 /* ============================================================
+   Sticky Table Columns (frozen left/right during horizontal scroll)
+   ============================================================ */
+.table .col-sticky {
+    position: sticky;
+    z-index: 2;
+}
+.table thead .col-sticky {
+    z-index: 3;
+}
+
+/* Left frozen columns */
+.col-sticky-l1 { left: 0; }
+.col-sticky-l2 { left: 50px; }
+.col-sticky-l3 { left: 190px; }
+
+/* Right frozen column */
+.col-sticky-r { right: 0; }
+
+/* Fixed widths for frozen columns (ensures left offsets stay correct) */
+.col-fw-id  { width: 50px;  min-width: 50px; }
+.col-fw-ip  { width: 140px; min-width: 140px; }
+.col-fw-key { width: 200px; min-width: 200px; }
+
+/* Opaque backgrounds prevent scrolling content from showing through */
+.table tbody .col-sticky {
+    background: #fff;
+}
+.table thead .col-sticky {
+    background: #f5f7fa;
+}
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky {
+    background: #f2f2f2;
+}
+
+/* ============================================================
    Status Badges
    ============================================================ */
 .status-badge {

@@ -54,9 +54,9 @@
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>主机 IP</th>
-                    <th>名称</th>
+                    <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                    <th class="col-sticky col-sticky-l2 col-fw-ip">主机 IP</th>
+                    <th class="col-sticky col-sticky-l3 col-fw-key">名称</th>
                     <th>表达式</th>
                     <th>优先级</th>
                     <th>模板</th>
@@ -65,15 +65,15 @@
                     <th>修改状态</th>
                     <th>确认状态</th>
                     <th>状态核验</th>
-                    <th>操作</th>
+                    <th class="col-sticky col-sticky-r">操作</th>
                 </tr>
             </thead>
             <tbody>
                 {% for trigger in triggers %}
                 <tr>
-                    <td>{{ trigger.id }}</td>
-                    <td>{{ trigger.host_ip }}</td>
-                    <td>{{ trigger.name }}</td>
+                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ trigger.id }}</td>
+                    <td class="col-sticky col-sticky-l2 col-fw-ip">{{ trigger.host_ip }}</td>
+                    <td class="col-sticky col-sticky-l3 col-fw-key">{{ trigger.name }}</td>
                     <td>{{ trigger.expression }}</td>
                     <td>{{ trigger.priority }}</td>
                     <td>{{ trigger.template_name }}</td>
@@ -90,7 +90,7 @@
                             <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="col-sticky col-sticky-r">
                         <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not trigger.confirmed %}
                             <a href="{{ url_for('confirm_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-success">确认</a>
