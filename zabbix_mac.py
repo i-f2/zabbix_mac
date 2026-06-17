@@ -182,7 +182,7 @@ class ZabbixClient:
             MD5 指纹
         """
         # 排除不参与比对的字段
-        exclude_keys = ["itemid", "hostid", "triggerid", "ruleid", "prototypeid", "created", "lastclock"]
+        exclude_keys = ["itemid", "hostid", "triggerid", "ruleid", "prototypeid", "created", "lastclock", "httptestid", "templateid", "nextcheck"]
         filtered_obj = {k: v for k, v in obj.items() if k not in exclude_keys}
         # 排序键以确保一致性
         sorted_obj = json.dumps(filtered_obj, sort_keys=True, ensure_ascii=False)
@@ -207,9 +207,11 @@ class ZabbixClient:
                     hostids=host_id,
                     output="extend"
                 )
-                # 在 Zabbix 5.0 中，监控项没有标签功能，直接返回所有监控项
-                logger.info(f"成功获取主机 {host_id} 的 {len(items)} 个监控项")
-                return items
+                # 过滤掉模板继承的监控项（templateid != "0"），只保留主机自有监控项
+                # 模板继承的监控项无法在主机级别删除，必须排除以避免删除时报错
+                owned_items = [item for item in items if item.get("templateid") == "0"]
+                logger.info(f"成功获取主机 {host_id} 的 {len(items)} 个监控项（其中 {len(owned_items)} 个为自有监控项）")
+                return owned_items
             except ZabbixAPIException as e:
                 logger.error(f"获取监控项失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:

@@ -925,7 +925,7 @@ def initialize_items_review():
 
 @app.route('/items-review/sync', methods=['POST'])
 def sync_items_to_zabbix():
-    """将已确认的监控项同步至指定环境机房的 Zabbix Server"""
+    """将已确认的监控项同步至指定环境机房的 Zabbix Server（含孤儿清理）"""
     data = request.get_json()
     environment = data.get('environment', '').strip() if data else ''
 
@@ -947,17 +947,24 @@ def sync_items_to_zabbix():
     if not confirmed_items:
         return jsonify({'success': True, 'message': '没有已确认的监控项需要同步', 'synced_count': 0})
 
-    # 调用 Zabbix API 逐条同步
     from zabbix_mac import ZabbixClient, ZabbixAPIException
 
     client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
     created = 0
     updated = 0
+    deleted = 0
     errors = []
 
+    # 按主机 IP 分组，避免对同一主机多次调用 get_managed_items()
+    hosts = {}
     for row in confirmed_items:
+        host_ip = row['host_ip']
+        if host_ip not in hosts:
+            hosts[host_ip] = []
+        hosts[host_ip].append(row)
+
+    for host_ip, rows in hosts.items():
         try:
-            host_ip = row['host_ip']
             host_id = client.get_host_id(host_ip)
             if not host_id:
                 errors.append(f'主机 {host_ip} 在 Zabbix 中不存在')
@@ -968,56 +975,81 @@ def sync_items_to_zabbix():
                 errors.append(f'主机 {host_ip} 无可用接口')
                 continue
 
-            item_data = {
-                'hostid': host_id,
-                'key_': row['item_key'],
-                'name': row['name'],
-                'type': row['type'],
-                'value_type': row['value_type'],
-                'delay': row['delay'],
-                'interfaceid': interface_id,
-            }
-            if row.get('description'):
-                item_data['description'] = row['description']
-            if row.get('units'):
-                item_data['units'] = row['units']
-            if row.get('history'):
-                item_data['history'] = str(row['history'])
-            if row.get('trends'):
-                item_data['trends'] = str(row['trends'])
-            if row.get('status'):
-                item_data['status'] = row['status']
-            if row.get('master_item'):
-                item_data['master_item'] = row['master_item']
-            if row.get('preprocessing'):
-                item_data['preprocessing'] = row['preprocessing']
-
-            # 检查是否已存在
+            # 一次性获取该主机所有自有监控项，构建当前状态映射
             existing_items = client.get_managed_items(host_id)
-            existing_keys = {item['key_']: item for item in existing_items}
+            current_items_map = {item['key_']: item for item in existing_items}
 
-            if row['item_key'] in existing_keys:
-                existing = existing_keys[row['item_key']]
-                target_fp = client.calculate_fingerprint(item_data)
-                current_fp = client.calculate_fingerprint(existing)
-                if target_fp != current_fp:
-                    client.update_item(existing['itemid'], item_data)
-                    updated += 1
-            else:
-                client.create_item(item_data)
-                created += 1
+            # 构建该主机下已确认的目标监控项 key 集合
+            target_keys = set()
+
+            # 第一轮：创建/更新目标监控项
+            for row in rows:
+                try:
+                    item_data = {
+                        'hostid': host_id,
+                        'key_': row['item_key'],
+                        'name': row['name'],
+                        'type': row['type'],
+                        'value_type': row['value_type'],
+                        'delay': row['delay'],
+                        'interfaceid': interface_id,
+                    }
+                    if row.get('description'):
+                        item_data['description'] = row['description']
+                    if row.get('units'):
+                        item_data['units'] = row['units']
+                    if row.get('history'):
+                        item_data['history'] = str(row['history'])
+                    if row.get('trends'):
+                        item_data['trends'] = str(row['trends'])
+                    if row.get('status'):
+                        item_data['status'] = row['status']
+                    if row.get('master_item'):
+                        item_data['master_item'] = row['master_item']
+                    if row.get('preprocessing'):
+                        item_data['preprocessing'] = row['preprocessing']
+
+                    target_keys.add(row['item_key'])
+
+                    if row['item_key'] in current_items_map:
+                        existing = current_items_map[row['item_key']]
+                        target_fp = client.calculate_fingerprint(item_data)
+                        current_fp = client.calculate_fingerprint(existing)
+                        if target_fp != current_fp:
+                            client.update_item(existing['itemid'], item_data)
+                            updated += 1
+                    else:
+                        client.create_item(item_data)
+                        created += 1
+
+                except ZabbixAPIException as e:
+                    errors.append(f'{host_ip}/{row["item_key"]}: Zabbix API 错误 - {e}')
+                except Exception as e:
+                    errors.append(f'{host_ip}/{row["item_key"]}: {e}')
+
+            # 第二轮：清理孤儿监控项（Zabbix 中存在但不在已确认列表中的）
+            for key, item in current_items_map.items():
+                if key not in target_keys:
+                    try:
+                        client.delete_item(item['itemid'])
+                        deleted += 1
+                    except ZabbixAPIException as e:
+                        errors.append(f'{host_ip}/{key}: 删除失败 - {e}')
+                    except Exception as e:
+                        errors.append(f'{host_ip}/{key}: 删除异常 - {e}')
 
         except ZabbixAPIException as e:
-            errors.append(f'{host_ip}/{row["item_key"]}: Zabbix API 错误 - {e}')
+            errors.append(f'主机 {host_ip}: Zabbix API 错误 - {e}')
         except Exception as e:
-            errors.append(f'{host_ip}/{row["item_key"]}: {e}')
+            errors.append(f'主机 {host_ip}: {e}')
 
-    msg = f'已成功同步至{environment} Zabbix：新建 {created}，更新 {updated}'
+    msg = f'已成功同步至{environment} Zabbix：新建 {created}，更新 {updated}，删除 {deleted}'
     if errors:
         msg += f'，{len(errors)} 个失败'
         return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
-                        'errors': errors[:10]})
-    return jsonify({'success': True, 'message': msg, 'synced_count': created + updated})
+                        'deleted_count': deleted, 'errors': errors[:10]})
+    return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
+                    'deleted_count': deleted})
 
 @app.route('/item-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_item_review(review_id):
@@ -1674,26 +1706,125 @@ def initialize_webscenarios_review():
 
 @app.route('/webscenarios-review/sync', methods=['POST'])
 def sync_webscenarios_to_zabbix():
-    """同步已确认Web场景到指定 Zabbix 环境"""
+    """同步已确认Web场景到指定 Zabbix 环境（含孤儿清理）"""
     data = request.get_json()
     environment = data.get('environment', '')
     if not environment:
         return jsonify({'success': False, 'message': '请选择目标环境机房'}), 400
 
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 {environment} 未配置 URL'}), 400
+
+    conn = get_db_connection()
     try:
-        env_config = ZABBIX_ENVIRONMENTS[environment]
-        if not env_config['url']:
-            return jsonify({'success': False, 'message': f'环境 {environment} 未配置 URL'}), 400
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM webscenario_items_review WHERE confirmed = TRUE ORDER BY host, name")
+            confirmed_scenarios = cur.fetchall()
+    finally:
+        conn.close()
 
-        from zabbix_mac import ConfigLoader, ZabbixClient, ZabbixUltimateAutomator
-        loader = ConfigLoader()
-        client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
-        automator = ZabbixUltimateAutomator(config_loader=loader, zabbix_client=client)
-        automator.create_web_scenarios()
+    if not confirmed_scenarios:
+        return jsonify({'success': True, 'message': '没有已确认的Web场景需要同步', 'synced_count': 0})
 
-        return jsonify({'success': True, 'message': f'Web场景同步到 {environment} 完成'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+    from zabbix_mac import ZabbixClient, ZabbixAPIException
+
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+    created = 0
+    updated = 0
+    deleted = 0
+    errors = []
+
+    # 按主机分组
+    hosts = {}
+    for row in confirmed_scenarios:
+        host = row['host']
+        if host not in hosts:
+            hosts[host] = []
+        hosts[host].append(row)
+
+    for host_name, rows in hosts.items():
+        try:
+            host_id = client.get_host_id(host_name)
+            if not host_id:
+                errors.append(f'主机 {host_name} 在 Zabbix 中不存在')
+                continue
+
+            # 获取该主机所有自有 Web 场景（排除模板继承的）
+            try:
+                all_scenarios = client.api.httptest.get(
+                    hostids=host_id,
+                    output="extend",
+                    selectSteps="extend"
+                )
+                all_scenarios = [s for s in all_scenarios if s.get("templateid") == "0"]
+            except ZabbixAPIException as e:
+                errors.append(f'主机 {host_name}: 获取Web场景失败 - {e}')
+                continue
+
+            current_map = {s['name']: s for s in all_scenarios}
+            target_names = set()
+
+            # 第一轮：创建/更新目标 Web 场景
+            for row in rows:
+                try:
+                    scenario_name = row['name']
+                    target_names.add(scenario_name)
+
+                    scenario_data = {
+                        "name": scenario_name,
+                        "hostid": host_id,
+                        "agent": "0",
+                        "retries": "1",
+                        "steps": [{
+                            "no": 1,
+                            "name": scenario_name,
+                            "url": row['url'],
+                            "timeout": "30",
+                            "status_codes": str(row.get('status_code', '200')),
+                            "follow_redirects": "1"
+                        }]
+                    }
+
+                    if scenario_name in current_map:
+                        existing = current_map[scenario_name]
+                        target_fp = client.calculate_fingerprint(scenario_data)
+                        current_fp = client.calculate_fingerprint(existing)
+                        if target_fp != current_fp:
+                            client.update_web_scenario(existing['httptestid'], scenario_data)
+                            updated += 1
+                    else:
+                        client.create_web_scenario(scenario_data)
+                        created += 1
+
+                except ZabbixAPIException as e:
+                    errors.append(f'{host_name}/{scenario_name}: Zabbix API 错误 - {e}')
+                except Exception as e:
+                    errors.append(f'{host_name}/{scenario_name}: {e}')
+
+            # 第二轮：清理孤儿 Web 场景（Zabbix 中存在但不在已确认列表中的）
+            for name, scenario in current_map.items():
+                if name not in target_names:
+                    try:
+                        client.delete_web_scenario(scenario['httptestid'])
+                        deleted += 1
+                    except ZabbixAPIException as e:
+                        errors.append(f'{host_name}/{name}: 删除失败 - {e}')
+                    except Exception as e:
+                        errors.append(f'{host_name}/{name}: 删除异常 - {e}')
+
+        except ZabbixAPIException as e:
+            errors.append(f'主机 {host_name}: Zabbix API 错误 - {e}')
+        except Exception as e:
+            errors.append(f'主机 {host_name}: {e}')
+
+    msg = f'已成功同步至{environment} Zabbix：新建 {created}，更新 {updated}，删除 {deleted}'
+    if errors:
+        msg += f'，{len(errors)} 个失败'
+        return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
+                        'deleted_count': deleted, 'errors': errors[:10]})
+    return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
+                    'deleted_count': deleted})
 
 
 @app.route('/webscenarios-review/sync-triggers', methods=['POST'])
