@@ -3315,16 +3315,17 @@ class SyncEngine:
 class StatusVerifier:
     """状态核验器 - 从 Zabbix 拉取实际状态并与复核表比对"""
 
-    def __init__(self, zabbix_client: ZabbixClient, db_config: Dict[str, Any]):
+    def __init__(self, zabbix_client: ZabbixClient, db_config: Dict[str, Any], db_conn=None):
         """初始化状态核验器
 
         Args:
             zabbix_client: Zabbix 客户端
             db_config: 数据库配置
+            db_conn: 可选的已有数据库连接（用于 Web UI 复用连接）
         """
         self.zabbix_client = zabbix_client
         self.db_config = db_config
-        self.connection = None
+        self.connection = db_conn  # 允许外部传入已有连接
 
     def _get_db_connection(self):
         """获取数据库连接"""
@@ -3602,6 +3603,339 @@ class StatusVerifier:
         if self.connection and not self.connection.closed:
             self.connection.close()
             self.connection = None
+
+    def verify_web_scenarios(self, host_ip: str) -> Dict[str, int]:
+        """核验单个主机的 Web 场景
+
+        Args:
+            host_ip: 主机 IP（Zabbix 中的 host name）
+
+        Returns:
+            统计字典 {'verified': n, 'mismatch': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+
+        conn = self._get_db_connection()
+        review_scenarios = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, host, name, url, status_code FROM webscenario_items_review WHERE host = %s",
+                (host_ip,)
+            )
+            review_scenarios = cur.fetchall()
+
+        if not review_scenarios:
+            logger.info(f"主机 {host_ip} 的 webscenario_items_review 表中没有记录，跳过 Web 场景核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_ip} 的 {len(review_scenarios)} 个 Web 场景...")
+
+        # 获取 Zabbix 主机 ID
+        host_id = self.zabbix_client.get_host_id(host_ip)
+        if not host_id:
+            logger.warning(f"主机 {host_ip} 在 Zabbix 中不存在，所有 Web 场景标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE webscenario_items_review SET status_verification = 'not_found' WHERE host = %s",
+                    (host_ip,)
+                )
+            stats['not_found'] = len(review_scenarios)
+            return stats
+
+        # 从 Zabbix 拉取实际 Web 场景
+        try:
+            zabbix_scenarios = self.zabbix_client.api.httptest.get(
+                hostids=host_id,
+                output=["httptestid", "name"],
+                selectSteps="extend"
+            )
+            # 构建 name -> {name, url, status_codes} 的映射
+            zabbix_scenarios_map = {}
+            for scenario in zabbix_scenarios:
+                name = scenario.get("name", "")
+                steps = scenario.get("steps", [])
+                if steps:
+                    first_step = steps[0]
+                    zabbix_scenarios_map[name] = {
+                        "url": first_step.get("url", ""),
+                        "status_codes": first_step.get("status_codes", ""),
+                    }
+                else:
+                    zabbix_scenarios_map[name] = {"url": "", "status_codes": ""}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_scenarios)} 个 Web 场景")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取 Web 场景失败: {e}")
+            return stats
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取 Web 场景时发生未知错误: {e}")
+            return stats
+
+        # 逐条比对
+        updates = []
+        for rscenario in review_scenarios:
+            scenario_name = rscenario['name']
+            if scenario_name not in zabbix_scenarios_map:
+                updates.append(('not_found', rscenario['id']))
+                stats['not_found'] += 1
+                logger.debug(f"  Web 场景 {scenario_name}: not_found")
+            else:
+                zs = zabbix_scenarios_map[scenario_name]
+                r_url = str(rscenario.get('url', '')).strip()
+                z_url = str(zs.get('url', '')).strip()
+                r_status = str(rscenario.get('status_code', '200')).strip()
+                z_status = str(zs.get('status_codes', '200')).strip()
+
+                if r_url != z_url or r_status != z_status:
+                    updates.append(('mismatch', rscenario['id']))
+                    stats['mismatch'] += 1
+                    logger.info(f"  Web 场景 {scenario_name}: mismatch — "
+                                f"url: '{r_url}' vs '{z_url}', status: '{r_status}' vs '{z_status}'")
+                else:
+                    updates.append(('verified', rscenario['id']))
+                    stats['verified'] += 1
+
+        # 批量更新
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE webscenario_items_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_ip} Web 场景核验完成: verified={stats['verified']}, "
+                    f"mismatch={stats['mismatch']}, not_found={stats['not_found']}")
+        return stats
+
+    def verify_item_prototypes(self, host_ip: str) -> Dict[str, int]:
+        """核验单个主机的监控项原型
+
+        通过 主机 → 发现规则 → 监控项原型 的路径进行比对。
+        匹配方式: 按 item_prototype 的 key_ 匹配，比对 name/type/value_type/delay。
+
+        Args:
+            host_ip: 主机 IP（Zabbix 中的 host name）
+
+        Returns:
+            统计字典 {'verified': n, 'mismatch': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+
+        conn = self._get_db_connection()
+        review_protos = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, discovery_rule_id, host_ip, name, key, value_type, delay "
+                "FROM item_prototypes_review WHERE host_ip = %s",
+                (host_ip,)
+            )
+            review_protos = cur.fetchall()
+
+        if not review_protos:
+            logger.info(f"主机 {host_ip} 的 item_prototypes_review 表中没有记录，跳过监控项原型核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_ip} 的 {len(review_protos)} 个监控项原型...")
+
+        # 获取 Zabbix 主机 ID
+        host_id = self.zabbix_client.get_host_id(host_ip)
+        if not host_id:
+            logger.warning(f"主机 {host_ip} 在 Zabbix 中不存在，所有监控项原型标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE item_prototypes_review SET status_verification = 'not_found' WHERE host_ip = %s",
+                    (host_ip,)
+                )
+            stats['not_found'] = len(review_protos)
+            return stats
+
+        # 按 discovery_rule_id 分组
+        rule_ids = set(p['discovery_rule_id'] for p in review_protos)
+        # 获取 discovery_rules 信息用于匹配 Zabbix 上的发现规则
+        from collections import defaultdict
+        rule_info = {}
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, name, key FROM discovery_rules WHERE id = ANY(%s)",
+                (list(rule_ids),)
+            )
+            for r in cur.fetchall():
+                rule_info[r['id']] = r
+
+        # 从 Zabbix 获取该主机所有发现规则
+        try:
+            zabbix_rules = self.zabbix_client.api.discoveryrule.get(
+                hostids=host_id,
+                output=["itemid", "key_", "name"]
+            )
+            zabbix_rules_map = {r["key_"]: r for r in zabbix_rules}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_rules)} 个发现规则")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取发现规则失败: {e}")
+            return stats
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取发现规则时发生未知错误: {e}")
+            return stats
+
+        # 获取所有发现规则的监控项原型
+        all_zabbix_protos = {}  # key_ -> item prototype
+        for rule_key, zrule in zabbix_rules_map.items():
+            try:
+                zabbix_protos = self.zabbix_client.api.itemprototype.get(
+                    discoveryids=zrule["itemid"],
+                    output=["itemid", "key_", "name", "type", "value_type", "delay"]
+                )
+                for zp in zabbix_protos:
+                    all_zabbix_protos[zp["key_"]] = zp
+            except Exception as e:
+                logger.warning(f"获取发现规则 {rule_key} 的监控项原型失败: {e}")
+
+        logger.info(f"从 Zabbix 获取到共 {len(all_zabbix_protos)} 个监控项原型")
+
+        # 逐条比对
+        updates = []
+        for rp in review_protos:
+            proto_key = rp['key']
+            if proto_key not in all_zabbix_protos:
+                updates.append(('not_found', rp['id']))
+                stats['not_found'] += 1
+                logger.debug(f"  监控项原型 {proto_key}: not_found")
+            else:
+                zp = all_zabbix_protos[proto_key]
+                z_name = str(zp.get('name', ''))
+                z_type = int(zp.get('type', -1))
+                z_value_type = int(zp.get('value_type', -1))
+                z_delay = str(zp.get('delay', ''))
+
+                r_name = str(rp.get('name', ''))
+                r_type = int(rp.get('type', -1)) if rp.get('type') is not None else -1
+                r_value_type = int(rp.get('value_type', -1)) if rp.get('value_type') is not None else -1
+                r_delay = str(rp.get('delay', ''))
+
+                mismatch_fields = []
+                if z_name != r_name:
+                    mismatch_fields.append(f"name: '{r_name}' vs '{z_name}'")
+                if z_type != r_type:
+                    mismatch_fields.append(f"type: {r_type} vs {z_type}")
+                if z_value_type != r_value_type:
+                    mismatch_fields.append(f"value_type: {r_value_type} vs {z_value_type}")
+                if z_delay.rstrip('s') != r_delay.rstrip('s'):
+                    mismatch_fields.append(f"delay: '{r_delay}' vs '{z_delay}'")
+
+                if mismatch_fields:
+                    updates.append(('mismatch', rp['id']))
+                    stats['mismatch'] += 1
+                    logger.info(f"  监控项原型 {proto_key}: mismatch — {', '.join(mismatch_fields)}")
+                else:
+                    updates.append(('verified', rp['id']))
+                    stats['verified'] += 1
+
+        # 批量更新
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE item_prototypes_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_ip} 监控项原型核验完成: verified={stats['verified']}, "
+                    f"mismatch={stats['mismatch']}, not_found={stats['not_found']}")
+        return stats
+
+    def verify_trigger_prototypes(self, host_ip: str) -> Dict[str, int]:
+        """核验单个主机的触发器原型
+
+        通过 主机 → 发现规则 → 触发器原型 的路径进行存在性比对。
+        匹配方式: 按 trigger_prototype 的 description 匹配。
+
+        Args:
+            host_ip: 主机 IP（Zabbix 中的 host name）
+
+        Returns:
+            统计字典 {'verified': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'not_found': 0}
+
+        conn = self._get_db_connection()
+        review_protos = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, discovery_rule_id, host_ip, description "
+                "FROM trigger_prototypes_review WHERE host_ip = %s",
+                (host_ip,)
+            )
+            review_protos = cur.fetchall()
+
+        if not review_protos:
+            logger.info(f"主机 {host_ip} 的 trigger_prototypes_review 表中没有记录，跳过触发器原型核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_ip} 的 {len(review_protos)} 个触发器原型...")
+
+        # 获取 Zabbix 主机 ID
+        host_id = self.zabbix_client.get_host_id(host_ip)
+        if not host_id:
+            logger.warning(f"主机 {host_ip} 在 Zabbix 中不存在，所有触发器原型标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE trigger_prototypes_review SET status_verification = 'not_found' WHERE host_ip = %s",
+                    (host_ip,)
+                )
+            stats['not_found'] = len(review_protos)
+            return stats
+
+        # 从 Zabbix 获取该主机所有发现规则
+        try:
+            zabbix_rules = self.zabbix_client.api.discoveryrule.get(
+                hostids=host_id,
+                output=["itemid", "key_", "name"]
+            )
+            zabbix_rules_map = {r["key_"]: r for r in zabbix_rules}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_rules)} 个发现规则")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取发现规则失败: {e}")
+            return stats
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取发现规则时发生未知错误: {e}")
+            return stats
+
+        # 获取所有发现规则的触发器原型
+        all_zabbix_protos = set()  # set of descriptions
+        for rule_key, zrule in zabbix_rules_map.items():
+            try:
+                zabbix_protos = self.zabbix_client.api.triggerprototype.get(
+                    discoveryids=zrule["itemid"],
+                    output=["triggerid", "description"]
+                )
+                for zp in zabbix_protos:
+                    all_zabbix_protos.add(zp["description"])
+            except Exception as e:
+                logger.warning(f"获取发现规则 {rule_key} 的触发器原型失败: {e}")
+
+        logger.info(f"从 Zabbix 获取到共 {len(all_zabbix_protos)} 个触发器原型")
+
+        # 逐条比对（存在性检查）
+        updates = []
+        for rp in review_protos:
+            proto_desc = rp['description']
+            if proto_desc in all_zabbix_protos:
+                updates.append(('verified', rp['id']))
+                stats['verified'] += 1
+            else:
+                updates.append(('not_found', rp['id']))
+                stats['not_found'] += 1
+                logger.debug(f"  触发器原型 {proto_desc}: not_found")
+
+        # 批量更新
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE trigger_prototypes_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_ip} 触发器原型核验完成: verified={stats['verified']}, "
+                    f"not_found={stats['not_found']}")
+        return stats
 
 
 class ZabbixUltimateAutomator:

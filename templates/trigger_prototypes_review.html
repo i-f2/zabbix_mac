@@ -4,7 +4,35 @@
 {% block page_title %}触发器原型复核表管理{% endblock %}
 
 {% block toolbar %}
-<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+<div class="d-flex flex-wrap align-items-center gap-2">
+    <!-- 初始化按钮 -->
+    <button id="initTriggerPrototypesReviewBtn" class="btn btn-outline-warning" onclick="initTriggerPrototypesReview()" title="清空并重新初始化 trigger_prototypes_review 表">
+        <i class="bi bi-arrow-counterclockwise"></i> 初始化
+    </button>
+
+    <!-- 核验按钮组 -->
+    <div class="btn-group">
+        <button id="verifyTriggerPrototypesReviewBtn" class="btn btn-outline-info" onclick="verifyTriggerPrototypesReview()" title="从 Zabbix 拉取实际状态并核验复核表">
+            <i class="bi bi-check-circle"></i> 核验
+        </button>
+        <select id="verifyEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
+            <option value="">选择环境</option>
+            <option value="深交所证联网">深交所证联网</option>
+            <option value="深交所互联网">深交所互联网</option>
+            <option value="上交所证联网">上交所证联网</option>
+            <option value="上交所互联网">上交所互联网</option>
+        </select>
+    </div>
+
+    <!-- 导出/导入按钮 -->
+    <a href="/trigger-prototypes-review/export" class="btn btn-outline-success" title="导出 trigger_prototypes_review 为 Excel"><i class="bi bi-download"></i> 导出</a>
+    <button class="btn btn-outline-info" onclick="document.getElementById('importTriggerPrototypesReviewFile').click()" title="从 Excel 导入 trigger_prototypes_review"><i class="bi bi-upload"></i> 导入</button>
+    <input type="file" id="importTriggerPrototypesReviewFile" accept=".xlsx" style="display:none" onchange="importTriggerPrototypesReview(this)">
+
+    <div class="ms-auto">
+        <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -20,6 +48,7 @@
                     <th>优先级</th>
                     <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
                     <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
+                    <th class="col-sticky col-sticky-r2 col-fw-status">状态核验</th>
                     <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
                 </tr>
             </thead>
@@ -33,6 +62,15 @@
                     <td>{{ prototype.priority }}</td>
                     <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if prototype.modified else '未修改' }}</td>
                     <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if prototype.confirmed else '未确认' }}</td>
+                    <td class="col-sticky col-sticky-r2 col-fw-status">
+                        {% if prototype.status_verification == 'verified' %}
+                            <span class="status-badge verified">已核验</span>
+                        {% elif prototype.status_verification == 'not_found' %}
+                            <span class="status-badge not-found">未找到</span>
+                        {% else %}
+                            <span class="status-badge pending">未核验</span>
+                        {% endif %}
+                    </td>
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_trigger_prototype_review', review_id=prototype.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not prototype.confirmed %}
@@ -55,4 +93,68 @@
     {% endif %}
     {{ pg(page, per_page, total, total_pages) }}
 </div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function initTriggerPrototypesReview() {
+    var btn = document.getElementById('initTriggerPrototypesReviewBtn');
+    if (!btn) return;
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
+    try {
+        var res = await fetch('/trigger-prototypes-review/initialize', { method: 'POST' });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('初始化请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function importTriggerPrototypesReview(input) {
+    if (!input.files.length) return;
+    if (!confirm('将清空 trigger_prototypes_review 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+    try {
+        var res = await fetch('/trigger-prototypes-review/import', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'danger');
+    }
+    input.value = '';
+}
+
+async function verifyTriggerPrototypesReview() {
+    var env = document.getElementById('verifyEnvSelect').value;
+    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+
+    var btn = document.getElementById('verifyTriggerPrototypesReviewBtn');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
+    try {
+        var res = await fetch('/trigger-prototypes-review/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env })
+        });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('核验请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+</script>
 {% endblock %}

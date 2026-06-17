@@ -1142,8 +1142,9 @@ def initialize_items_review():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM items_review")
-            deleted = cur.rowcount
+            cur.execute("SELECT COUNT(*) FROM items_review")
+            deleted = cur.fetchone()[0]
+            cur.execute("TRUNCATE items_review RESTART IDENTITY")
             cur.execute("""
                 INSERT INTO items_review (
                     item_id, host_ip, item_key, name, type, value_type, delay,
@@ -1528,8 +1529,9 @@ def initialize_triggers_review():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM triggers_review")
-            deleted = cur.rowcount
+            cur.execute("SELECT COUNT(*) FROM triggers_review")
+            deleted = cur.fetchone()[0]
+            cur.execute("TRUNCATE triggers_review RESTART IDENTITY")
             cur.execute("""
                 INSERT INTO triggers_review (
                     trigger_id, host_ip, name, expression, priority, description,
@@ -1915,8 +1917,9 @@ def initialize_webscenarios_review():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM webscenario_items_review")
-            deleted = cur.rowcount
+            cur.execute("SELECT COUNT(*) FROM webscenario_items_review")
+            deleted = cur.fetchone()[0]
+            cur.execute("TRUNCATE webscenario_items_review RESTART IDENTITY")
             cur.execute("""
                 INSERT INTO webscenario_items_review (system, subsystem, host, name, url, status_code, modified, confirmed, status_verification)
                 SELECT
@@ -2486,6 +2489,481 @@ def unconfirm_trigger_prototype_review(review_id):
         flash(f'取消确认失败: {e}')
     conn.close()
     return redirect(url_for('trigger_prototypes_review'))
+
+
+@app.route('/item-prototypes-review/initialize', methods=['POST'])
+def initialize_item_prototypes_review():
+    """初始化 item_prototypes_review 表：清空并重新从 item_prototypes × discovery_rules × hosts 填充"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM item_prototypes_review")
+            deleted = cur.fetchone()[0]
+            cur.execute("TRUNCATE item_prototypes_review RESTART IDENTITY")
+            cur.execute("""
+                INSERT INTO item_prototypes_review (
+                    item_prototype_id, discovery_rule_id, host_ip, name, key, value_type, delay,
+                    description, units, multiplier, delta, history, trends, status,
+                    system, subsystem, modified, confirmed, status_verification
+                )
+                SELECT
+                    ip.id,
+                    ip.discovery_rule_id,
+                    h.name as host_ip,
+                    ip.name,
+                    ip.key,
+                    ip.value_type,
+                    ip.delay,
+                    ip.description,
+                    ip.units,
+                    ip.multiplier,
+                    ip.delta,
+                    ip.history,
+                    ip.trends,
+                    ip.status,
+                    h.system,
+                    h.subsystem,
+                    false,
+                    false,
+                    'pending'
+                FROM item_prototypes ip
+                CROSS JOIN hosts h
+                JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+                WHERE dr.template_name = %s
+            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
+            inserted = cur.rowcount
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'item_prototypes_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/item-prototypes-review/export')
+def export_item_prototypes_review():
+    """导出 item_prototypes_review 表到 Excel 文件"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM item_prototypes_review ORDER BY host_ip, key")
+            rows = cur.fetchall()
+        if not rows:
+            return jsonify({'success': False, 'message': 'item_prototypes_review 表为空'}), 400
+
+        df = pd.DataFrame([dict(r) for r in rows])
+        tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        df.to_excel(tmp.name, index=False, engine='openpyxl')
+        tmp.close()
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(tmp.name, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'item_prototypes_review_{timestamp}.xlsx')
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/item-prototypes-review/import', methods=['POST'])
+def import_item_prototypes_review():
+    """从 Excel 文件导入数据到 item_prototypes_review 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM item_prototypes_review")
+            deleted = cur.rowcount
+
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(
+                f"INSERT INTO item_prototypes_review ({column_names}) VALUES ({placeholders})",
+                all_values
+            )
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'item_prototypes_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/trigger-prototypes-review/initialize', methods=['POST'])
+def initialize_trigger_prototypes_review():
+    """初始化 trigger_prototypes_review 表：清空并重新从 trigger_prototypes × discovery_rules × hosts 填充"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM trigger_prototypes_review")
+            deleted = cur.fetchone()[0]
+            cur.execute("TRUNCATE trigger_prototypes_review RESTART IDENTITY")
+            cur.execute("""
+                INSERT INTO trigger_prototypes_review (
+                    trigger_prototype_id, discovery_rule_id, host_ip, description, expression, priority, status,
+                    system, subsystem, modified, confirmed, status_verification
+                )
+                SELECT
+                    tp.id,
+                    tp.discovery_rule_id,
+                    h.name as host_ip,
+                    tp.description,
+                    tp.expression,
+                    tp.priority,
+                    tp.status,
+                    h.system,
+                    h.subsystem,
+                    false,
+                    false,
+                    'pending'
+                FROM trigger_prototypes tp
+                CROSS JOIN hosts h
+                JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+                WHERE dr.template_name = %s
+            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
+            inserted = cur.rowcount
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'trigger_prototypes_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/trigger-prototypes-review/export')
+def export_trigger_prototypes_review():
+    """导出 trigger_prototypes_review 表到 Excel 文件"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY host_ip, description")
+            rows = cur.fetchall()
+        if not rows:
+            return jsonify({'success': False, 'message': 'trigger_prototypes_review 表为空'}), 400
+
+        df = pd.DataFrame([dict(r) for r in rows])
+        tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        df.to_excel(tmp.name, index=False, engine='openpyxl')
+        tmp.close()
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(tmp.name, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=f'trigger_prototypes_review_{timestamp}.xlsx')
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/trigger-prototypes-review/import', methods=['POST'])
+def import_trigger_prototypes_review():
+    """从 Excel 文件导入数据到 trigger_prototypes_review 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM trigger_prototypes_review")
+            deleted = cur.rowcount
+
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(
+                f"INSERT INTO trigger_prototypes_review ({column_names}) VALUES ({placeholders})",
+                all_values
+            )
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'trigger_prototypes_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/items-review/verify', methods=['POST'])
+def verify_items_review():
+    """核验 items_review 状态：从 Zabbix 拉取实际监控项并与复核表比对"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, StatusVerifier
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    conn = get_db_connection()
+    try:
+        # 收集所有 host_ip
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT DISTINCT host_ip FROM items_review")
+            host_ips = [r['host_ip'] for r in cur.fetchall()]
+
+        if not host_ips:
+            return jsonify({'success': True, 'message': 'items_review 表为空，无需核验', 'results': {}})
+
+        # db_config 最小化配置（StatusVerifier 将使用传入的 conn）
+        verifier = StatusVerifier(client, {}, db_conn=conn)
+        total = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+        for host_ip in host_ips:
+            stats = verifier.verify_items(host_ip)
+            total['verified'] += stats['verified']
+            total['mismatch'] += stats['mismatch']
+            total['not_found'] += stats['not_found']
+
+        return jsonify({
+            'success': True,
+            'message': f'监控项核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}',
+            'results': total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/triggers-review/verify', methods=['POST'])
+def verify_triggers_review():
+    """核验 triggers_review 状态：从 Zabbix 拉取实际触发器并与复核表比对"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, StatusVerifier
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT DISTINCT host_ip FROM triggers_review")
+            host_ips = [r['host_ip'] for r in cur.fetchall()]
+
+        if not host_ips:
+            return jsonify({'success': True, 'message': 'triggers_review 表为空，无需核验', 'results': {}})
+
+        verifier = StatusVerifier(client, {}, db_conn=conn)
+        total = {'verified': 0, 'not_found': 0}
+        for host_ip in host_ips:
+            stats = verifier.verify_triggers(host_ip)
+            total['verified'] += stats['verified']
+            total['not_found'] += stats['not_found']
+
+        return jsonify({
+            'success': True,
+            'message': f'触发器核验完成：verified={total["verified"]}, not_found={total["not_found"]}',
+            'results': total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenarios-review/verify', methods=['POST'])
+def verify_webscenarios_review():
+    """核验 webscenario_items_review 状态：从 Zabbix 拉取实际 Web 场景并与复核表比对"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, StatusVerifier
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT DISTINCT host FROM webscenario_items_review")
+            host_names = [r['host'] for r in cur.fetchall()]
+
+        if not host_names:
+            return jsonify({'success': True, 'message': 'webscenario_items_review 表为空，无需核验', 'results': {}})
+
+        verifier = StatusVerifier(client, {}, db_conn=conn)
+        total = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+        for host_name in host_names:
+            stats = verifier.verify_web_scenarios(host_name)
+            total['verified'] += stats['verified']
+            total['mismatch'] += stats['mismatch']
+            total['not_found'] += stats['not_found']
+
+        return jsonify({
+            'success': True,
+            'message': f'Web 场景核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}',
+            'results': total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/item-prototypes-review/verify', methods=['POST'])
+def verify_item_prototypes_review():
+    """核验 item_prototypes_review 状态：从 Zabbix 拉取实际监控项原型并与复核表比对"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, StatusVerifier
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT DISTINCT host_ip FROM item_prototypes_review")
+            host_ips = [r['host_ip'] for r in cur.fetchall()]
+
+        if not host_ips:
+            return jsonify({'success': True, 'message': 'item_prototypes_review 表为空，无需核验', 'results': {}})
+
+        verifier = StatusVerifier(client, {}, db_conn=conn)
+        total = {'verified': 0, 'mismatch': 0, 'not_found': 0}
+        for host_ip in host_ips:
+            stats = verifier.verify_item_prototypes(host_ip)
+            total['verified'] += stats['verified']
+            total['mismatch'] += stats['mismatch']
+            total['not_found'] += stats['not_found']
+
+        return jsonify({
+            'success': True,
+            'message': f'监控项原型核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}',
+            'results': total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/trigger-prototypes-review/verify', methods=['POST'])
+def verify_trigger_prototypes_review():
+    """核验 trigger_prototypes_review 状态：从 Zabbix 拉取实际触发器原型并与复核表比对"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, StatusVerifier
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT DISTINCT host_ip FROM trigger_prototypes_review")
+            host_ips = [r['host_ip'] for r in cur.fetchall()]
+
+        if not host_ips:
+            return jsonify({'success': True, 'message': 'trigger_prototypes_review 表为空，无需核验', 'results': {}})
+
+        verifier = StatusVerifier(client, {}, db_conn=conn)
+        total = {'verified': 0, 'not_found': 0}
+        for host_ip in host_ips:
+            stats = verifier.verify_trigger_prototypes(host_ip)
+            total['verified'] += stats['verified']
+            total['not_found'] += stats['not_found']
+
+        return jsonify({
+            'success': True,
+            'message': f'触发器原型核验完成：verified={total["verified"]}, not_found={total["not_found"]}',
+            'results': total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 
 # ============================================================
 # 自动发现规则管理

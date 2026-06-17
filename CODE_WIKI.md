@@ -74,6 +74,8 @@ zabbix_mac/
 │   ├── apply_migrations.sh        # 迁移部署脚本
 │   └── README.md                  # 迁移规范说明
 ├── 数据导出/                       # pg_dump 数据快照
+├── .claude/skills/                # Claude Code 技能定义
+│   └── deploy-production/         #   部署上线自动化技能
 ├── templates/                     # Jinja2 模板 (36 个)
 │   ├── base.html
 │   ├── index.html
@@ -235,7 +237,7 @@ python3 app.py
 | 触发器原型 | 按 LLD 规则分组展示 + 编辑 + 模板筛选 + Excel 导出/导入 |
 | 自动发现规则 | LLD 规则管理 + 过滤条件管理 + 模板筛选 + Excel 导出/导入 |
 | 主机管理 | 主机 CRUD + 从 ops.sub_assets 同步 |
-| 复核表 (×5) | 监控项/触发器/原型/Web场景复核，审核 → 确认 → 同步 |
+| 复核表 (×5) | 监控项/触发器/原型/Web场景复核，审核 → 确认 → 同步 → 核验，含初始化/导出/导入 |
 | 搜索 | 跨表搜索主机名/模板名/IP |
 
 ### 5.3 预定义模版管理 - 模板筛选
@@ -327,7 +329,39 @@ Web 界面复核表同步（`/items-review/sync`, `/webscenarios-review/sync`）
 | `/webscenario-review/add` | POST | 添加Web场景复核 |
 | `/webscenario-review/confirm/<id>` | GET | 确认Web场景复核 |
 | `/webscenario-review/unconfirm/<id>` | GET | 取消确认Web场景复核 |
+| `/item-prototypes-review/initialize` | POST | 初始化监控项原型复核表 |
+| `/item-prototypes-review/export` | GET | 导出监控项原型复核表 |
+| `/item-prototypes-review/import` | POST | 导入监控项原型复核表 |
+| `/trigger-prototypes-review/initialize` | POST | 初始化触发器原型复核表 |
+| `/trigger-prototypes-review/export` | GET | 导出触发器原型复核表 |
+| `/trigger-prototypes-review/import` | POST | 导入触发器原型复核表 |
+| `/items-review/verify` | POST | 核验监控项复核状态 |
+| `/triggers-review/verify` | POST | 核验触发器复核状态 |
+| `/webscenarios-review/verify` | POST | 核验Web场景复核状态 |
+| `/item-prototypes-review/verify` | POST | 核验监控项原型复核状态 |
+| `/trigger-prototypes-review/verify` | POST | 核验触发器原型复核状态 |
 | `/search` | GET | 全局搜索 |
+
+### 5.9 状态核验
+
+复核表每条记录都有 `status_verification` 字段，表示与 Zabbix 实际配置的对账结果：
+
+| 值 | 含义 |
+|----|------|
+| `pending` | 未核验（默认值） |
+| `verified` | 与 Zabbix 中的配置一致 |
+| `mismatch` | 存在但字段不一致（仅监控项/Web场景） |
+| `not_found` | Zabbix 中不存在对应配置 |
+
+**核验触发**: 在复核表页面选择目标环境 → 点击"核验"按钮，系统将拉取 Zabbix 实际配置并与复核表逐条比对：
+
+| 复核表 | 比对方式 |
+|--------|---------|
+| `items_review` | 按 `key_` 匹配 → 比对 name/type/value_type/delay |
+| `triggers_review` | 按 `description` 匹配 → 存在性检查 |
+| `webscenario_items_review` | 按 `name` 匹配 → 比对 url/status_code |
+| `item_prototypes_review` | 按 `key_` 匹配（通过发现规则） → 比对 name/type/value_type/delay |
+| `trigger_prototypes_review` | 按 `description` 匹配（通过发现规则） → 存在性检查 |
 
 ## 6. 关键类与函数
 
@@ -371,6 +405,21 @@ Web 界面复核表同步（`/items-review/sync`, `/webscenarios-review/sync`）
 | `get_webscenario_items_review()` | 获取已确认的 Web 场景复核记录 |
 
 配置优先级：**环境变量 > config.yaml > 默认值**
+
+### 6.4 StatusVerifier — 状态核验器
+
+位于 `zabbix_mac.py`，负责从 Zabbix 拉取实际配置并与复核表逐条比对。
+
+| 方法 | 说明 |
+|------|------|
+| `verify_items(host_ip)` | 按 `key_` 匹配，比对 name/type/value_type/delay，标记 verified/mismatch/not_found |
+| `verify_triggers(host_ip)` | 按 `description` 匹配，存在性检查，标记 verified/not_found |
+| `verify_web_scenarios(host_ip)` | 按 `name` 匹配，比对 url/status_code，标记 verified/mismatch/not_found |
+| `verify_item_prototypes(host_ip)` | 通过发现规则按 `key_` 匹配，比对字段 |
+| `verify_trigger_prototypes(host_ip)` | 通过发现规则按 `description` 匹配，存在性检查 |
+| `verify_all()` | 遍历所有主机执行 items + triggers 核验，打印汇总报告 |
+
+Web UI 通过 5 条 `POST /xxx-review/verify` 路由触发，CLI 通过 `--verify-status` 参数触发。
 
 ## 7. 数据库结构
 
@@ -423,6 +472,10 @@ Web 界面复核表同步（`/items-review/sync`, `/webscenarios-review/sync`）
 ### 7.5 迁移管理
 
 使用 `database_update/apply_migrations.sh` 进行数据库结构变更。详见 `database_update/README.md`。
+
+### 7.6 ID 序列重置
+
+复核表的"初始化"操作使用 `TRUNCATE <table> RESTART IDENTITY`（而非 `DELETE`），确保清空表后 `SERIAL` 主键序列从 1 开始重新计数。涉及: `items_review`、`triggers_review`、`webscenario_items_review`、`item_prototypes_review`、`trigger_prototypes_review`。
 
 ## 8. 依赖关系
 
@@ -508,6 +561,8 @@ Zabbix 机房凭据通过环境变量注入（不写入代码）：
 | Bootstrap 图标显示方框 | 字体路径错误 | 已修复：`bootstrap-icons.css` 中字体路径改为 `../fonts/` |
 | 侧边栏菜单错误高亮 | URL 前缀匹配过于宽泛 | 已修复：JS 增加词边界检查 |
 | 横向滚动时固定列失效 | 父容器 `overflow:hidden` 冲突 | 已修复：`.data-card` 移除 `overflow:hidden` |
+| 核验提示"无效的环境" | `zabbix_environments` 未在 config.yaml 中配置 | 在 config.yaml 添加 Zabbix 环境配置（参考 config.yaml.example） |
+| 原型核验全部 not_found | 发现规则未同步到 Zabbix 或 key 不匹配 | 先执行"同步"操作确保发现规则已存在于 Zabbix |
 
 ## 12. 部署上线
 
@@ -532,7 +587,19 @@ docker run -d -p 5000:5000 \
 
 详见第 9 节配置说明。
 
+### 12.4 deploy-production 技能
+
+Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-production` 触发，自动执行三阶段部署准备：
+
+| 阶段 | 操作 |
+|------|------|
+| Phase 1 - 依赖检查 | 扫描 `app.py`/`zabbix_mac.py` 导入 → 对比 `requirements-*.txt` → 检查 `Dockerfile` COPY 指令 → 检查 `config.yaml` |
+| Phase 2 - 数据库迁移 | 列出 `database_update/` 下 SQL 文件 → 查询 `schema_migrations` 状态 → 询问用户 → 执行 `apply_migrations.sh` |
+| Phase 3 - 数据导出 | 启动 Flask → curl 6 个导出端点 → 保存至 `数据导出/` → 生成时间戳备份 → 停止 Flask |
+
+技能文件: `.claude/skills/deploy-production/SKILL.md`
+
 ---
 
-**文档版本**: 3.0
+**文档版本**: 3.1
 **最后更新**: 2026-06-17

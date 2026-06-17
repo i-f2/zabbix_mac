@@ -15,6 +15,9 @@
         <button id="syncItemsBtn" class="btn btn-outline-primary" onclick="syncItemsToZabbix()" title="同步已确认监控项到指定环境">
             <i class="bi bi-cloud-upload"></i> 监控同步
         </button>
+        <button id="verifyItemsBtn" class="btn btn-outline-info" onclick="verifyItemsReview()" title="从 Zabbix 拉取实际状态并核验复核表">
+            <i class="bi bi-check-circle"></i> 核验
+        </button>
         <select id="syncEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
             <option value="">选择环境</option>
             <option value="深交所证联网">深交所证联网</option>
@@ -345,6 +348,31 @@ async function syncItemsToZabbix() {
         showToast(data.message, data.success ? 'success' : 'danger');
     } catch (e) {
         showToast('同步请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function verifyItemsReview() {
+    var env = document.getElementById('syncEnvSelect').value;
+    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+
+    var btn = document.getElementById('verifyItemsBtn');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
+    try {
+        var res = await fetch('/items-review/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env })
+        });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('核验请求失败: ' + e.message, 'danger');
     } finally {
         btn.disabled = false;
         btn.innerHTML = orig;
