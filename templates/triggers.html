@@ -1,21 +1,20 @@
 {% extends 'base.html' %}
 {% from '_pagination.html' import render as pg %}
 
-{% block page_title %}触发器管理
-<!-- 模板筛选 -->
-<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('triggers') }}">
-    <input type="text" name="template" class="form-control form-control-sm" placeholder="模板" style="width: 140px;" value="{{ request.args.get('template', '') }}">
-    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
-    {{% if request.args %}}
-    <a href="{{ url_for('triggers') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
-    {{% endif %}}
-</form>
-
-{% endblock %}
+{% block page_title %}触发器管理{% endblock %}
 
 {% block toolbar %}
 <a href="{{ url_for('add_trigger') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加触发器</a>
 <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+<!-- 模板筛选 -->
+<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('triggers') }}">
+    <input type="text" name="template" class="form-control form-control-sm" placeholder="模板" style="width: 140px;" value="{{ request.args.get('template', '') }}">
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    {% if request.args %}
+    <a href="{{ url_for('triggers') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    {% endif %}
+</form>
+
 {% endblock %}
 
 {% block content %}
