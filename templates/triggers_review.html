@@ -62,10 +62,10 @@
                     <th>模板</th>
                     <th>系统名称</th>
                     <th>模块名称</th>
-                    <th class="col-sticky col-sticky-r3 col-fw-status">修改状态</th>
-                    <th class="col-sticky col-sticky-r2 col-fw-status">确认状态</th>
-                    <th class="col-sticky col-sticky-r1 col-fw-status">状态核验</th>
-                    <th>操作</th>
+                    <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
+                    <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
+                    <th class="col-sticky col-sticky-r2 col-fw-status">状态核验</th>
+                    <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
                 </tr>
             </thead>
             <tbody>
@@ -79,9 +79,9 @@
                     <td>{{ trigger.template_name }}</td>
                     <td>{{ trigger.system or '' }}</td>
                     <td>{{ trigger.subsystem or '' }}</td>
-                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已修改' if trigger.modified else '未修改' }}</td>
-                    <td class="col-sticky col-sticky-r2 col-fw-status">{{ '已确认' if trigger.confirmed else '未确认' }}</td>
-                    <td class="col-sticky col-sticky-r1 col-fw-status">
+                    <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if trigger.modified else '未修改' }}</td>
+                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if trigger.confirmed else '未确认' }}</td>
+                    <td class="col-sticky col-sticky-r2 col-fw-status">
                         {% if trigger.status_verification == 'verified' %}
                             <span class="status-badge verified">已核验</span>
                         {% elif trigger.status_verification == 'not_found' %}
@@ -90,7 +90,7 @@
                             <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not trigger.confirmed %}
                             <a href="{{ url_for('confirm_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-success">确认</a>

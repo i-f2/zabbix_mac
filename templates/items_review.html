@@ -78,10 +78,10 @@
                 <th>模板</th>
                 <th>系统名称</th>
                 <th>模块名称</th>
-                <th class="col-sticky col-sticky-r3 col-fw-status">修改状态</th>
-                <th class="col-sticky col-sticky-r2 col-fw-status">确认状态</th>
-                <th class="col-sticky col-sticky-r1 col-fw-status">状态核验</th>
-                <th>操作</th>
+                <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
+                <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
+                <th class="col-sticky col-sticky-r2 col-fw-status">状态核验</th>
+                <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
             </tr>
         </thead>
         <tbody>
@@ -97,9 +97,9 @@
                     <td>{{ item.template_name }}</td>
                     <td>{{ item.system }}</td>
                     <td>{{ item.subsystem }}</td>
-                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已修改' if item.modified else '未修改' }}</td>
-                    <td class="col-sticky col-sticky-r2 col-fw-status">{{ '已确认' if item.confirmed else '未确认' }}</td>
-                    <td class="col-sticky col-sticky-r1 col-fw-status">
+                    <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if item.modified else '未修改' }}</td>
+                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if item.confirmed else '未确认' }}</td>
+                    <td class="col-sticky col-sticky-r2 col-fw-status">
                         {% if item.status_verification == 'verified' %}
                             <span class="status-badge verified">已核验</span>
                         {% elif item.status_verification == 'mismatch' %}
@@ -110,7 +110,7 @@
                             <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_item_review', review_id=item.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not item.confirmed %}
                             <a href="{{ url_for('confirm_item_review', review_id=item.id) }}" class="btn btn-sm btn-success">确认</a>

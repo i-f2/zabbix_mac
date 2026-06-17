@@ -520,14 +520,16 @@ body.sidebar-collapsed .app-main {
 .col-sticky-l2 { left: 50px; }
 
 /* Right frozen columns (stacked from right edge inward) */
-.col-sticky-r1 { right: 0; }       /* 状态核验 — rightmost */
-.col-sticky-r2 { right: 80px; }    /* 确认状态 */
-.col-sticky-r3 { right: 160px; }   /* 修改状态 */
+.col-sticky-r1 { right: 0; }       /* 操作 — rightmost */
+.col-sticky-r2 { right: 100px; }   /* 状态核验 */
+.col-sticky-r3 { right: 180px; }   /* 确认状态 */
+.col-sticky-r4 { right: 260px; }   /* 修改状态 */
 
 /* Fixed widths for frozen columns */
 .col-fw-id     { width: 50px;  min-width: 50px; }
 .col-fw-ip     { width: 140px; min-width: 140px; }
 .col-fw-status { width: 80px;  min-width: 80px; }
+.col-fw-action { width: 100px; min-width: 100px; }
 
 /* Opaque backgrounds prevent scrolling content from showing through */
 .table tbody .col-sticky {
