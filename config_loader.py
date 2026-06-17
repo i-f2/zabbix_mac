@@ -20,6 +20,7 @@ def _defaults() -> Dict[str, Any]:
             'host': '0.0.0.0',
             'port': 5000,
             'debug': False,
+            'default_template_name': '21001',
         },
         'database': {
             'host': 'localhost',

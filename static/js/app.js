@@ -200,11 +200,23 @@ function showToast(message, type) {
     var toastEl = document.createElement('div');
     toastEl.className = 'toast align-items-center text-white bg-' + type + ' border-0 position-fixed bottom-0 end-0 m-3';
     toastEl.setAttribute('role', 'alert');
-    toastEl.innerHTML =
-        '<div class="d-flex">' +
-            '<div class="toast-body">' + message + '</div>' +
-            '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
-        '</div>';
+
+    var flexDiv = document.createElement('div');
+    flexDiv.className = 'd-flex';
+
+    var bodyDiv = document.createElement('div');
+    bodyDiv.className = 'toast-body';
+    bodyDiv.textContent = message;
+
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-close btn-close-white me-2 m-auto';
+    closeBtn.setAttribute('data-bs-dismiss', 'toast');
+
+    flexDiv.appendChild(bodyDiv);
+    flexDiv.appendChild(closeBtn);
+    toastEl.appendChild(flexDiv);
+
     document.body.appendChild(toastEl);
     var toast = new bootstrap.Toast(toastEl, { delay: 3000 });
     toast.show();

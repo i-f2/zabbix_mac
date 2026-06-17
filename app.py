@@ -23,6 +23,7 @@ app = Flask(__name__)
 # 加载外部配置（环境变量 > config.yaml > 内置默认值）
 _config = load_config()
 app.secret_key = _config['app']['secret_key']
+app.config['DEFAULT_TEMPLATE_NAME'] = _config['app'].get('default_template_name', '21001')
 
 # 数据库连接配置
 DB_CONFIG = get_db_config(_config)
@@ -872,8 +873,8 @@ def initialize_items_review():
                     'pending'
                 FROM items i
                 CROSS JOIN hosts h
-                WHERE i.template_name = '21001'
-            """)
+                WHERE i.template_name = %s
+            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
         return jsonify({
@@ -1216,8 +1217,8 @@ def initialize_triggers_review():
                     'pending'
                 FROM triggers tr
                 CROSS JOIN hosts h
-                WHERE tr.template_name = '21001'
-            """)
+                WHERE tr.template_name = %s
+            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
         return jsonify({
@@ -1413,7 +1414,7 @@ def import_items_review():
             columns = list(df.columns)
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
-            inserted = 0
+            all_values = []
             for _, row in df.iterrows():
                 values = []
                 for col in columns:
@@ -1427,11 +1428,12 @@ def import_items_review():
                             values.append(val)
                     else:
                         values.append(val)
-                cur.execute(
-                    f"INSERT INTO items_review ({column_names}) VALUES ({placeholders})",
-                    values
-                )
-                inserted += 1
+                all_values.append(values)
+            cur.executemany(
+                f"INSERT INTO items_review ({column_names}) VALUES ({placeholders})",
+                all_values
+            )
+            inserted = len(all_values)
         conn.commit()
         return jsonify({
             'success': True,
@@ -1490,7 +1492,7 @@ def import_triggers_review():
             columns = list(df.columns)
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
-            inserted = 0
+            all_values = []
             for _, row in df.iterrows():
                 values = []
                 for col in columns:
@@ -1504,11 +1506,12 @@ def import_triggers_review():
                             values.append(val)
                     else:
                         values.append(val)
-                cur.execute(
-                    f"INSERT INTO triggers_review ({column_names}) VALUES ({placeholders})",
-                    values
-                )
-                inserted += 1
+                all_values.append(values)
+            cur.executemany(
+                f"INSERT INTO triggers_review ({column_names}) VALUES ({placeholders})",
+                all_values
+            )
+            inserted = len(all_values)
         conn.commit()
         return jsonify({
             'success': True,

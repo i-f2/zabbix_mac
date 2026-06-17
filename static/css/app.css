@@ -380,7 +380,6 @@ body.sidebar-collapsed .app-main {
     background: #fff;
     border-radius: 4px;
     box-shadow: var(--card-shadow);
-    overflow: hidden;
 }
 
 .data-card .card-body-padding {

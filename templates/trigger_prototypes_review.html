@@ -13,27 +13,27 @@
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>主机 IP</th>
+                    <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                    <th class="col-sticky col-sticky-l2 col-fw-ip">主机 IP</th>
                     <th>描述</th>
                     <th>表达式</th>
                     <th>优先级</th>
-                    <th>修改状态</th>
-                    <th>确认状态</th>
-                    <th>操作</th>
+                    <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
+                    <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
+                    <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
                 </tr>
             </thead>
             <tbody>
                 {% for prototype in prototypes %}
                 <tr>
-                    <td>{{ prototype.id }}</td>
-                    <td>{{ prototype.host_ip }}</td>
+                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ prototype.id }}</td>
+                    <td class="col-sticky col-sticky-l2 col-fw-ip">{{ prototype.host_ip }}</td>
                     <td>{{ prototype.description }}</td>
                     <td>{{ prototype.expression }}</td>
                     <td>{{ prototype.priority }}</td>
-                    <td>{{ '已修改' if prototype.modified else '未修改' }}</td>
-                    <td>{{ '已确认' if prototype.confirmed else '未确认' }}</td>
-                    <td>
+                    <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if prototype.modified else '未修改' }}</td>
+                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if prototype.confirmed else '未确认' }}</td>
+                    <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_trigger_prototype_review', review_id=prototype.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not prototype.confirmed %}
                             <a href="{{ url_for('confirm_trigger_prototype_review', review_id=prototype.id) }}" class="btn btn-sm btn-success">确认</a>
