@@ -199,6 +199,73 @@ def item_prototypes():
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
+
+@app.route('/item-prototypes/export')
+def export_item_prototypes():
+    """导出 item_prototypes 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM item_prototypes ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='item_prototypes')
+        output.seek(0)
+        return send_file(output, download_name='item_prototypes.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/item-prototypes/import', methods=['POST'])
+def import_item_prototypes():
+    """从 Excel 导入数据到 item_prototypes 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM item_prototypes")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO item_prototypes ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'item_prototypes 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/trigger-prototypes')
 def trigger_prototypes():
     """触发器原型管理"""
@@ -232,6 +299,73 @@ def trigger_prototypes():
     return render_template('trigger_prototypes.html', prototypes=prototypes,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
+
+
+@app.route('/trigger-prototypes/export')
+def export_trigger_prototypes():
+    """导出 trigger_prototypes 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM trigger_prototypes ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='trigger_prototypes')
+        output.seek(0)
+        return send_file(output, download_name='trigger_prototypes.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/trigger-prototypes/import', methods=['POST'])
+def import_trigger_prototypes():
+    """从 Excel 导入数据到 trigger_prototypes 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM trigger_prototypes")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO trigger_prototypes ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'trigger_prototypes 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 
 @app.route('/item-prototype/edit/<int:proto_id>', methods=['GET', 'POST'])
 def edit_item_prototype(proto_id):
@@ -427,6 +561,73 @@ def items():
     return render_template('items.html', items=items, page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
+
+@app.route('/items/export')
+def export_items():
+    """导出 items 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM items ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='items')
+        output.seek(0)
+        return send_file(output, download_name='items.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/items/import', methods=['POST'])
+def import_items():
+    """从 Excel 导入数据到 items 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM items")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO items ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'items 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/item/add', methods=['GET', 'POST'])
 def add_item():
     """添加监控项"""
@@ -570,6 +771,73 @@ def triggers():
     total_pages = (total + per_page - 1) // per_page
     return render_template('triggers.html', triggers=triggers, page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
+
+
+@app.route('/triggers/export')
+def export_triggers():
+    """导出 triggers 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM triggers ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='triggers')
+        output.seek(0)
+        return send_file(output, download_name='triggers.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/triggers/import', methods=['POST'])
+def import_triggers():
+    """从 Excel 导入数据到 triggers 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM triggers")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO triggers ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'triggers 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 
 @app.route('/trigger/add', methods=['GET', 'POST'])
 def add_trigger():
@@ -2257,6 +2525,73 @@ def discovery_rules():
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
+
+@app.route('/discovery-rules/export')
+def export_discovery_rules():
+    """导出 discovery_rules 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM discovery_rules ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='discovery_rules')
+        output.seek(0)
+        return send_file(output, download_name='discovery_rules.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/discovery-rules/import', methods=['POST'])
+def import_discovery_rules():
+    """从 Excel 导入数据到 discovery_rules 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM discovery_rules")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO discovery_rules ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'discovery_rules 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/discovery-rule/edit/<int:rule_id>', methods=['GET', 'POST'])
 def edit_discovery_rule(rule_id):
     """编辑自动发现规则"""
@@ -2333,6 +2668,73 @@ def filter_conditions():
     return render_template('filter_conditions.html', conditions=conditions,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
+
+
+@app.route('/filter-conditions/export')
+def export_filter_conditions():
+    """导出 filter_conditions 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM filter_conditions ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='filter_conditions')
+        output.seek(0)
+        return send_file(output, download_name='filter_conditions.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/filter-conditions/import', methods=['POST'])
+def import_filter_conditions():
+    """从 Excel 导入数据到 filter_conditions 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM filter_conditions")
+            deleted = cur.rowcount
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO filter_conditions ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'filter_conditions 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
 
 @app.route('/filter-condition/edit/<int:cond_id>', methods=['GET', 'POST'])
 def edit_filter_condition(cond_id):
