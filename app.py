@@ -168,20 +168,29 @@ def template_detail(template_id):
 @app.route('/item-prototypes')
 def item_prototypes():
     """监控项原型管理"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM item_prototypes")
+        where_clause = ""
+        where_join = ""
+        params = []
+        if template:
+            where_clause = " WHERE dr.template_name ILIKE %s"
+            where_join = " AND dr.template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM item_prototypes ip JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("""
+        cur.execute(f"""
             SELECT ip.*, dr.name as rule_name, dr.template_name
             FROM item_prototypes ip
             JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+            {where_join}
             ORDER BY ip.id LIMIT %s OFFSET %s
-        """, (per_page, offset))
+        """, params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
 
@@ -193,20 +202,29 @@ def item_prototypes():
 @app.route('/trigger-prototypes')
 def trigger_prototypes():
     """触发器原型管理"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM trigger_prototypes")
+        where_clause = ""
+        where_join = ""
+        params = []
+        if template:
+            where_clause = " WHERE dr.template_name ILIKE %s"
+            where_join = " AND dr.template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM trigger_prototypes tp JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("""
+        cur.execute(f"""
             SELECT tp.*, dr.name as rule_name, dr.template_name
             FROM trigger_prototypes tp
             JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+            {where_join}
             ORDER BY tp.id LIMIT %s OFFSET %s
-        """, (per_page, offset))
+        """, params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
 
@@ -387,15 +405,21 @@ def confirm_trigger_prototype(proto_id):
 @app.route('/items')
 def items():
     """监控项管理"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM items")
+        where_clause = ""
+        params = []
+        if template:
+            where_clause = " WHERE template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM items{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("SELECT * FROM items ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
+        cur.execute(f"SELECT * FROM items{where_clause} ORDER BY id LIMIT %s OFFSET %s", params + [per_page, offset])
         items = cur.fetchall()
     conn.close()
 
@@ -525,15 +549,21 @@ def delete_item(item_id):
 @app.route('/triggers')
 def triggers():
     """触发器管理"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM triggers")
+        where_clause = ""
+        params = []
+        if template:
+            where_clause = " WHERE template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM triggers{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("SELECT * FROM triggers ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
+        cur.execute(f"SELECT * FROM triggers{where_clause} ORDER BY id LIMIT %s OFFSET %s", params + [per_page, offset])
         triggers = cur.fetchall()
     conn.close()
 
@@ -2065,20 +2095,29 @@ def unconfirm_trigger_prototype_review(review_id):
 @app.route('/discovery-rules')
 def discovery_rules():
     """自动发现规则列表"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM discovery_rules")
+        where_clause = ""
+        where_join = ""
+        params = []
+        if template:
+            where_clause = " WHERE dr.template_name ILIKE %s"
+            where_join = " AND dr.template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM discovery_rules dr{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("""
+        cur.execute(f"""
             SELECT dr.*,
                    (SELECT COUNT(*) FROM filter_conditions fc WHERE fc.discovery_rule_id = dr.id) as filter_count
             FROM discovery_rules dr
+            WHERE 1=1{where_join}
             ORDER BY dr.id LIMIT %s OFFSET %s
-        """, (per_page, offset))
+        """, params + [per_page, offset])
         rules = cur.fetchall()
     conn.close()
 
@@ -2133,20 +2172,29 @@ def edit_discovery_rule(rule_id):
 @app.route('/filter-conditions')
 def filter_conditions():
     """自动发现过滤规则管理列表"""
+    template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM filter_conditions")
+        where_clause = ""
+        where_join = ""
+        params = []
+        if template:
+            where_clause = " WHERE dr.template_name ILIKE %s"
+            where_join = " AND dr.template_name ILIKE %s"
+            params.append(f'%{template}%')
+        cur.execute(f"SELECT COUNT(*) FROM filter_conditions fc JOIN discovery_rules dr ON fc.discovery_rule_id = dr.id{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("""
+        cur.execute(f"""
             SELECT fc.*, dr.name as rule_name, dr.template_name
             FROM filter_conditions fc
             JOIN discovery_rules dr ON fc.discovery_rule_id = dr.id
+            {where_join}
             ORDER BY fc.id LIMIT %s OFFSET %s
-        """, (per_page, offset))
+        """, params + [per_page, offset])
         conditions = cur.fetchall()
     conn.close()
 
