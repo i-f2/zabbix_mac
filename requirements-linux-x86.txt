@@ -13,3 +13,4 @@ pandas==2.3.2
 numpy==2.2.6
 openpyxl==3.1.5
 python-dateutil==2.9.0.post0
+pyzabbix==1.2.1
