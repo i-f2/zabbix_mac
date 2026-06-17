@@ -1,0 +1,300 @@
+{% extends 'base.html' %}
+{% from '_pagination.html' import render as pg %}
+
+{% block page_title %}Web场景复核表管理{% endblock %}
+
+{% block toolbar %}
+<div class="d-flex flex-wrap align-items-center gap-2">
+    <!-- 初始化按钮 -->
+    <button id="initWebScenariosReviewBtn" class="btn btn-outline-warning" onclick="initWebScenariosReview()" title="清空并重新初始化 webscenario_items_review 表">
+        <i class="bi bi-arrow-counterclockwise"></i> 初始化
+    </button>
+
+    <!-- 同步Web场景按钮组 -->
+    <div class="btn-group">
+        <button id="syncWebScenariosBtn" class="btn btn-outline-primary" onclick="syncWebScenarios()" title="同步已确认Web场景到指定环境">
+            <i class="bi bi-cloud-upload"></i> 同步Web场景
+        </button>
+        <select id="syncEnvSelectScenarios" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
+            <option value="">选择环境</option>
+            <option value="深交所证联网">深交所证联网</option>
+            <option value="深交所互联网">深交所互联网</option>
+            <option value="上交所证联网">上交所证联网</option>
+            <option value="上交所互联网">上交所互联网</option>
+        </select>
+    </div>
+
+    <!-- 同步Web场景触发器按钮组 -->
+    <div class="btn-group">
+        <button id="syncWebScenarioTriggersBtn" class="btn btn-outline-primary" onclick="syncWebScenarioTriggers()" title="同步Web场景触发器到指定环境">
+            <i class="bi bi-cloud-upload"></i> 同步Web场景触发器
+        </button>
+        <select id="syncEnvSelectTriggers" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
+            <option value="">选择环境</option>
+            <option value="深交所证联网">深交所证联网</option>
+            <option value="深交所互联网">深交所互联网</option>
+            <option value="上交所证联网">上交所证联网</option>
+            <option value="上交所互联网">上交所互联网</option>
+        </select>
+    </div>
+
+    <!-- 添加Web场景按钮 -->
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWebScenarioModal" title="手动添加Web场景">
+        <i class="bi bi-plus-lg"></i> 添加Web场景
+    </button>
+
+    <!-- 导出/导入按钮 -->
+    <a href="/webscenarios-review/export" class="btn btn-outline-success" title="导出为 Excel"><i class="bi bi-download"></i> 导出</a>
+    <button class="btn btn-outline-info" onclick="document.getElementById('importWebScenariosFile').click()" title="从 Excel 导入"><i class="bi bi-upload"></i> 导入</button>
+    <input type="file" id="importWebScenariosFile" accept=".xlsx" style="display:none" onchange="importWebScenariosReview(this)">
+
+    <div class="ms-auto">
+        <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+</div>
+
+<!-- 筛选器行 -->
+<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('webscenarios_review') }}">
+    <input type="text" name="host" class="form-control form-control-sm" placeholder="主机" style="width: 140px;" value="{{ request.args.get('host', '') }}">
+
+    <input type="text" name="system" class="form-control form-control-sm" placeholder="系统名称" style="width: 140px;"
+           list="systemList" autocomplete="off" value="{{ request.args.get('system', '') }}">
+    <datalist id="systemList">
+        {% for s in distinct_systems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <input type="text" name="subsystem" class="form-control form-control-sm" placeholder="模块名称" style="width: 140px;"
+           list="subsystemList" autocomplete="off" value="{{ request.args.get('subsystem', '') }}">
+    <datalist id="subsystemList">
+        {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    {% if request.args %}
+    <a href="{{ url_for('webscenarios_review') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="data-card">
+    <div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                <th class="col-sticky col-sticky-l2 col-fw-ip">主机</th>
+                <th>系统名称</th>
+                <th>模块名称</th>
+                <th>名称</th>
+                <th>URL</th>
+                <th>状态码</th>
+                <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
+                <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
+                <th class="col-sticky col-sticky-r2 col-fw-status">状态核验</th>
+                <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ws in webscenarios %}
+                <tr>
+                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ ws.id }}</td>
+                    <td class="col-sticky col-sticky-l2 col-fw-ip">{{ ws.host }}</td>
+                    <td>{{ ws.system }}</td>
+                    <td>{{ ws.subsystem }}</td>
+                    <td>{{ ws.name }}</td>
+                    <td>{{ ws.url }}</td>
+                    <td>{{ ws.status_code }}</td>
+                    <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if ws.modified else '未修改' }}</td>
+                    <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if ws.confirmed else '未确认' }}</td>
+                    <td class="col-sticky col-sticky-r2 col-fw-status">
+                        {% if ws.status_verification == 'verified' %}
+                            <span class="status-badge verified">已核验</span>
+                        {% elif ws.status_verification == 'mismatch' %}
+                            <span class="status-badge mismatch">不一致</span>
+                        {% elif ws.status_verification == 'not_found' %}
+                            <span class="status-badge not-found">未找到</span>
+                        {% else %}
+                            <span class="status-badge pending">未核验</span>
+                        {% endif %}
+                    </td>
+                    <td class="col-sticky col-sticky-r1 col-fw-action">
+                        <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                        {% if not ws.confirmed %}
+                            <a href="{{ url_for('confirm_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-success">确认</a>
+                        {% else %}
+                            <a href="{{ url_for('unconfirm_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-warning">取消确认</a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if webscenarios|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无复核记录</div>
+        <div class="empty-desc">当前没有待复核的Web场景记录。</div>
+    </div>
+    {% endif %}
+    {{ pg(page, per_page, total, total_pages, url_params={'host': request.args.get('host', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', '')}) }}
+</div>
+
+<!-- 添加Web场景 Modal -->
+<div class="modal fade" id="addWebScenarioModal" tabindex="-1" aria-labelledby="addWebScenarioModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addWebScenarioModalLabel">添加Web场景</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addWebScenarioForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="wsName" class="form-label">名称</label>
+                    <input type="text" class="form-control" id="wsName" name="name" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="wsHost" class="form-label">主机</label>
+                    <input type="text" class="form-control" id="wsHost" name="host" value="Zabbix server" required>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="wsUrl" class="form-label">URL</label>
+                <input type="text" class="form-control" id="wsUrl" name="url" required>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="wsStatusCode" class="form-label">状态码</label>
+                    <input type="text" class="form-control" id="wsStatusCode" name="status_code" value="200" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="wsSystem" class="form-label">系统名称</label>
+                    <input type="text" class="form-control" id="wsSystem" name="system" placeholder="如: 上市系统">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="wsSubsystem" class="form-label">模块名称</label>
+                    <input type="text" class="form-control" id="wsSubsystem" name="subsystem" placeholder="如: 日常监管模块">
+                </div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="submitAddWebScenarioBtn" onclick="submitAddWebScenario()">添加</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function initWebScenariosReview() {
+    var btn = document.getElementById('initWebScenariosReviewBtn');
+    if (!btn) return;
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
+    try {
+        var res = await fetch('/webscenarios-review/initialize', { method: 'POST' });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('初始化请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function syncWebScenarios() {
+    var env = document.getElementById('syncEnvSelectScenarios').value;
+    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+    var btn = document.getElementById('syncWebScenariosBtn');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
+    try {
+        var res = await fetch('/webscenarios-review/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env })
+        });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+    } catch (e) {
+        showToast('同步请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function syncWebScenarioTriggers() {
+    var env = document.getElementById('syncEnvSelectTriggers').value;
+    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+    var btn = document.getElementById('syncWebScenarioTriggersBtn');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
+    try {
+        var res = await fetch('/webscenarios-review/sync-triggers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env })
+        });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+    } catch (e) {
+        showToast('同步请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function importWebScenariosReview(input) {
+    if (!input.files.length) return;
+    if (!confirm('将清空 webscenario_items_review 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+    try {
+        var res = await fetch('/webscenarios-review/import', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function () { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'danger');
+    }
+    input.value = '';
+}
+
+async function submitAddWebScenario() {
+    var btn = document.getElementById('submitAddWebScenarioBtn');
+    var form = document.getElementById('addWebScenarioForm');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 提交中...';
+    try {
+        var formData = new FormData(form);
+        var res = await fetch('/webscenario-review/add', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('addWebScenarioModal'));
+            modal.hide();
+            setTimeout(function () { location.reload(); }, 800);
+        }
+    } catch (e) {
+        showToast('添加失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+</script>
+{% endblock %}

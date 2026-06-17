@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block page_title %}编辑Web场景复核记录{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <form method="post">
+        <div class="mb-3">
+            <label for="host" class="form-label">主机</label>
+            <input type="text" class="form-control" id="host" name="host" value="{{ ws.host }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="name" class="form-label">名称</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ ws.name }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="url" class="form-label">URL</label>
+            <input type="text" class="form-control" id="url" name="url" value="{{ ws.url }}" required>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="status_code" class="form-label">状态码</label>
+                <input type="text" class="form-control" id="status_code" name="status_code" value="{{ ws.status_code }}" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="system" class="form-label">系统名称</label>
+                <input type="text" class="form-control" id="system" name="system" value="{{ ws.system or '' }}">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="subsystem" class="form-label">模块名称</label>
+                <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ ws.subsystem or '' }}">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <a href="{{ url_for('webscenarios_review') }}" class="btn btn-secondary">取消</a>
+    </form>
+</div>
+{% endblock %}

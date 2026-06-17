@@ -9,6 +9,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 import os
 import ast
+import io
 import tempfile
 from datetime import datetime
 import psycopg2
@@ -64,6 +65,8 @@ def inject_active_menu():
         'edit_item_prototype_review': 'item_prototypes_review',
         'trigger_prototypes_review': 'trigger_prototypes_review',
         'edit_trigger_prototype_review': 'trigger_prototypes_review',
+        'webscenarios_review': 'webscenarios_review',
+        'edit_webscenario_review': 'webscenarios_review',
         'hosts': 'hosts',
         'add_host': 'hosts',
         'edit_host': 'hosts',
@@ -101,6 +104,8 @@ def inject_breadcrumb():
         'edit_item_prototype_review': [('复核表管理', None), ('监控项原型复核', url_for('item_prototypes_review')), ('编辑复核记录', None)],
         'trigger_prototypes_review': [('复核表管理', None), ('触发器原型复核', url_for('trigger_prototypes_review'))],
         'edit_trigger_prototype_review': [('复核表管理', None), ('触发器原型复核', url_for('trigger_prototypes_review')), ('编辑复核记录', None)],
+        'webscenarios_review': [('复核表管理', None), ('Web场景复核', url_for('webscenarios_review'))],
+        'edit_webscenario_review': [('复核表管理', None), ('Web场景复核', url_for('webscenarios_review')), ('编辑复核记录', None)],
         'hosts': [('主机管理', url_for('hosts'))],
         'add_host': [('主机管理', url_for('hosts')), ('添加主机', None)],
         'edit_host': [('主机管理', url_for('hosts')), ('编辑主机', None)],
@@ -1516,6 +1521,339 @@ def import_triggers_review():
         return jsonify({
             'success': True,
             'message': f'triggers_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+# ============================================================
+# Web场景复核表管理路由
+# ============================================================
+
+@app.route('/webscenarios-review')
+def webscenarios_review():
+    """Web场景复核表管理 — 支持 host/system/subsystem 过滤 + 分页"""
+    host = request.args.get('host', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    offset = (page - 1) * per_page
+
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        where_clause = " WHERE 1=1"
+        params = []
+        if host:
+            where_clause += " AND host ILIKE %s"
+            params.append(f'%{host}%')
+        if system:
+            where_clause += " AND system ILIKE %s"
+            params.append(f'%{system}%')
+        if subsystem:
+            where_clause += " AND subsystem ILIKE %s"
+            params.append(f'%{subsystem}%')
+
+        cur.execute("SELECT DISTINCT system FROM webscenario_items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM webscenario_items_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+
+        cur.execute(f"SELECT COUNT(*) FROM webscenario_items_review{where_clause}", params)
+        total = cur.fetchone()['count']
+
+        cur.execute(f"SELECT * FROM webscenario_items_review{where_clause} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
+        webscenarios = cur.fetchall()
+
+    conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('webscenarios_review.html', webscenarios=webscenarios,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
+
+
+@app.route('/webscenarios-review/initialize', methods=['POST'])
+def initialize_webscenarios_review():
+    """初始化 webscenario_items_review 表：清空并重新从 webscenario_items 填充"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM webscenario_items_review")
+            deleted = cur.rowcount
+            cur.execute("""
+                INSERT INTO webscenario_items_review (system, subsystem, host, name, url, status_code, modified, confirmed, status_verification)
+                SELECT
+                    system, subsystem,
+                    'Zabbix server' as host,
+                    system || '_' || subsystem || '_clb' as name,
+                    nginx_clb as url,
+                    '200' as status_code,
+                    false, false, 'pending'
+                FROM webscenario_items
+                WHERE nginx_clb IS NOT NULL AND nginx_clb != ''
+                UNION ALL
+                SELECT
+                    system, subsystem,
+                    'Zabbix server' as host,
+                    system || '_' || subsystem || '_nginx' as name,
+                    nginx as url,
+                    '200' as status_code,
+                    false, false, 'pending'
+                FROM webscenario_items
+                WHERE nginx IS NOT NULL AND nginx != ''
+                UNION ALL
+                SELECT
+                    system, subsystem,
+                    'Zabbix server' as host,
+                    system || '_' || subsystem || '_clb_direct' as name,
+                    clb as url,
+                    '200' as status_code,
+                    false, false, 'pending'
+                FROM webscenario_items
+                WHERE clb IS NOT NULL AND clb != ''
+                UNION ALL
+                SELECT
+                    system, subsystem,
+                    'Zabbix server' as host,
+                    system || '_' || subsystem || '_pod' as name,
+                    pod as url,
+                    '200' as status_code,
+                    false, false, 'pending'
+                FROM webscenario_items
+                WHERE pod IS NOT NULL AND pod != ''
+            """)
+            inserted = cur.rowcount
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'webscenario_items_review 初始化成功：删除 {deleted} 条，导入 {inserted} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenarios-review/sync', methods=['POST'])
+def sync_webscenarios_to_zabbix():
+    """同步已确认Web场景到指定 Zabbix 环境"""
+    data = request.get_json()
+    environment = data.get('environment', '')
+    if not environment:
+        return jsonify({'success': False, 'message': '请选择目标环境机房'}), 400
+
+    try:
+        env_config = ZABBIX_ENVIRONMENTS[environment]
+        if not env_config['url']:
+            return jsonify({'success': False, 'message': f'环境 {environment} 未配置 URL'}), 400
+
+        from zabbix_mac import ConfigLoader, ZabbixClient, ZabbixUltimateAutomator
+        loader = ConfigLoader()
+        client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+        automator = ZabbixUltimateAutomator(config_loader=loader, zabbix_client=client)
+        automator.create_web_scenarios()
+
+        return jsonify({'success': True, 'message': f'Web场景同步到 {environment} 完成'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+
+
+@app.route('/webscenarios-review/sync-triggers', methods=['POST'])
+def sync_webscenario_triggers_to_zabbix():
+    """同步Web场景触发器到指定 Zabbix 环境"""
+    data = request.get_json()
+    environment = data.get('environment', '')
+    if not environment:
+        return jsonify({'success': False, 'message': '请选择目标环境机房'}), 400
+
+    try:
+        env_config = ZABBIX_ENVIRONMENTS[environment]
+        if not env_config['url']:
+            return jsonify({'success': False, 'message': f'环境 {environment} 未配置 URL'}), 400
+
+        from zabbix_mac import ConfigLoader, ZabbixClient, ZabbixUltimateAutomator
+        loader = ConfigLoader()
+        client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+        automator = ZabbixUltimateAutomator(config_loader=loader, zabbix_client=client)
+        automator.create_web_scenario_triggers()
+
+        return jsonify({'success': True, 'message': f'Web场景触发器同步到 {environment} 完成'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+
+
+@app.route('/webscenario-review/edit/<int:review_id>', methods=['GET', 'POST'])
+def edit_webscenario_review(review_id):
+    """编辑单条 Web 场景复核记录"""
+    conn = get_db_connection()
+    if request.method == 'GET':
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM webscenario_items_review WHERE id = %s", (review_id,))
+            ws = cur.fetchone()
+        conn.close()
+        if not ws:
+            flash('记录不存在')
+            return redirect(url_for('webscenarios_review'))
+        return render_template('edit_webscenario_review.html', ws=ws)
+
+    # POST — save changes
+    host = request.form['host']
+    name = request.form['name']
+    url = request.form['url']
+    status_code = request.form['status_code']
+    system = request.form.get('system', '')
+    subsystem = request.form.get('subsystem', '')
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE webscenario_items_review
+                SET host = %s, name = %s, url = %s, status_code = %s,
+                    system = %s, subsystem = %s, modified = true, updated_at = NOW()
+                WHERE id = %s
+            """, (host, name, url, status_code, system, subsystem, review_id))
+        conn.commit()
+        flash('保存成功')
+    except Exception as e:
+        conn.rollback()
+        flash(f'保存失败: {e}')
+    finally:
+        conn.close()
+    return redirect(url_for('webscenarios_review'))
+
+
+@app.route('/webscenario-review/confirm/<int:review_id>')
+def confirm_webscenario_review(review_id):
+    """确认 Web 场景复核记录"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE webscenario_items_review SET confirmed = true, updated_at = NOW() WHERE id = %s", (review_id,))
+        conn.commit()
+        flash('已确认')
+    except Exception as e:
+        conn.rollback()
+        flash(f'操作失败: {e}')
+    finally:
+        conn.close()
+    return redirect(url_for('webscenarios_review'))
+
+
+@app.route('/webscenario-review/unconfirm/<int:review_id>')
+def unconfirm_webscenario_review(review_id):
+    """取消确认 Web 场景复核记录"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE webscenario_items_review SET confirmed = false, updated_at = NOW() WHERE id = %s", (review_id,))
+        conn.commit()
+        flash('已取消确认')
+    except Exception as e:
+        conn.rollback()
+        flash(f'操作失败: {e}')
+    finally:
+        conn.close()
+    return redirect(url_for('webscenarios_review'))
+
+
+@app.route('/webscenario-review/add', methods=['POST'])
+def add_webscenario_from_review():
+    """手动添加 Web 场景到复核表"""
+    name = request.form['name']
+    host = request.form['host']
+    url = request.form['url']
+    status_code = request.form['status_code']
+    system = request.form.get('system', '')
+    subsystem = request.form.get('subsystem', '')
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO webscenario_items_review (name, host, url, status_code, system, subsystem, modified, confirmed, status_verification)
+                VALUES (%s, %s, %s, %s, %s, %s, false, false, 'pending')
+            """, (name, host, url, status_code, system, subsystem))
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Web场景添加成功'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenarios-review/export')
+def export_webscenarios_review():
+    """导出 webscenario_items_review 到 Excel"""
+    import pandas as pd
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM webscenario_items_review ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='webscenario_items_review')
+        output.seek(0)
+        return send_file(output, download_name='webscenario_items_review.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenarios-review/import', methods=['POST'])
+def import_webscenarios_review():
+    """从 Excel 导入数据到 webscenario_items_review 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM webscenario_items_review")
+            deleted = cur.rowcount
+
+            columns = list(df.columns)
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(
+                f"INSERT INTO webscenario_items_review ({column_names}) VALUES ({placeholders})",
+                all_values
+            )
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'webscenario_items_review 导入成功：删除 {deleted} 条，导入 {inserted} 条'
         })
     except Exception as e:
         conn.rollback()
