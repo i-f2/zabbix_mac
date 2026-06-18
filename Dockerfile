@@ -5,7 +5,7 @@
 # 在 Intel Mac 上构建: docker build -t zabbix-mac:latest .
 # =============================================================================
 
-FROM python:3.11-slim-bookworm
+FROM docker.m.daocloud.io/library/python:3.11-slim-bookworm
 
 WORKDIR /app
 
