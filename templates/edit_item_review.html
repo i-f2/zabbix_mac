@@ -75,7 +75,7 @@
         </div>
         <div class="mb-3">
             <label for="preprocessing" class="form-label">预处理步骤 (JSON格式)</label>
-            <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3">{{ item.preprocessing or '' }}</textarea>
+            <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3">{{ item.preprocessing | tojson if item.preprocessing is not none else '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-primary">保存</button>
         <a href="{{ url_for('items_review') }}" class="btn btn-secondary">取消</a>

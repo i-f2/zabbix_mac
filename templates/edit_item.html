@@ -96,7 +96,7 @@
             </div>
             <div class="mb-3">
                 <label for="preprocessing" class="form-label">预处理 (JSON格式)</label>
-                <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3" placeholder="[{\"type\": 0, \"params\": \"\"}]">{{ item.preprocessing or '' }}</textarea>
+                <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3" placeholder="[{\"type\": 0, \"params\": \"\"}]">{{ item.preprocessing | tojson if item.preprocessing is not none else '' }}</textarea>
             </div>
             <button type="submit" class="btn btn-primary">更新</button>
             <a href="{{ url_for('items') }}" class="btn btn-secondary">取消</a>

@@ -653,8 +653,17 @@ def add_item():
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
         master_item = request.form.get('master_item') or None
-        preprocessing = request.form.get('preprocessing') or None
-        
+        preprocessing_raw = request.form.get('preprocessing')
+        if preprocessing_raw and preprocessing_raw.strip():
+            try:
+                preprocessing = json.loads(preprocessing_raw)
+                if preprocessing == '':
+                    preprocessing = None
+            except json.JSONDecodeError:
+                preprocessing = None
+        else:
+            preprocessing = None
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -708,8 +717,17 @@ def edit_item(item_id):
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
         master_item = request.form.get('master_item') or None
-        preprocessing = request.form.get('preprocessing') or None
-        
+        preprocessing_raw = request.form.get('preprocessing')
+        if preprocessing_raw and preprocessing_raw.strip():
+            try:
+                preprocessing = json.loads(preprocessing_raw)
+                if preprocessing == '':
+                    preprocessing = None
+            except json.JSONDecodeError:
+                preprocessing = None
+        else:
+            preprocessing = None
+
         try:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -1352,7 +1370,16 @@ def edit_item_review(review_id):
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
         master_item = request.form.get('master_item') or None
-        preprocessing = request.form.get('preprocessing') or None
+        preprocessing_raw = request.form.get('preprocessing')
+        if preprocessing_raw and preprocessing_raw.strip():
+            try:
+                preprocessing = json.loads(preprocessing_raw)
+                if preprocessing == '':
+                    preprocessing = None
+            except json.JSONDecodeError:
+                preprocessing = None
+        else:
+            preprocessing = None
         template_name = request.form['template_name']
         system = request.form.get('system') or None
         subsystem = request.form.get('subsystem') or None
@@ -1435,7 +1462,16 @@ def add_item_from_review():
         system = request.form.get('system', '').strip() or None
         subsystem = request.form.get('subsystem', '').strip() or None
         master_item = request.form.get('master_item') or None
-        preprocessing = request.form.get('preprocessing') or None
+        preprocessing_raw = request.form.get('preprocessing')
+        if preprocessing_raw and preprocessing_raw.strip():
+            try:
+                preprocessing = json.loads(preprocessing_raw)
+                if preprocessing == '':
+                    preprocessing = None
+            except json.JSONDecodeError:
+                preprocessing = None
+        else:
+            preprocessing = None
 
         with conn.cursor() as cur:
             # 1. 写入主表 items，返回新 ID（items 表无 system/subsystem 字段）
