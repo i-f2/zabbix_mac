@@ -11,7 +11,7 @@
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">描述</label>
-            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description }}</textarea>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description or '' }}</textarea>
         </div>
         <div class="mb-3">
             <label for="expression" class="form-label">表达式</label>

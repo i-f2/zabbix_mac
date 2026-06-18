@@ -319,7 +319,7 @@ class ZabbixClient:
         
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                self.api.item.delete([item_id])
+                self.api.item.delete(item_id)
                 logger.info(f"成功删除监控项 (ID: {item_id})")
                 return True
             except ZabbixAPIException as e:
@@ -841,7 +841,7 @@ class ZabbixClient:
         """
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                self.api.httptest.delete([scenario_id])
+                self.api.httptest.delete(scenario_id)
                 logger.info(f"成功删除 web 场景 (ID: {scenario_id})")
                 return True
             except ZabbixAPIException as e:
@@ -1061,9 +1061,9 @@ class ConfigLoader:
                             if row['delta']:
                                 item_config['delta'] = row['delta']
                             if row['history']:
-                                item_config['history'] = row['history']
+                                item_config['history'] = f"{row['history']}d"
                             if row['trends']:
-                                item_config['trends'] = row['trends']
+                                item_config['trends'] = f"{row['trends']}d"
                             if row['status']:
                                 item_config['status'] = row['status']
                             
@@ -1157,7 +1157,7 @@ class ConfigLoader:
                             if isinstance(row['history'], int):
                                 item_config['history'] = f"{row['history']}d"
                             else:
-                                item_config['history'] = str(row['history'])
+                                item_config['history'] = f"{int(row['history'])}d"
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid history value: {row['history']}, using default")
                     if row['trends']:
@@ -1166,7 +1166,7 @@ class ConfigLoader:
                             if isinstance(row['trends'], int):
                                 item_config['trends'] = f"{row['trends']}d"
                             else:
-                                item_config['trends'] = str(row['trends'])
+                                item_config['trends'] = f"{int(row['trends'])}d"
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid trends value: {row['trends']}, using default")
                     if row['status']:
@@ -1332,16 +1332,12 @@ class ConfigLoader:
                                 proto_config['delta'] = proto_row['delta']
                             if proto_row['history']:
                                 try:
-                                    # 将天数转换为秒
-                                    history_days = int(proto_row['history'])
-                                    proto_config['history'] = history_days * 86400
+                                    proto_config['history'] = f"{int(proto_row['history'])}d"
                                 except (ValueError, TypeError):
                                     logger.warning(f"Invalid history value: {proto_row['history']}, using default")
                             if proto_row['trends']:
                                 try:
-                                    # 将天数转换为秒
-                                    trends_days = int(proto_row['trends'])
-                                    proto_config['trends'] = trends_days * 86400
+                                    proto_config['trends'] = f"{int(proto_row['trends'])}d"
                                 except (ValueError, TypeError):
                                     logger.warning(f"Invalid trends value: {proto_row['trends']}, using default")
                             if proto_row['status']:
@@ -2891,7 +2887,7 @@ class SyncEngine:
                         # 删除规则（会级联删除关联的原型）
                         delete_id = rule.get("itemid") or rule.get("ruleid")
                         if delete_id:
-                            self.zabbix_client.api.discoveryrule.delete([delete_id])
+                            self.zabbix_client.api.discoveryrule.delete(delete_id)
                             self.report_generator.log_change("deleted", "discovery_rule", rule["name"])
                     except ZabbixAPIException as e:
                         logger.error(f"删除 LLD 规则失败: {e}")
@@ -3024,7 +3020,9 @@ class SyncEngine:
                     "type": proto_config.get("type", 0),  # 支持不同类型，包括 18（Dependent item）
                     "value_type": proto_config.get("value_type", 0),
                     "delay": delay,
-                    "units": proto_config.get("units", "")
+                    "units": proto_config.get("units", ""),
+                    "history": proto_config.get("history", "7d"),
+                    "trends": proto_config.get("trends", "365d"),
                 }
                 
                 # 添加预处理步骤

@@ -24,7 +24,7 @@
                 <tr>
                     <td>{{ template.id }}</td>
                     <td>{{ template.name }}</td>
-                    <td>{{ template.description }}</td>
+                    <td>{{ template.description or '' }}</td>
                     <td>{{ template.created_at }}</td>
                     <td>
                         <a href="{{ url_for('template_detail', template_id=template.id) }}" class="btn btn-sm btn-info">查看</a>

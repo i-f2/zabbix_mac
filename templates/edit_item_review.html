@@ -31,11 +31,11 @@
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">描述</label>
-            <textarea class="form-control" id="description" name="description" rows="3">{{ item.description }}</textarea>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ item.description or '' }}</textarea>
         </div>
         <div class="mb-3">
             <label for="units" class="form-label">单位</label>
-            <input type="text" class="form-control" id="units" name="units" value="{{ item.units }}">
+            <input type="text" class="form-control" id="units" name="units" value="{{ item.units or '' }}">
         </div>
         <div class="mb-3">
             <label for="multiplier" class="form-label">乘数</label>
@@ -63,19 +63,19 @@
         </div>
         <div class="mb-3">
             <label for="system" class="form-label">系统名称</label>
-            <input type="text" class="form-control" id="system" name="system" value="{{ item.system }}">
+            <input type="text" class="form-control" id="system" name="system" value="{{ item.system or '' }}">
         </div>
         <div class="mb-3">
             <label for="subsystem" class="form-label">模块名称</label>
-            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ item.subsystem }}">
+            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ item.subsystem or '' }}">
         </div>
         <div class="mb-3">
             <label for="master_item" class="form-label">主监控项</label>
-            <input type="text" class="form-control" id="master_item" name="master_item" value="{{ item.master_item }}" placeholder="主监控项的键值">
+            <input type="text" class="form-control" id="master_item" name="master_item" value="{{ item.master_item or '' }}" placeholder="主监控项的键值">
         </div>
         <div class="mb-3">
             <label for="preprocessing" class="form-label">预处理步骤 (JSON格式)</label>
-            <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3">{{ item.preprocessing }}</textarea>
+            <textarea class="form-control" id="preprocessing" name="preprocessing" rows="3">{{ item.preprocessing or '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-primary">保存</button>
         <a href="{{ url_for('items_review') }}" class="btn btn-secondary">取消</a>

@@ -15,7 +15,7 @@
             </div>
             <div class="mb-3">
                 <label for="description" class="form-label">描述</label>
-                <textarea class="form-control" id="description" name="description">{{ host.description }}</textarea>
+                <textarea class="form-control" id="description" name="description">{{ host.description or '' }}</textarea>
             </div>
             <div class="mb-3">
                 <label for="system" class="form-label">系统名称</label>

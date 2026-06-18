@@ -23,7 +23,7 @@
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">描述</label>
-            <textarea class="form-control" id="description" name="description" rows="3">{{ trigger.description }}</textarea>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ trigger.description or '' }}</textarea>
         </div>
         <div class="mb-3">
             <label for="status" class="form-label">状态</label>

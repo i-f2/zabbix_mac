@@ -98,8 +98,8 @@
                     <td>{{ item.value_type }}</td>
                     <td>{{ item.delay }}</td>
                     <td>{{ item.template_name }}</td>
-                    <td>{{ item.system }}</td>
-                    <td>{{ item.subsystem }}</td>
+                    <td>{{ item.system or '' }}</td>
+                    <td>{{ item.subsystem or '' }}</td>
                     <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if item.modified else '未修改' }}</td>
                     <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if item.confirmed else '未确认' }}</td>
                     <td class="col-sticky col-sticky-r2 col-fw-status">

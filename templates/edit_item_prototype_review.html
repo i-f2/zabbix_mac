@@ -27,11 +27,11 @@
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">描述</label>
-            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description }}</textarea>
+            <textarea class="form-control" id="description" name="description" rows="3">{{ prototype.description or '' }}</textarea>
         </div>
         <div class="mb-3">
             <label for="units" class="form-label">单位</label>
-            <input type="text" class="form-control" id="units" name="units" value="{{ prototype.units }}">
+            <input type="text" class="form-control" id="units" name="units" value="{{ prototype.units or '' }}">
         </div>
         <div class="mb-3">
             <label for="multiplier" class="form-label">乘数</label>

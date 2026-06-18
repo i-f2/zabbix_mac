@@ -1268,9 +1268,9 @@ def sync_items_to_zabbix():
                     if row.get('units'):
                         item_data['units'] = row['units']
                     if row.get('history'):
-                        item_data['history'] = str(row['history'])
+                        item_data['history'] = f"{row['history']}d"
                     if row.get('trends'):
-                        item_data['trends'] = str(row['trends'])
+                        item_data['trends'] = f"{row['trends']}d"
                     if row.get('status'):
                         item_data['status'] = row['status']
                     if row.get('master_item'):
@@ -1351,12 +1351,12 @@ def edit_item_review(review_id):
         history = request.form.get('history', 7)
         trends = request.form.get('trends', 365)
         status = request.form.get('status', 0)
-        master_item = request.form.get('master_item')
-        preprocessing = request.form.get('preprocessing')
+        master_item = request.form.get('master_item') or None
+        preprocessing = request.form.get('preprocessing') or None
         template_name = request.form['template_name']
-        system = request.form.get('system')
-        subsystem = request.form.get('subsystem')
-        
+        system = request.form.get('system') or None
+        subsystem = request.form.get('subsystem') or None
+
         # 更新数据
         try:
             with conn.cursor() as cur:
