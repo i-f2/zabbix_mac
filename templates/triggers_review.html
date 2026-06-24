@@ -17,10 +17,13 @@
 
     <!-- 核验按钮组 -->
     <div class="btn-group">
+        <button id="syncTriggersBtn" class="btn btn-outline-primary" onclick="syncAllToZabbix()" title="一键同步所有已确认项到指定环境">
+            <i class="bi bi-cloud-upload"></i> 一键同步
+        </button>
         <button id="verifyTriggersBtn" class="btn btn-outline-info" onclick="verifyTriggersReview()" title="从 Zabbix 拉取实际状态并核验复核表">
             <i class="bi bi-check-circle"></i> 核验
         </button>
-        <select id="verifyEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
+        <select id="syncEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
             <option value="">选择环境</option>
             <option value="深交所证联网">深交所证联网</option>
             <option value="深交所互联网">深交所互联网</option>
@@ -107,9 +110,9 @@
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not trigger.confirmed %}
-                            <a href="{{ url_for('confirm_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-success">确认</a>
+                            <a href="{{ url_for('confirm_trigger_review', review_id=trigger.id, page=page, ip=request.args.get('ip',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-success">确认</a>
                         {% else %}
-                            <a href="{{ url_for('unconfirm_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-warning">取消确认</a>
+                            <a href="{{ url_for('unconfirm_trigger_review', review_id=trigger.id, page=page, ip=request.args.get('ip',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-warning">取消确认</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -264,8 +267,30 @@ async function initTriggersReview() {
     }
 }
 
+async function syncAllToZabbix() {
+    var env = document.getElementById('syncEnvSelect').value;
+    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+    var btn = document.getElementById('syncTriggersBtn');
+    var orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
+    try {
+        var res = await fetch('/review/sync-all', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env })
+        });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+    } catch (e) {
+        showToast('同步请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
 async function verifyTriggersReview() {
-    var env = document.getElementById('verifyEnvSelect').value;
+    var env = document.getElementById('syncEnvSelect').value;
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
 
     var btn = document.getElementById('verifyTriggersBtn');

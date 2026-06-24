@@ -575,12 +575,23 @@ cd database_update/
 
 ### 12.2 容器化部署
 
+**构建镜像**（Apple Silicon Mac 上构建 Linux x86_64 镜像）：
+
 ```bash
-# Intel Mac 上构建
-docker build -t zabbix-mac:latest .
+# 格式: docker build --platform linux/amd64 -t zabbix-mac:<版本号> ./
+# 示例:
+docker build --platform linux/amd64 -t zabbix-mac:20260618v1 ./
+```
+
+- `--platform linux/amd64`：在 ARM Mac 上交叉编译 Intel Linux 镜像，确保与生产服务器兼容
+- 版本号建议格式：`YYYYMMDDvN`（日期 + 递增版本号）
+
+**运行容器**：
+
+```bash
 docker run -d -p 5000:5000 \
   -e DB_HOST=... -e DB_PORT=5432 -e DB_NAME=ops -e DB_USER=postgres \
-  zabbix-mac:latest
+  zabbix-mac:20260618v1
 ```
 
 ### 12.3 环境变量

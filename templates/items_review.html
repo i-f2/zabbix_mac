@@ -12,8 +12,8 @@
 
     <!-- 监控同步按钮组 -->
     <div class="btn-group">
-        <button id="syncItemsBtn" class="btn btn-outline-primary" onclick="syncItemsToZabbix()" title="同步已确认监控项到指定环境">
-            <i class="bi bi-cloud-upload"></i> 监控同步
+        <button id="syncItemsBtn" class="btn btn-outline-primary" onclick="syncAllToZabbix()" title="一键同步所有已确认项(监控项/触发器/原型)到指定环境">
+            <i class="bi bi-cloud-upload"></i> 一键同步
         </button>
         <button id="verifyItemsBtn" class="btn btn-outline-info" onclick="verifyItemsReview()" title="从 Zabbix 拉取实际状态并核验复核表">
             <i class="bi bi-check-circle"></i> 核验
@@ -116,9 +116,9 @@
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_item_review', review_id=item.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not item.confirmed %}
-                            <a href="{{ url_for('confirm_item_review', review_id=item.id) }}" class="btn btn-sm btn-success">确认</a>
+                            <a href="{{ url_for('confirm_item_review', review_id=item.id, page=page, ip=request.args.get('ip',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-success">确认</a>
                         {% else %}
-                            <a href="{{ url_for('unconfirm_item_review', review_id=item.id) }}" class="btn btn-sm btn-warning">取消确认</a>
+                            <a href="{{ url_for('unconfirm_item_review', review_id=item.id, page=page, ip=request.args.get('ip',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-warning">取消确认</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -330,7 +330,7 @@ async function submitAddItem() {
     }
 }
 
-async function syncItemsToZabbix() {
+async function syncAllToZabbix() {
     var env = document.getElementById('syncEnvSelect').value;
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
 
@@ -339,13 +339,16 @@ async function syncItemsToZabbix() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
     try {
-        var res = await fetch('/items-review/sync', {
+        var res = await fetch('/review/sync-all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ environment: env })
         });
         var data = await res.json();
         showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.errors && data.errors.length > 0) {
+            console.log('同步错误:', data.errors);
+        }
     } catch (e) {
         showToast('同步请求失败: ' + e.message, 'danger');
     } finally {

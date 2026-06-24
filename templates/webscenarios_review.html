@@ -124,9 +124,9 @@
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not ws.confirmed %}
-                            <a href="{{ url_for('confirm_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-success">确认</a>
+                            <a href="{{ url_for('confirm_webscenario_review', review_id=ws.id, page=page, host=request.args.get('host',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-success">确认</a>
                         {% else %}
-                            <a href="{{ url_for('unconfirm_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-warning">取消确认</a>
+                            <a href="{{ url_for('unconfirm_webscenario_review', review_id=ws.id, page=page, host=request.args.get('host',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-warning">取消确认</a>
                         {% endif %}
                     </td>
                 </tr>

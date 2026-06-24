@@ -2,7 +2,10 @@
 # Zabbix Monitor as Code (MaC) - 生产环境 Dockerfile
 # =============================================================================
 # 目标平台: Intel Linux (linux/amd64)
-# 在 Intel Mac 上构建: docker build -t zabbix-mac:latest .
+# 在 Apple Silicon Mac 上构建 Intel Linux 镜像:
+#   docker build --platform linux/amd64 -t zabbix-mac:YYYYMMDDvN ./
+# 在 Intel Linux 上构建:
+#   docker build -t zabbix-mac:YYYYMMDDvN .
 # =============================================================================
 
 FROM docker.m.daocloud.io/library/python:3.11-slim-bookworm

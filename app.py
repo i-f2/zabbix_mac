@@ -1338,6 +1338,324 @@ def sync_items_to_zabbix():
     return jsonify({'success': True, 'message': msg, 'synced_count': created + updated,
                     'deleted_count': deleted})
 
+
+@app.route('/review/sync-all', methods=['POST'])
+def sync_all_to_zabbix():
+    """一键同步所有已确认的复核表记录至 Zabbix（监控项 + 触发器 + 监控项原型 + 触发器原型）"""
+    data = request.get_json()
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    from zabbix_mac import ZabbixClient, ZabbixAPIException
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+    result = {
+        'environment': environment,
+        'items': {'created': 0, 'updated': 0, 'deleted': 0},
+        'triggers': {'created': 0, 'updated': 0, 'deleted': 0},
+        'item_prototypes': {'created': 0, 'updated': 0, 'deleted': 0},
+        'trigger_prototypes': {'created': 0, 'updated': 0, 'deleted': 0},
+        'errors': []
+    }
+
+    # ==================== 1. 同步监控项 ====================
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM items_review WHERE confirmed = TRUE ORDER BY host_ip, item_key")
+            confirmed_items = cur.fetchall()
+    finally:
+        conn.close()
+
+    if confirmed_items:
+        hosts = {}
+        for row in confirmed_items:
+            hosts.setdefault(row['host_ip'], []).append(row)
+
+        for host_ip, rows in hosts.items():
+            try:
+                host_id = client.get_host_id(host_ip)
+                if not host_id:
+                    result['errors'].append(f'[监控项] 主机 {host_ip} 不存在')
+                    continue
+                interface_id = client.get_host_interface_id(host_id)
+                if not interface_id:
+                    result['errors'].append(f'[监控项] 主机 {host_ip} 无可用接口')
+                    continue
+
+                existing_items = client.get_managed_items(host_id)
+                current_map = {it['key_']: it for it in existing_items}
+                target_keys = set()
+
+                for row in rows:
+                    try:
+                        item_data = {
+                            'hostid': host_id, 'key_': row['item_key'], 'name': row['name'],
+                            'type': row['type'], 'value_type': row['value_type'],
+                            'delay': row['delay'], 'interfaceid': interface_id,
+                        }
+                        if row.get('description'): item_data['description'] = row['description']
+                        if row.get('units'): item_data['units'] = row['units']
+                        if row.get('history'): item_data['history'] = f"{row['history']}d"
+                        if row.get('trends'): item_data['trends'] = f"{row['trends']}d"
+                        if row.get('status'): item_data['status'] = row['status']
+                        if row.get('master_item'): item_data['master_item'] = row['master_item']
+                        if row.get('preprocessing'): item_data['preprocessing'] = row['preprocessing']
+
+                        target_keys.add(row['item_key'])
+                        if row['item_key'] in current_map:
+                            if client.calculate_fingerprint(item_data) != client.calculate_fingerprint(current_map[row['item_key']]):
+                                client.update_item(current_map[row['item_key']]['itemid'], item_data)
+                                result['items']['updated'] += 1
+                        else:
+                            client.create_item(item_data)
+                            result['items']['created'] += 1
+                    except ZabbixAPIException as e:
+                        result['errors'].append(f'[监控项] {host_ip}/{row["item_key"]}: {e}')
+                    except Exception as e:
+                        result['errors'].append(f'[监控项] {host_ip}/{row["item_key"]}: {e}')
+
+                for key, it in current_map.items():
+                    if key not in target_keys:
+                        try:
+                            client.delete_item(it['itemid'])
+                            result['items']['deleted'] += 1
+                        except ZabbixAPIException as e:
+                            result['errors'].append(f'[监控项] 删除 {host_ip}/{key}: {e}')
+            except ZabbixAPIException as e:
+                result['errors'].append(f'[监控项] 主机 {host_ip}: {e}')
+
+    # ==================== 2. 同步触发器 ====================
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM triggers_review WHERE confirmed = TRUE ORDER BY host_ip, name")
+            confirmed_triggers = cur.fetchall()
+    finally:
+        conn.close()
+
+    if confirmed_triggers:
+        hosts = {}
+        for row in confirmed_triggers:
+            hosts.setdefault(row['host_ip'], []).append(row)
+
+        for host_ip, rows in hosts.items():
+            try:
+                host_id = client.get_host_id(host_ip)
+                if not host_id:
+                    result['errors'].append(f'[触发器] 主机 {host_ip} 不存在')
+                    continue
+
+                existing = client.get_managed_triggers(host_id)
+                current_map = {}
+                for t in existing:
+                    key = t.get('description', '') or t.get('name', '')
+                    current_map[t['description']] = t
+
+                target_descs = set()
+                for row in rows:
+                    try:
+                        trigger_data = {
+                            'description': row['name'],
+                            'expression': row['expression'],
+                            'priority': int(row['priority']),
+                        }
+                        if row.get('status') is not None:
+                            trigger_data['status'] = int(row['status'])
+
+                        target_descs.add(row['name'])
+                        if row['name'] in current_map:
+                            existing_t = current_map[row['name']]
+                            if client.calculate_fingerprint(trigger_data) != client.calculate_fingerprint(existing_t):
+                                client.update_trigger(existing_t['triggerid'], trigger_data)
+                                result['triggers']['updated'] += 1
+                        else:
+                            client.create_trigger(trigger_data)
+                            result['triggers']['created'] += 1
+                    except ZabbixAPIException as e:
+                        result['errors'].append(f'[触发器] {host_ip}/{row["name"]}: {e}')
+                    except Exception as e:
+                        result['errors'].append(f'[触发器] {host_ip}/{row["name"]}: {e}')
+
+                for desc, t in current_map.items():
+                    if desc not in target_descs:
+                        try:
+                            client.api.trigger.delete([t['triggerid']])
+                            result['triggers']['deleted'] += 1
+                        except ZabbixAPIException as e:
+                            result['errors'].append(f'[触发器] 删除 {host_ip}/{desc}: {e}')
+            except ZabbixAPIException as e:
+                result['errors'].append(f'[触发器] 主机 {host_ip}: {e}')
+
+    # ==================== 3 & 4. 同步监控项原型和触发器原型 ====================
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 加载 discovery_rules 映射
+            cur.execute("SELECT id, name, key FROM discovery_rules")
+            dr_map = {row['id']: row for row in cur.fetchall()}
+
+            cur.execute("""
+                SELECT ipr.*, dr.key as dr_key, dr.name as dr_name
+                FROM item_prototypes_review ipr
+                JOIN discovery_rules dr ON ipr.discovery_rule_id = dr.id
+                WHERE ipr.confirmed = TRUE
+                ORDER BY ipr.host_ip, ipr.key
+            """)
+            confirmed_ip = cur.fetchall()
+
+            cur.execute("""
+                SELECT tpr.*, dr.key as dr_key, dr.name as dr_name
+                FROM trigger_prototypes_review tpr
+                JOIN discovery_rules dr ON tpr.discovery_rule_id = dr.id
+                WHERE tpr.confirmed = TRUE
+                ORDER BY tpr.host_ip, tpr.description
+            """)
+            confirmed_tp = cur.fetchall()
+    finally:
+        conn.close()
+
+    # 按 (host_ip, dr_key) 分组同步
+    if confirmed_ip or confirmed_tp:
+        # 收集所有需要的主机+发现规则组合
+        host_dr_pairs = set()
+        for row in confirmed_ip:
+            host_dr_pairs.add((row['host_ip'], row['dr_key'], row['dr_name']))
+        for row in confirmed_tp:
+            host_dr_pairs.add((row['host_ip'], row['dr_key'], row['dr_name']))
+
+        for host_ip, dr_key, dr_name in host_dr_pairs:
+            try:
+                host_id = client.get_host_id(host_ip)
+                if not host_id:
+                    result['errors'].append(f'[原型] 主机 {host_ip} 不存在')
+                    continue
+                interface_id = client.get_host_interface_id(host_id)
+
+                # 找到 Zabbix 上对应的 LLD 规则
+                try:
+                    dr_list = client.api.discoveryrule.get(hostids=host_id, output='extend')
+                    zabbix_rule = None
+                    for r in dr_list:
+                        if r.get('key_') == dr_key or r.get('name') == dr_name:
+                            zabbix_rule = r
+                            break
+                    if not zabbix_rule:
+                        result['errors'].append(f'[原型] {host_ip}: LLD规则 {dr_key} 在 Zabbix 上不存在，跳过该规则下的原型')
+                        continue
+                    rule_id = zabbix_rule['itemid']
+                except ZabbixAPIException as e:
+                    result['errors'].append(f'[原型] {host_ip}: 查询LLD规则失败 - {e}')
+                    continue
+
+                # 同步监控项原型
+                ip_rows = [r for r in confirmed_ip if r['host_ip'] == host_ip and r['dr_key'] == dr_key]
+                if ip_rows:
+                    existing_protos = client.get_item_prototypes(rule_id)
+                    current_map = {p['key_']: p for p in existing_protos}
+                    target_keys = set()
+                    for row in ip_rows:
+                        try:
+                            proto_data = {
+                                'ruleid': rule_id, 'hostid': host_id,
+                                'name': row['name'], 'key_': row['key'],
+                                'type': row.get('type', 0), 'value_type': row['value_type'],
+                                'delay': row['delay'], 'units': row.get('units', ''),
+                                'history': f"{row['history']}d" if row.get('history') else '7d',
+                                'trends': f"{row['trends']}d" if row.get('trends') else '365d',
+                            }
+                            if interface_id:
+                                proto_data['interfaceid'] = interface_id
+                            if row.get('description'):
+                                proto_data['description'] = row['description']
+                            if row.get('status'):
+                                proto_data['status'] = row['status']
+
+                            target_keys.add(row['key'])
+                            if row['key'] in current_map:
+                                if client.calculate_fingerprint(proto_data) != client.calculate_fingerprint(current_map[row['key']]):
+                                    client.api.itemprototype.update({'itemid': current_map[row['key']]['itemid'], **proto_data})
+                                    result['item_prototypes']['updated'] += 1
+                            else:
+                                client.create_item_prototype(proto_data)
+                                result['item_prototypes']['created'] += 1
+                        except ZabbixAPIException as e:
+                            result['errors'].append(f'[监控项原型] {host_ip}/{row["key"]}: {e}')
+
+                    for key, p in current_map.items():
+                        if key not in target_keys:
+                            try:
+                                client.api.itemprototype.delete([p['itemid']])
+                                result['item_prototypes']['deleted'] += 1
+                            except ZabbixAPIException as e:
+                                result['errors'].append(f'[监控项原型] 删除 {host_ip}/{key}: {e}')
+
+                # 同步触发器原型
+                tp_rows = [r for r in confirmed_tp if r['host_ip'] == host_ip and r['dr_key'] == dr_key]
+                if tp_rows:
+                    existing_tprotos = client.get_trigger_prototypes(rule_id)
+                    current_map = {t['description']: t for t in existing_tprotos}
+                    target_descs = set()
+                    for row in tp_rows:
+                        try:
+                            tp_data = {
+                                'description': row['description'],
+                                'expression': row['expression'],
+                                'priority': int(row['priority']),
+                            }
+                            if row.get('status') is not None:
+                                tp_data['status'] = int(row['status'])
+
+                            target_descs.add(row['description'])
+                            if row['description'] in current_map:
+                                if client.calculate_fingerprint(tp_data) != client.calculate_fingerprint(current_map[row['description']]):
+                                    tp_data['triggerid'] = current_map[row['description']]['triggerid']
+                                    client.api.triggerprototype.update(tp_data)
+                                    result['trigger_prototypes']['updated'] += 1
+                            else:
+                                tp_data['discoveryruleid'] = rule_id
+                                client.create_trigger_prototype(tp_data)
+                                result['trigger_prototypes']['created'] += 1
+                        except ZabbixAPIException as e:
+                            result['errors'].append(f'[触发器原型] {host_ip}/{row["description"]}: {e}')
+
+                    for desc, t in current_map.items():
+                        if desc not in target_descs:
+                            try:
+                                client.api.triggerprototype.delete([t['triggerid']])
+                                result['trigger_prototypes']['deleted'] += 1
+                            except ZabbixAPIException as e:
+                                result['errors'].append(f'[触发器原型] 删除 {host_ip}/{desc}: {e}')
+
+            except ZabbixAPIException as e:
+                result['errors'].append(f'[原型] {host_ip}/{dr_key}: {e}')
+
+    # 构建汇总消息
+    parts = []
+    for label, key in [('监控项', 'items'), ('触发器', 'triggers'),
+                        ('监控项原型', 'item_prototypes'), ('触发器原型', 'trigger_prototypes')]:
+        stats = result[key]
+        total = stats['created'] + stats['updated'] + stats['deleted']
+        if total > 0:
+            parts.append(f'{label} 新建{stats["created"]} 更新{stats["updated"]} 删除{stats["deleted"]}')
+
+    msg = f'同步至{environment}: ' + ('; '.join(parts) if parts else '无变更')
+    if result['errors']:
+        msg += f'，{len(result["errors"])} 个错误'
+
+    return jsonify({
+        'success': True, 'message': msg,
+        'result': result,
+        'errors': result['errors'][:10] if result['errors'] else []
+    })
+
+
 @app.route('/item-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_item_review(review_id):
     """编辑监控项复核表记录"""
@@ -1421,7 +1739,11 @@ def confirm_item_review(review_id):
         conn.rollback()
         flash(f'确认失败: {e}')
     conn.close()
-    return redirect(url_for('items_review'))
+    page = request.args.get('page', 1, type=int)
+    ip = request.args.get('ip', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('items_review', page=page, ip=ip, system=system, subsystem=subsystem))
 
 @app.route('/item-review/unconfirm/<int:review_id>')
 def unconfirm_item_review(review_id):
@@ -1436,7 +1758,11 @@ def unconfirm_item_review(review_id):
         conn.rollback()
         flash(f'取消确认失败: {e}')
     conn.close()
-    return redirect(url_for('items_review'))
+    page = request.args.get('page', 1, type=int)
+    ip = request.args.get('ip', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('items_review', page=page, ip=ip, system=system, subsystem=subsystem))
 
 
 @app.route('/item-review/add', methods=['POST'])
@@ -1666,7 +1992,11 @@ def confirm_trigger_review(review_id):
         conn.rollback()
         flash(f'确认失败: {e}')
     conn.close()
-    return redirect(url_for('triggers_review'))
+    page = request.args.get('page', 1, type=int)
+    ip = request.args.get('ip', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('triggers_review', page=page, ip=ip, system=system, subsystem=subsystem))
 
 @app.route('/trigger-review/unconfirm/<int:review_id>')
 def unconfirm_trigger_review(review_id):
@@ -1681,7 +2011,11 @@ def unconfirm_trigger_review(review_id):
         conn.rollback()
         flash(f'取消确认失败: {e}')
     conn.close()
-    return redirect(url_for('triggers_review'))
+    page = request.args.get('page', 1, type=int)
+    ip = request.args.get('ip', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('triggers_review', page=page, ip=ip, system=system, subsystem=subsystem))
 
 
 @app.route('/trigger-review/add', methods=['POST'])
@@ -2212,7 +2546,11 @@ def confirm_webscenario_review(review_id):
         flash(f'操作失败: {e}')
     finally:
         conn.close()
-    return redirect(url_for('webscenarios_review'))
+    page = request.args.get('page', 1, type=int)
+    host = request.args.get('host', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('webscenarios_review', page=page, host=host, system=system, subsystem=subsystem))
 
 
 @app.route('/webscenario-review/unconfirm/<int:review_id>')
@@ -2229,7 +2567,11 @@ def unconfirm_webscenario_review(review_id):
         flash(f'操作失败: {e}')
     finally:
         conn.close()
-    return redirect(url_for('webscenarios_review'))
+    page = request.args.get('page', 1, type=int)
+    host = request.args.get('host', '')
+    system = request.args.get('system', '')
+    subsystem = request.args.get('subsystem', '')
+    return redirect(url_for('webscenarios_review', page=page, host=host, system=system, subsystem=subsystem))
 
 
 @app.route('/webscenario-review/add', methods=['POST'])
@@ -2416,7 +2758,8 @@ def confirm_item_prototype_review(review_id):
         conn.rollback()
         flash(f'确认失败: {e}')
     conn.close()
-    return redirect(url_for('item_prototypes_review'))
+    page = request.args.get('page', 1, type=int)
+    return redirect(url_for('item_prototypes_review', page=page))
 
 @app.route('/item-prototype-review/unconfirm/<int:review_id>')
 def unconfirm_item_prototype_review(review_id):
@@ -2431,7 +2774,8 @@ def unconfirm_item_prototype_review(review_id):
         conn.rollback()
         flash(f'取消确认失败: {e}')
     conn.close()
-    return redirect(url_for('item_prototypes_review'))
+    page = request.args.get('page', 1, type=int)
+    return redirect(url_for('item_prototypes_review', page=page))
 
 @app.route('/trigger-prototypes-review')
 def trigger_prototypes_review():
@@ -2509,7 +2853,8 @@ def confirm_trigger_prototype_review(review_id):
         conn.rollback()
         flash(f'确认失败: {e}')
     conn.close()
-    return redirect(url_for('trigger_prototypes_review'))
+    page = request.args.get('page', 1, type=int)
+    return redirect(url_for('trigger_prototypes_review', page=page))
 
 @app.route('/trigger-prototype-review/unconfirm/<int:review_id>')
 def unconfirm_trigger_prototype_review(review_id):
@@ -2524,7 +2869,8 @@ def unconfirm_trigger_prototype_review(review_id):
         conn.rollback()
         flash(f'取消确认失败: {e}')
     conn.close()
-    return redirect(url_for('trigger_prototypes_review'))
+    page = request.args.get('page', 1, type=int)
+    return redirect(url_for('trigger_prototypes_review', page=page))
 
 
 @app.route('/item-prototypes-review/initialize', methods=['POST'])
