@@ -1461,7 +1461,7 @@ class ConfigLoader:
                         'pending'
                     FROM items i
                     CROSS JOIN hosts h
-                    WHERE i.template_name = '21001'
+                    WHERE i.template_name = '21001' AND h.template_name = i.template_name
                 """)
                 logger.info(f"插入了 {cur.rowcount} 条记录到 items_review 表")
             
@@ -1519,7 +1519,7 @@ class ConfigLoader:
                             'pending'
                         FROM triggers tr
                         CROSS JOIN hosts h
-                        WHERE tr.template_name = '21001'
+                        WHERE tr.template_name = '21001' AND h.template_name = tr.template_name
                     """)
                 else:
                     # 或者我们假设触发器主键是其他字段
@@ -1545,7 +1545,7 @@ class ConfigLoader:
                             'pending'
                         FROM triggers tr
                         CROSS JOIN hosts h
-                        WHERE tr.template_name = '21001'
+                        WHERE tr.template_name = '21001' AND h.template_name = tr.template_name
                     """)
                 logger.info(f"插入了 {cur.rowcount} 条记录到 triggers_review 表")
             
@@ -1602,7 +1602,7 @@ class ConfigLoader:
                     FROM item_prototypes ip
                     CROSS JOIN hosts h
                     JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-                    WHERE dr.template_name = '21001'
+                    WHERE dr.template_name = '21001' AND h.template_name = dr.template_name
                 """)
                 logger.info(f"插入了 {cur.rowcount} 条记录到 item_prototypes_review 表")
             
@@ -1651,7 +1651,7 @@ class ConfigLoader:
                     FROM trigger_prototypes tp
                     CROSS JOIN hosts h
                     JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-                    WHERE dr.template_name = '21001'
+                    WHERE dr.template_name = '21001' AND h.template_name = dr.template_name
                 """)
                 logger.info(f"插入了 {cur.rowcount} 条记录到 trigger_prototypes_review 表")
             

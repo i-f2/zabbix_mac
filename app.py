@@ -104,6 +104,24 @@ def get_db_connection():
     return conn
 
 
+import threading
+from functools import wraps
+
+_sync_lock = threading.Lock()
+
+
+def _with_sync_lock(f):
+    """装饰器：防止并发同步/初始化操作"""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not _sync_lock.acquire(blocking=False):
+            return jsonify({'success': False, 'message': '另一个同步/初始化操作正在进行，请稍后再试'}), 409
+        try:
+            return f(*args, **kwargs)
+        finally:
+            _sync_lock.release()
+    return wrapper
+
 def _safe_pagination(page, per_page):
     """安全分页参数：page>=1, per_page 在 1-200 之间"""
     page = max(1, page)
@@ -1234,6 +1252,7 @@ def items_review():
 
 
 @app.route('/items-review/initialize', methods=['POST'])
+@_with_sync_lock
 def initialize_items_review():
     """初始化 items_review 表：清空并重新从 items × hosts 填充"""
     conn = get_db_connection()
@@ -1274,7 +1293,7 @@ def initialize_items_review():
                     'pending'
                 FROM items i
                 CROSS JOIN hosts h
-                WHERE i.template_name = %s
+                WHERE i.template_name = %s AND h.template_name = i.template_name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
@@ -1290,6 +1309,7 @@ def initialize_items_review():
 
 
 @app.route('/items-review/sync', methods=['POST'])
+@_with_sync_lock
 def sync_items_to_zabbix():
     """将已确认的监控项同步至指定环境机房的 Zabbix Server（含孤儿清理）"""
     data = request.get_json()
@@ -1419,6 +1439,7 @@ def sync_items_to_zabbix():
 
 
 @app.route('/review/sync-all', methods=['POST'])
+@_with_sync_lock
 def sync_all_to_zabbix():
     """一键同步所有已确认的复核表记录至 Zabbix（监控项 + 触发器 + 监控项原型 + 触发器原型）"""
     data = request.get_json()
@@ -1970,6 +1991,7 @@ def triggers_review():
 
 
 @app.route('/triggers-review/initialize', methods=['POST'])
+@_with_sync_lock
 def initialize_triggers_review():
     """初始化 triggers_review 表：清空并重新从 triggers × hosts 填充"""
     conn = get_db_connection()
@@ -2000,7 +2022,7 @@ def initialize_triggers_review():
                     'pending'
                 FROM triggers tr
                 CROSS JOIN hosts h
-                WHERE tr.template_name = %s
+                WHERE tr.template_name = %s AND h.template_name = tr.template_name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
@@ -2367,6 +2389,7 @@ def webscenarios_review():
 
 
 @app.route('/webscenarios-review/initialize', methods=['POST'])
+@_with_sync_lock
 def initialize_webscenarios_review():
     """初始化 webscenario_items_review 表：清空并重新从 webscenario_items 填充"""
     conn = get_db_connection()
@@ -2431,6 +2454,7 @@ def initialize_webscenarios_review():
 
 
 @app.route('/webscenarios-review/sync', methods=['POST'])
+@_with_sync_lock
 def sync_webscenarios_to_zabbix():
     """同步已确认Web场景到指定 Zabbix 环境（含孤儿清理）"""
     data = request.get_json()
@@ -2554,6 +2578,7 @@ def sync_webscenarios_to_zabbix():
 
 
 @app.route('/webscenarios-review/sync-triggers', methods=['POST'])
+@_with_sync_lock
 def sync_webscenario_triggers_to_zabbix():
     """同步Web场景触发器到指定 Zabbix 环境"""
     data = request.get_json()
@@ -2961,6 +2986,7 @@ def unconfirm_trigger_prototype_review(review_id):
 
 
 @app.route('/item-prototypes-review/initialize', methods=['POST'])
+@_with_sync_lock
 def initialize_item_prototypes_review():
     """初始化 item_prototypes_review 表：清空并重新从 item_prototypes × discovery_rules × hosts 填充"""
     conn = get_db_connection()
@@ -2998,7 +3024,7 @@ def initialize_item_prototypes_review():
                 FROM item_prototypes ip
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s
+                WHERE dr.template_name = %s AND h.template_name = dr.template_name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
@@ -3092,6 +3118,7 @@ def import_item_prototypes_review():
 
 
 @app.route('/trigger-prototypes-review/initialize', methods=['POST'])
+@_with_sync_lock
 def initialize_trigger_prototypes_review():
     """初始化 trigger_prototypes_review 表：清空并重新从 trigger_prototypes × discovery_rules × hosts 填充"""
     conn = get_db_connection()
@@ -3121,7 +3148,7 @@ def initialize_trigger_prototypes_review():
                 FROM trigger_prototypes tp
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s
+                WHERE dr.template_name = %s AND h.template_name = dr.template_name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             inserted = cur.rowcount
         conn.commit()
