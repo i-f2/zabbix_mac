@@ -1455,8 +1455,9 @@ def sync_all_to_zabbix():
                 existing = client.get_managed_triggers(host_id)
                 current_map = {}
                 for t in existing:
-                    key = t.get('description', '') or t.get('name', '')
-                    current_map[t['description']] = t
+                    desc = t.get('description', '') or t.get('name', '')
+                    if desc:
+                        current_map[desc] = t
 
                 target_descs = set()
                 for row in rows:
@@ -1486,7 +1487,7 @@ def sync_all_to_zabbix():
                 for desc, t in current_map.items():
                     if desc not in target_descs:
                         try:
-                            client.api.trigger.delete([t['triggerid']])
+                            client.api.trigger.delete(t['triggerid'])
                             result['triggers']['deleted'] += 1
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[触发器] 删除 {host_ip}/{desc}: {e}')
@@ -1537,6 +1538,9 @@ def sync_all_to_zabbix():
                     result['errors'].append(f'[原型] 主机 {host_ip} 不存在')
                     continue
                 interface_id = client.get_host_interface_id(host_id)
+                if not interface_id:
+                    result['errors'].append(f'[原型] 主机 {host_ip} 无可用接口')
+                    continue
 
                 # 找到 Zabbix 上对应的 LLD 规则
                 try:
@@ -1566,7 +1570,7 @@ def sync_all_to_zabbix():
                                 'ruleid': rule_id, 'hostid': host_id,
                                 'name': row['name'], 'key_': row['key'],
                                 'type': row.get('type', 0), 'value_type': row['value_type'],
-                                'delay': row['delay'], 'units': row.get('units', ''),
+                                'delay': row.get('delay') or '30s', 'units': row.get('units', ''),
                                 'history': f"{row['history']}d" if row.get('history') else '7d',
                                 'trends': f"{row['trends']}d" if row.get('trends') else '365d',
                             }
@@ -1591,7 +1595,7 @@ def sync_all_to_zabbix():
                     for key, p in current_map.items():
                         if key not in target_keys:
                             try:
-                                client.api.itemprototype.delete([p['itemid']])
+                                client.api.itemprototype.delete(p['itemid'])
                                 result['item_prototypes']['deleted'] += 1
                             except ZabbixAPIException as e:
                                 result['errors'].append(f'[监控项原型] 删除 {host_ip}/{key}: {e}')
@@ -1628,7 +1632,7 @@ def sync_all_to_zabbix():
                     for desc, t in current_map.items():
                         if desc not in target_descs:
                             try:
-                                client.api.triggerprototype.delete([t['triggerid']])
+                                client.api.triggerprototype.delete(t['triggerid'])
                                 result['trigger_prototypes']['deleted'] += 1
                             except ZabbixAPIException as e:
                                 result['errors'].append(f'[触发器原型] 删除 {host_ip}/{desc}: {e}')
