@@ -7,6 +7,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 """
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+import logging
 import os
 import ast
 import io
@@ -21,9 +22,30 @@ from config_loader import load_config, get_db_config, get_zabbix_environments
 
 app = Flask(__name__)
 
+# 请求结束时自动关闭数据库连接（防止连接泄漏）
+@app.teardown_appcontext
+def _close_db_connection(exception=None):
+    from flask import g
+    conn = g.pop('_db_conn', None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+# 配置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+app.logger.setLevel(logging.INFO)
+
 # 加载外部配置（环境变量 > config.yaml > 内置默认值）
 _config = load_config()
 app.secret_key = _config['app']['secret_key']
+
+# 安全检查：拒绝默认密钥
+if app.secret_key == 'dev-secret-key-change-me':
+    app.logger.critical("SECURITY: 使用默认 secret_key，请设置 APP_SECRET_KEY 环境变量!")
+    raise RuntimeError("默认 secret_key 不允许用于生产环境，请设置 APP_SECRET_KEY 环境变量")
+
 app.config['DEFAULT_TEMPLATE_NAME'] = _config['app'].get('default_template_name', '21001')
 
 # 数据库连接配置
@@ -32,11 +54,62 @@ DB_CONFIG = get_db_config(_config)
 # Zabbix 环境机房配置
 ZABBIX_ENVIRONMENTS = get_zabbix_environments(_config)
 
+# ---- Excel 导入安全工具 ----
+# 每个表允许的列名白名单
+_ALLOWED_IMPORT_COLUMNS = {
+    'items': {'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
+              'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
+              'master_item', 'preprocessing'},
+    'triggers': {'name', 'expression', 'priority', 'description', 'status', 'template_name'},
+    'item_prototypes': {'name', 'key', 'value_type', 'delay', 'description', 'units',
+                        'multiplier', 'delta', 'history', 'trends', 'status',
+                        'discovery_rule_id'},
+    'trigger_prototypes': {'description', 'expression', 'priority', 'status', 'discovery_rule_id'},
+    'discovery_rules': {'name', 'key', 'delay', 'type', 'status', 'template_name'},
+    'filter_conditions': {'macro', 'value', 'operator', 'discovery_rule_id'},
+    'items_review': {'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
+                     'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
+                     'host_ip', 'master_item', 'preprocessing', 'system', 'subsystem',
+                     'confirmed', 'modified', 'status_verification'},
+    'triggers_review': {'name', 'expression', 'priority', 'description', 'status',
+                        'template_name', 'host_ip', 'system', 'subsystem',
+                        'confirmed', 'modified', 'status_verification'},
+    'item_prototypes_review': {'name', 'key', 'value_type', 'delay', 'description', 'units',
+                               'multiplier', 'delta', 'history', 'trends', 'status',
+                               'host_ip', 'discovery_rule_id', 'system', 'subsystem',
+                               'confirmed', 'modified', 'status_verification'},
+    'trigger_prototypes_review': {'description', 'expression', 'priority', 'status',
+                                  'host_ip', 'discovery_rule_id', 'system', 'subsystem',
+                                  'confirmed', 'modified', 'status_verification'},
+    'webscenario_items_review': {'name', 'host', 'url', 'status_code', 'system', 'subsystem',
+                                  'confirmed', 'modified', 'status_verification'},
+}
+
+def _sanitize_import_columns(table_name, columns):
+    """防止 SQL 注入：仅允许白名单内的列名"""
+    allowed = _ALLOWED_IMPORT_COLUMNS.get(table_name, set())
+    invalid = [c for c in columns if c not in allowed]
+    if invalid:
+        raise ValueError(f"非法列名: {', '.join(invalid)}")
+    return columns
+
 def get_db_connection():
-    """获取数据库连接"""
-    conn = psycopg2.connect(**DB_CONFIG)
-    conn.set_client_encoding('utf8')
+    """获取数据库连接（请求结束时自动关闭，防止泄漏）"""
+    from flask import g
+    conn = g.get('_db_conn')
+    if conn is None or conn.closed:
+        conn = psycopg2.connect(**DB_CONFIG)
+        conn.set_client_encoding('utf8')
+        g._db_conn = conn
     return conn
+
+
+def _safe_pagination(page, per_page):
+    """安全分页参数：page>=1, per_page 在 1-200 之间"""
+    page = max(1, page)
+    per_page = max(1, min(200, per_page))
+    return page, per_page
+
 
 @app.context_processor
 def inject_active_menu():
@@ -171,6 +244,7 @@ def item_prototypes():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -237,7 +311,7 @@ def import_item_prototypes():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM item_prototypes")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('item_prototypes', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -272,6 +346,7 @@ def trigger_prototypes():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -338,7 +413,7 @@ def import_trigger_prototypes():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM trigger_prototypes")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('trigger_prototypes', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -542,6 +617,7 @@ def items():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -599,7 +675,7 @@ def import_items():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM items")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('items', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -771,6 +847,7 @@ def triggers():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -828,7 +905,7 @@ def import_triggers():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM triggers")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('triggers', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -954,6 +1031,7 @@ def hosts():
     """主机管理"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -1113,6 +1191,7 @@ def items_review():
     subsystem = request.args.get('subsystem', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -1848,6 +1927,7 @@ def triggers_review():
     subsystem = request.args.get('subsystem', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -2122,7 +2202,7 @@ def import_items_review():
             cur.execute("DELETE FROM items_review")
             deleted = cur.rowcount
 
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('items_review', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -2200,7 +2280,7 @@ def import_triggers_review():
             cur.execute("DELETE FROM triggers_review")
             deleted = cur.rowcount
 
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('triggers_review', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -2247,6 +2327,7 @@ def webscenarios_review():
     subsystem = request.args.get('subsystem', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -2646,7 +2727,7 @@ def import_webscenarios_review():
             cur.execute("DELETE FROM webscenario_items_review")
             deleted = cur.rowcount
 
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('webscenario_items_review', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -2681,6 +2762,7 @@ def item_prototypes_review():
     """监控项原型复核表管理"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -2786,6 +2868,7 @@ def trigger_prototypes_review():
     """触发器原型复核表管理"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -2973,7 +3056,7 @@ def import_item_prototypes_review():
             cur.execute("DELETE FROM item_prototypes_review")
             deleted = cur.rowcount
 
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('item_prototypes_review', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -3096,7 +3179,7 @@ def import_trigger_prototypes_review():
             cur.execute("DELETE FROM trigger_prototypes_review")
             deleted = cur.rowcount
 
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('trigger_prototypes_review', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -3361,6 +3444,7 @@ def discovery_rules():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -3427,7 +3511,7 @@ def import_discovery_rules():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM discovery_rules")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('discovery_rules', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []
@@ -3505,6 +3589,7 @@ def filter_conditions():
     template = request.args.get('template', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
     offset = (page - 1) * per_page
 
     conn = get_db_connection()
@@ -3571,7 +3656,7 @@ def import_filter_conditions():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM filter_conditions")
             deleted = cur.rowcount
-            columns = list(df.columns)
+            columns = _sanitize_import_columns('filter_conditions', list(df.columns))
             placeholders = ', '.join(['%s'] * len(columns))
             column_names = ', '.join(columns)
             all_values = []

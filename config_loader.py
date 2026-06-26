@@ -17,7 +17,7 @@ def _defaults() -> Dict[str, Any]:
     return {
         'app': {
             'secret_key': 'dev-secret-key-change-me',
-            'host': '0.0.0.0',
+            'host': '127.0.0.1',
             'port': 5000,
             'debug': False,
             'default_template_name': '21001',

@@ -219,7 +219,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取监控项失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取监控项时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -227,7 +227,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取监控项失败")
-                    return []
+                    raise
     
     def create_item(self, item_data: Dict[str, Any]) -> Optional[str]:
         """创建监控项
@@ -377,7 +377,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取触发器失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取触发器时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -385,7 +385,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取触发器失败")
-                    return []
+                    raise
     
     def create_trigger(self, trigger_data: Dict[str, Any]) -> Optional[str]:
         """创建触发器
@@ -491,7 +491,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取自动发现规则失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取自动发现规则时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -499,7 +499,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取自动发现规则失败")
-                    return []
+                    raise
     
     def create_discovery_rule(self, rule_data: Dict[str, Any]) -> Optional[str]:
         """创建自动发现规则
@@ -616,7 +616,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取监控项原型失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取监控项原型时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -624,7 +624,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取监控项原型失败")
-                    return []
+                    raise
     
     def create_item_prototype(self, prototype_data: Dict[str, Any]) -> Optional[str]:
         """创建监控项原型
@@ -687,7 +687,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取触发器原型失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取触发器原型时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -695,7 +695,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取触发器原型失败")
-                    return []
+                    raise
     
     def get_managed_web_scenarios(self, host_id: str) -> List[Dict[str, Any]]:
         """获取主机的所有受管理 web 场景
@@ -736,7 +736,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取 web 场景失败")
-                    return []
+                    raise
             except Exception as e:
                 logger.error(f"获取 web 场景时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -744,7 +744,7 @@ class ZabbixClient:
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error("达到最大重试次数，获取 web 场景失败")
-                    return []
+                    raise
     
     def create_web_scenario(self, scenario_data: Dict[str, Any]) -> Optional[str]:
         """创建 web 场景
@@ -938,8 +938,6 @@ class ConfigLoader:
                 
                 logger.debug(f"尝试连接数据库 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {conn_params['host']}:{conn_params['port']}/{conn_params['database']}")
                 self.connection = psycopg2.connect(**conn_params)
-                # 设置连接参数
-                self.connection.autocommit = True
                 # 设置客户端编码为 UTF-8，以正确处理中文字符
                 self.connection.set_client_encoding('UTF8')
                 logger.info("成功连接到 PostgreSQL 数据库")
@@ -1114,7 +1112,6 @@ class ConfigLoader:
                            ir.multiplier, ir.delta, ir.history, ir.trends, ir.status, ir.master_item, ir.preprocessing
                     FROM items_review ir
                     WHERE ir.template_name = %s AND ir.confirmed = true
-                    LIMIT 100
                 """, (template_name,))
                 
                 items_rows = cur.fetchall()
@@ -1129,8 +1126,7 @@ class ConfigLoader:
                                    multiplier, delta, history, trends, status, master_item, preprocessing
                             FROM items
                             WHERE template_name = %s
-                            LIMIT 100
-                        """, (template_name,))
+                                """, (template_name,))
                         
                         items_rows = cur2.fetchall()
                         logger.info(f"从原始表获取到 {len(items_rows)} 个监控项")
@@ -1185,7 +1181,6 @@ class ConfigLoader:
                     SELECT tr.name, tr.expression, tr.priority, tr.description, tr.status
                     FROM triggers_review tr
                     WHERE tr.template_name = %s AND tr.confirmed = true
-                    LIMIT 100
                 """, (template_name,))
                 
                 triggers_rows = cur.fetchall()
@@ -1199,8 +1194,7 @@ class ConfigLoader:
                             SELECT name, expression, priority, description, status
                             FROM triggers
                             WHERE template_name = %s
-                            LIMIT 100
-                        """, (template_name,))
+                                """, (template_name,))
                         
                         triggers_rows = cur2.fetchall()
                         logger.info(f"从原始表获取到 {len(triggers_rows)} 个触发器")
@@ -1296,8 +1290,7 @@ class ConfigLoader:
                                    ipr.multiplier, ipr.delta, ipr.history, ipr.trends, ipr.status
                             FROM item_prototypes_review ipr
                             WHERE ipr.discovery_rule_id = %s AND ipr.confirmed = true
-                            LIMIT 100
-                        """, (rule_id,))
+                                """, (rule_id,))
                         
                         proto_rows = cur2.fetchall()
                         logger.info(f"从复核表获取到规则 {row['name']} 的 {len(proto_rows)} 个监控项原型")
@@ -1351,8 +1344,7 @@ class ConfigLoader:
                             SELECT tpr.description, tpr.expression, tpr.priority, tpr.status
                             FROM trigger_prototypes_review tpr
                             WHERE tpr.discovery_rule_id = %s AND tpr.confirmed = true
-                            LIMIT 100
-                        """, (rule_id,))
+                                """, (rule_id,))
                         
                         proto_rows = cur2.fetchall()
                         logger.info(f"从复核表获取到规则 {row['name']} 的 {len(proto_rows)} 个触发器原型")
@@ -1814,14 +1806,20 @@ class ConfigLoader:
                 inserted = 0
                 for _, row in df.iterrows():
                     try:
-                        # 构建插入语句
-                        columns = list(df.columns)
+                        # 构建插入语句（列名白名单验证）
+                        _ALLOWED = {'item_key', 'name', 'type', 'value_type', 'delay', 'description',
+                                     'units', 'multiplier', 'delta', 'history', 'trends', 'status',
+                                     'template_name', 'host_ip', 'master_item', 'preprocessing',
+                                     'system', 'subsystem', 'confirmed', 'modified', 'status_verification'}
+                        columns = [c for c in df.columns if c in _ALLOWED]
+                        if not columns:
+                            raise ValueError("Excel 列名无效")
                         placeholders = ', '.join(['%s'] * len(columns))
                         column_names = ', '.join(columns)
-                        
+
                         # 准备数据
                         values = [row[col] if pd.notna(row[col]) else None for col in columns]
-                        
+
                         # 执行插入
                         cur.execute(
                             f"INSERT INTO items_review ({column_names}) VALUES ({placeholders})",
@@ -1870,14 +1868,19 @@ class ConfigLoader:
                 inserted = 0
                 for _, row in df.iterrows():
                     try:
-                        # 构建插入语句
-                        columns = list(df.columns)
+                        # 构建插入语句（列名白名单验证）
+                        _ALLOWED = {'name', 'expression', 'priority', 'description', 'status',
+                                     'template_name', 'host_ip', 'system', 'subsystem',
+                                     'confirmed', 'modified', 'status_verification'}
+                        columns = [c for c in df.columns if c in _ALLOWED]
+                        if not columns:
+                            raise ValueError("Excel 列名无效")
                         placeholders = ', '.join(['%s'] * len(columns))
                         column_names = ', '.join(columns)
-                        
+
                         # 准备数据
                         values = [row[col] if pd.notna(row[col]) else None for col in columns]
-                        
+
                         # 执行插入
                         cur.execute(
                             f"INSERT INTO triggers_review ({column_names}) VALUES ({placeholders})",
