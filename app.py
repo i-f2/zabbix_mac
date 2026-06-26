@@ -6,9 +6,10 @@ Zabbix Monitor as Code (MaC) 管理界面
 基于 Flask 的 Web 应用，用于管理 PostgreSQL 中的监控配置数据
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 import logging
 import os
+import secrets
 import ast
 import io
 import tempfile
@@ -47,6 +48,26 @@ if app.secret_key == 'dev-secret-key-change-me':
     raise RuntimeError("默认 secret_key 不允许用于生产环境，请设置 APP_SECRET_KEY 环境变量")
 
 app.config['DEFAULT_TEMPLATE_NAME'] = _config['app'].get('default_template_name', '21001')
+
+# ---- CSRF 保护 ----
+def _generate_csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(32)
+    return session['_csrf_token']
+
+@app.before_request
+def _validate_csrf():
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+        token = session.get('_csrf_token')
+        if not token:
+            _generate_csrf_token()
+            token = session['_csrf_token']
+        req_token = request.form.get('_csrf_token') or request.headers.get('X-CSRF-Token')
+        if not req_token or not secrets.compare_digest(token, req_token):
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': 'CSRF 验证失败，请刷新页面重试'}), 403
+            flash('CSRF 验证失败，请刷新页面重试')
+            return redirect(request.referrer or url_for('index'))
 
 # 数据库连接配置
 DB_CONFIG = get_db_config(_config)
@@ -127,6 +148,12 @@ def _safe_pagination(page, per_page):
     page = max(1, page)
     per_page = max(1, min(200, per_page))
     return page, per_page
+
+
+@app.context_processor
+def inject_globals():
+    """为所有模板注入全局变量"""
+    return {'csrf_token': _generate_csrf_token}
 
 
 @app.context_processor
@@ -1442,6 +1469,10 @@ def sync_items_to_zabbix():
 @_with_sync_lock
 def sync_all_to_zabbix():
     """一键同步所有已确认的复核表记录至 Zabbix（监控项 + 触发器 + 监控项原型 + 触发器原型）
+
+    设计说明：同步操作是幂等的 — 已创建的实体就是"应该存在"的已确认配置。
+    部分失败不会回滚已成功的操作，而是报告错误让用户修复后重新同步。
+    get_managed_* 方法失败时会 raise（而非返回[]），避免误判"零实体"导致批量重建。
 
     TODO: 重构 - 本函数与 /items-review/sync 和 zabbix_mac.py SyncEngine 存在大量重复逻辑。
     建议将4类实体的同步抽取为 SyncEntity 协议，由统一的同步引擎驱动。

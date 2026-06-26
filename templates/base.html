@@ -9,6 +9,8 @@
     <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
 
     <!-- 防闪烁：页面渲染前恢复侧边栏状态 -->
+    <!-- CSRF Token 全局变量 -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <script>
     (function() {
         if (localStorage.getItem('sidebarCollapsed') === 'true') {
@@ -18,6 +20,31 @@
             document.documentElement.classList.add('sidebar-collapsed');
         }
     })();
+    // 全局：自动为所有 fetch 请求添加 CSRF token
+    var _csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    var _originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        options = options || {};
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].indexOf((options.method || 'GET').toUpperCase()) !== -1) {
+            options.headers = options.headers || {};
+            if (!options.headers['X-CSRF-Token'] && !(options.body instanceof FormData)) {
+                options.headers['X-CSRF-Token'] = _csrfToken;
+            }
+        }
+        return _originalFetch.call(this, url, options);
+    };
+    // 自动为所有 HTML form 注入 hidden CSRF 字段
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(f) {
+            if (!f.querySelector('input[name="_csrf_token"]')) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = '_csrf_token';
+                input.value = _csrfToken;
+                f.appendChild(input);
+            }
+        });
+    });
     </script>
 
     {% block head_extra %}{% endblock %}
