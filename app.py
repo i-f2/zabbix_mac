@@ -1441,7 +1441,11 @@ def sync_items_to_zabbix():
 @app.route('/review/sync-all', methods=['POST'])
 @_with_sync_lock
 def sync_all_to_zabbix():
-    """一键同步所有已确认的复核表记录至 Zabbix（监控项 + 触发器 + 监控项原型 + 触发器原型）"""
+    """一键同步所有已确认的复核表记录至 Zabbix（监控项 + 触发器 + 监控项原型 + 触发器原型）
+
+    TODO: 重构 - 本函数与 /items-review/sync 和 zabbix_mac.py SyncEngine 存在大量重复逻辑。
+    建议将4类实体的同步抽取为 SyncEntity 协议，由统一的同步引擎驱动。
+    """
     data = request.get_json()
     environment = data.get('environment', '').strip() if data else ''
 
