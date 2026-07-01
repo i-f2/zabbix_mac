@@ -124,9 +124,9 @@
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not ws.confirmed %}
-                            <a href="{{ url_for('confirm_webscenario_review', review_id=ws.id, page=page, host=request.args.get('host',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-success">确认</a>
+                            <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ ws.id }}, 'confirm', this)">确认</button>
                         {% else %}
-                            <a href="{{ url_for('unconfirm_webscenario_review', review_id=ws.id, page=page, host=request.args.get('host',''), system=request.args.get('system',''), subsystem=request.args.get('subsystem','')) }}" class="btn btn-sm btn-warning">取消确认</a>
+                            <button class="btn btn-sm btn-warning" onclick="toggleConfirm({{ ws.id }}, 'unconfirm', this)">取消确认</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -322,6 +322,26 @@ async function verifyWebScenariosReview() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = orig;
+    }
+}
+
+async function toggleConfirm(id, action, btn) {
+    btn.disabled = true;
+    try {
+        var url = action === 'confirm'
+            ? '/webscenario-review/confirm/' + id
+            : '/webscenario-review/unconfirm/' + id;
+        var res = await fetch(url, { method: 'POST' });
+        var data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.message || '操作失败', 'danger');
+        }
+    } catch (e) {
+        showToast('请求失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
     }
 }
 </script>

@@ -1,0 +1,24 @@
+# =============================================================================
+# Zabbix MaC - Docker 构建忽略文件
+# =============================================================================
+.git/
+.gitignore
+.claude/
+.pytest_cache/
+__pycache__/
+*.pyc
+tests/
+数据导出/
+database_update/
+*.md
+!config.yaml.example
+requirements-macos-arm.txt
+requirements-test.txt
+Dockerfile
+.dockerignore
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env

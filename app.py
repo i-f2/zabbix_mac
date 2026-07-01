@@ -153,7 +153,7 @@ def _safe_pagination(page, per_page):
 @app.context_processor
 def inject_globals():
     """为所有模板注入全局变量"""
-    return {'csrf_token': _generate_csrf_token}
+    return {'csrf_token': _generate_csrf_token()}
 
 
 @app.context_processor
@@ -1865,7 +1865,7 @@ def edit_item_review(review_id):
     conn.close()
     return render_template('edit_item_review.html', item=item)
 
-@app.route('/item-review/confirm/<int:review_id>')
+@app.route('/item-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_item_review(review_id):
     """确认监控项复核表记录"""
     conn = get_db_connection()
@@ -1873,18 +1873,14 @@ def confirm_item_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE items_review SET confirmed = true WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    ip = request.args.get('ip', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('items_review', page=page, ip=ip, system=system, subsystem=subsystem))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
-@app.route('/item-review/unconfirm/<int:review_id>')
+@app.route('/item-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_item_review(review_id):
     """取消确认监控项复核表记录"""
     conn = get_db_connection()
@@ -1892,16 +1888,12 @@ def unconfirm_item_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE items_review SET confirmed = false WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已取消确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'取消确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    ip = request.args.get('ip', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('items_review', page=page, ip=ip, system=system, subsystem=subsystem))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/item-review/add', methods=['POST'])
@@ -2120,7 +2112,7 @@ def edit_trigger_review(review_id):
     conn.close()
     return render_template('edit_trigger_review.html', trigger=trigger)
 
-@app.route('/trigger-review/confirm/<int:review_id>')
+@app.route('/trigger-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_trigger_review(review_id):
     """确认触发器复核表记录"""
     conn = get_db_connection()
@@ -2128,18 +2120,14 @@ def confirm_trigger_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE triggers_review SET confirmed = true WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    ip = request.args.get('ip', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('triggers_review', page=page, ip=ip, system=system, subsystem=subsystem))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
-@app.route('/trigger-review/unconfirm/<int:review_id>')
+@app.route('/trigger-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_trigger_review(review_id):
     """取消确认触发器复核表记录"""
     conn = get_db_connection()
@@ -2147,16 +2135,12 @@ def unconfirm_trigger_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE triggers_review SET confirmed = false WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已取消确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'取消确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    ip = request.args.get('ip', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('triggers_review', page=page, ip=ip, system=system, subsystem=subsystem))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/trigger-review/add', methods=['POST'])
@@ -2677,7 +2661,7 @@ def edit_webscenario_review(review_id):
     return redirect(url_for('webscenarios_review'))
 
 
-@app.route('/webscenario-review/confirm/<int:review_id>')
+@app.route('/webscenario-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_webscenario_review(review_id):
     """确认 Web 场景复核记录"""
     conn = get_db_connection()
@@ -2685,20 +2669,15 @@ def confirm_webscenario_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE webscenario_items_review SET confirmed = true, updated_at = NOW() WHERE id = %s", (review_id,))
         conn.commit()
-        flash('已确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'操作失败: {e}')
+        return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         conn.close()
-    page = request.args.get('page', 1, type=int)
-    host = request.args.get('host', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('webscenarios_review', page=page, host=host, system=system, subsystem=subsystem))
 
 
-@app.route('/webscenario-review/unconfirm/<int:review_id>')
+@app.route('/webscenario-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_webscenario_review(review_id):
     """取消确认 Web 场景复核记录"""
     conn = get_db_connection()
@@ -2706,17 +2685,12 @@ def unconfirm_webscenario_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE webscenario_items_review SET confirmed = false, updated_at = NOW() WHERE id = %s", (review_id,))
         conn.commit()
-        flash('已取消确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'操作失败: {e}')
+        return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         conn.close()
-    page = request.args.get('page', 1, type=int)
-    host = request.args.get('host', '')
-    system = request.args.get('system', '')
-    subsystem = request.args.get('subsystem', '')
-    return redirect(url_for('webscenarios_review', page=page, host=host, system=system, subsystem=subsystem))
 
 
 @app.route('/webscenario-review/add', methods=['POST'])
@@ -2891,7 +2865,7 @@ def edit_item_prototype_review(review_id):
     conn.close()
     return render_template('edit_item_prototype_review.html', prototype=prototype)
 
-@app.route('/item-prototype-review/confirm/<int:review_id>')
+@app.route('/item-prototype-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_item_prototype_review(review_id):
     """确认监控项原型复核表记录"""
     conn = get_db_connection()
@@ -2899,15 +2873,14 @@ def confirm_item_prototype_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE item_prototypes_review SET confirmed = true WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    return redirect(url_for('item_prototypes_review', page=page))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
-@app.route('/item-prototype-review/unconfirm/<int:review_id>')
+@app.route('/item-prototype-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_item_prototype_review(review_id):
     """取消确认监控项原型复核表记录"""
     conn = get_db_connection()
@@ -2915,13 +2888,12 @@ def unconfirm_item_prototype_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE item_prototypes_review SET confirmed = false WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已取消确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'取消确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    return redirect(url_for('item_prototypes_review', page=page))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/trigger-prototypes-review')
 def trigger_prototypes_review():
@@ -2987,7 +2959,7 @@ def edit_trigger_prototype_review(review_id):
     conn.close()
     return render_template('edit_trigger_prototype_review.html', prototype=prototype)
 
-@app.route('/trigger-prototype-review/confirm/<int:review_id>')
+@app.route('/trigger-prototype-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_trigger_prototype_review(review_id):
     """确认触发器原型复核表记录"""
     conn = get_db_connection()
@@ -2995,15 +2967,14 @@ def confirm_trigger_prototype_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE trigger_prototypes_review SET confirmed = true WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    return redirect(url_for('trigger_prototypes_review', page=page))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
-@app.route('/trigger-prototype-review/unconfirm/<int:review_id>')
+@app.route('/trigger-prototype-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_trigger_prototype_review(review_id):
     """取消确认触发器原型复核表记录"""
     conn = get_db_connection()
@@ -3011,13 +2982,12 @@ def unconfirm_trigger_prototype_review(review_id):
         with conn.cursor() as cur:
             cur.execute("UPDATE trigger_prototypes_review SET confirmed = false WHERE id = %s", (review_id,))
         conn.commit()
-        flash('记录已取消确认')
+        return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        flash(f'取消确认失败: {e}')
-    conn.close()
-    page = request.args.get('page', 1, type=int)
-    return redirect(url_for('trigger_prototypes_review', page=page))
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/item-prototypes-review/initialize', methods=['POST'])
