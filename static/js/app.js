@@ -163,6 +163,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         row.style.cursor = 'pointer';
     });
+
+    // ========================================================
+    // Bootstrap Tooltip Initialization
+    // ========================================================
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
 });
 
 // ========================================================

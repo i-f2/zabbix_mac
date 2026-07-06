@@ -25,6 +25,10 @@
                 <label for="subsystem" class="form-label">模块名称</label>
                 <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ host.subsystem or '' }}">
             </div>
+            <div class="mb-3">
+                <label for="in_room" class="form-label">机房</label>
+                <input type="text" class="form-control" id="in_room" name="in_room" value="{{ host.in_room or '' }}" placeholder="如: 深交所证联网">
+            </div>
             <button type="submit" class="btn btn-primary">更新</button>
             <a href="{{ url_for('hosts') }}" class="btn btn-secondary">取消</a>
         </form>

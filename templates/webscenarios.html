@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% from '_pagination.html' import render as pg %}
+
+{% block page_title %}Web场景管理{% endblock %}
+
+{% block toolbar %}
+<a href="{{ url_for('add_webscenario') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加Web场景</a>
+<button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+<a href="/webscenarios/export" class="btn btn-outline-success" title="导出为 Excel"><i class="bi bi-download"></i> 导出</a>
+<button class="btn btn-outline-info" onclick="document.getElementById('importWebscenariosFile').click()" title="从 Excel 导入"><i class="bi bi-upload"></i> 导入</button>
+<input type="file" id="importWebscenariosFile" accept=".xlsx" style="display:none" onchange="importWebscenarios(this)">
+<!-- 筛选 -->
+<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('webscenarios') }}">
+    <input type="text" name="system" class="form-control form-control-sm" placeholder="系统" style="width: 140px;" value="{{ request.args.get('system', '') }}">
+    <input type="text" name="subsystem" class="form-control form-control-sm" placeholder="子系统" style="width: 140px;" value="{{ request.args.get('subsystem', '') }}">
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    {% if request.args %}
+    <a href="{{ url_for('webscenarios') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>系统</th>
+                    <th>子系统</th>
+                    <th>nginx_clb</th>
+                    <th>nginx</th>
+                    <th>clb</th>
+                    <th>pod</th>
+                    <th>webtest_api</th>
+                    <th>webtest_nginx_api</th>
+                    <th>机房</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ws in webscenarios %}
+                <tr>
+                    <td>{{ ws.id }}</td>
+                    <td>{{ ws.system or '' }}</td>
+                    <td>{{ ws.subsystem or '' }}</td>
+                    <td>{{ ws.nginx_clb or '' }}</td>
+                    <td>{{ ws.nginx or '' }}</td>
+                    <td>{{ ws.clb or '' }}</td>
+                    <td>{{ ws.pod or '' }}</td>
+                    <td>{{ ws.webtest_api or '' }}</td>
+                    <td>{{ ws.webtest_nginx_api or '' }}</td>
+                    <td>{{ ws.in_room or '' }}</td>
+                    <td>
+                        <a href="{{ url_for('edit_webscenario', ws_id=ws.id) }}" class="btn btn-sm btn-info">编辑</a>
+                        <a href="{{ url_for('delete_webscenario', ws_id=ws.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if webscenarios|length == 0 %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+        <div class="empty-title">暂无Web场景数据</div>
+        <div class="empty-desc">当前未查询到符合条件的Web场景，您可以<a href="{{ url_for('add_webscenario') }}">添加第一条Web场景</a>。</div>
+    </div>
+    {% endif %}
+    {{ pg(page, per_page, total, total_pages) }}
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+async function importWebscenarios(input) {
+    if (!input.files.length) return;
+    if (!confirm('将清空 webscenario_items 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
+    var formData = new FormData();
+    formData.append('file', input.files[0]);
+    try {
+        var res = await fetch('/webscenarios/import', { method: 'POST', body: formData });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(function() { location.reload(); }, 1500);
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'danger');
+    }
+    input.value = '';
+}
+</script>
+{% endblock %}

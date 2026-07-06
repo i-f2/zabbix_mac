@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block page_title %}编辑Web触发器复核记录{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <form method="post">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="host" class="form-label">主机</label>
+                <input type="text" class="form-control" id="host" name="host" value="{{ trigger.host }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="web_scenario_name" class="form-label">Web场景名称</label>
+                <input type="text" class="form-control" id="web_scenario_name" name="web_scenario_name" value="{{ trigger.web_scenario_name }}" required>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="trigger_name" class="form-label">触发器名称</label>
+                <input type="text" class="form-control" id="trigger_name" name="trigger_name" value="{{ trigger.trigger_name }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="expression" class="form-label">表达式</label>
+                <input type="text" class="form-control" id="expression" name="expression" value="{{ trigger.expression }}" required>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="priority" class="form-label">优先级</label>
+                <select class="form-select" id="priority" name="priority">
+                    <option value="0" {{ 'selected' if trigger.priority == 0 }}>0 - 未分类</option>
+                    <option value="1" {{ 'selected' if trigger.priority == 1 }}>1 - 信息</option>
+                    <option value="2" {{ 'selected' if trigger.priority == 2 }}>2 - 警告</option>
+                    <option value="3" {{ 'selected' if trigger.priority == 3 }}>3 - 一般严重</option>
+                    <option value="4" {{ 'selected' if trigger.priority == 4 }}>4 - 严重</option>
+                    <option value="5" {{ 'selected' if trigger.priority == 5 }}>5 - 灾难</option>
+                </select>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="status" class="form-label">状态</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="0" {{ 'selected' if trigger.status == 0 }}>启用</option>
+                    <option value="1" {{ 'selected' if trigger.status == 1 }}>禁用</option>
+                </select>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="system" class="form-label">系统名称</label>
+                <input type="text" class="form-control" id="system" name="system" value="{{ trigger.system or '' }}">
+            </div>
+        </div>
+        <div class="mb-3">
+            <label for="subsystem" class="form-label">模块名称</label>
+            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ trigger.subsystem or '' }}">
+        </div>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <a href="{{ url_for('web_triggers_review') }}" class="btn btn-secondary">取消</a>
+    </form>
+</div>
+{% endblock %}

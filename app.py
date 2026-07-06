@@ -91,19 +91,30 @@ _ALLOWED_IMPORT_COLUMNS = {
     'items_review': {'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
                      'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
                      'host_ip', 'master_item', 'preprocessing', 'system', 'subsystem',
-                     'confirmed', 'modified', 'status_verification'},
+                     'confirmed', 'modified', 'status_verification', 'in_room',
+                     'sync_status', 'change_type'},
     'triggers_review': {'name', 'expression', 'priority', 'description', 'status',
                         'template_name', 'host_ip', 'system', 'subsystem',
-                        'confirmed', 'modified', 'status_verification'},
+                        'confirmed', 'modified', 'status_verification', 'in_room',
+                        'sync_status', 'change_type'},
     'item_prototypes_review': {'name', 'key', 'value_type', 'delay', 'description', 'units',
                                'multiplier', 'delta', 'history', 'trends', 'status',
                                'host_ip', 'discovery_rule_id', 'system', 'subsystem',
-                               'confirmed', 'modified', 'status_verification'},
+                               'confirmed', 'modified', 'status_verification', 'in_room',
+                               'sync_status', 'change_type'},
     'trigger_prototypes_review': {'description', 'expression', 'priority', 'status',
                                   'host_ip', 'discovery_rule_id', 'system', 'subsystem',
-                                  'confirmed', 'modified', 'status_verification'},
+                                  'confirmed', 'modified', 'status_verification', 'in_room',
+                                  'sync_status', 'change_type'},
     'webscenario_items_review': {'name', 'host', 'url', 'status_code', 'system', 'subsystem',
-                                  'confirmed', 'modified', 'status_verification'},
+                                  'confirmed', 'modified', 'status_verification', 'in_room',
+                                  'sync_status', 'change_type'},
+    'webscenario_items': {'system', 'subsystem', 'nginx_clb', 'nginx', 'clb', 'pod',
+                          'webtest_api', 'webtest_nginx_api', 'in_room'},
+    'web_trigger_review': {'host', 'web_scenario_name', 'trigger_name', 'expression',
+                           'priority', 'status', 'system', 'subsystem',
+                           'confirmed', 'modified', 'status_verification', 'in_room',
+                           'sync_status', 'change_type'},
 }
 
 def _sanitize_import_columns(table_name, columns):
@@ -129,6 +140,16 @@ import threading
 from functools import wraps
 
 _sync_lock = threading.Lock()
+_sync_abort_event = threading.Event()
+_sync_progress = {
+    'running': False,
+    'current_host': '',
+    'hosts_done': 0,
+    'hosts_total': 0,
+    'message': '',
+    'errors': []
+}
+_sync_progress_lock = threading.Lock()
 
 
 def _with_sync_lock(f):
@@ -148,6 +169,122 @@ def _safe_pagination(page, per_page):
     page = max(1, page)
     per_page = max(1, min(200, per_page))
     return page, per_page
+
+
+def _diff_and_merge(cur, table_name, unique_keys, content_columns,
+                    new_rows, existing_rows, all_insert_cols):
+    """基于 Diff 算法的复核表增量合并
+
+    在单个事务中处理三件事：
+      1. INSERT 上游存在但复核表不存在的新记录（change_type='new'）
+      2. UPDATE 内容已变化且 sync_status='synced' 的记录为 pending_confirm（change_type='update'）
+      3. UPDATE sync_status='synced' 但上游已不存在的记录为 pending_delete（change_type='delete'）
+
+    Args:
+        cur: 数据库游标
+        table_name: 复核表名
+        unique_keys: 唯一键列名列表（用于比对主键，如 ['item_id', 'host_ip']）
+        content_columns: 内容比对列名列表（用于检测是否变更）
+        new_rows: dict 列表，上游查询的最新数据
+        existing_rows: DictRow 列表，复核表现有数据
+        all_insert_cols: 需要 INSERT/UPDATE 的所有列名（含唯一键、内容列、系统字段等）
+
+    Returns: dict {new: N, update: N, delete: N, unchanged: N}
+    """
+    # 构建现有记录索引 {(uk1, uk2): row}
+    existing_by_key = {}
+    for row in existing_rows:
+        key = tuple(str(row.get(k, '')) for k in unique_keys)
+        existing_by_key[key] = row
+
+    new_keys = set()
+    inserts = []   # (row_dict) – 全新
+    updates = []   # (existing_id, row_dict) – 内容变更
+    unchanged_synced = 0
+    unchanged_pending = 0
+
+    for src in new_rows:
+        key = tuple(str(src.get(k, '')) for k in unique_keys)
+        new_keys.add(key)
+
+        if key not in existing_by_key:
+            inserts.append(src)
+        else:
+            existing = existing_by_key[key]
+            # 比较内容列是否变化
+            changed = any(
+                str(src.get(col, '')) != str(existing.get(col, ''))
+                for col in content_columns
+            )
+            if changed and existing.get('sync_status') == 'synced':
+                updates.append((existing['id'], src))
+            elif changed:
+                # 未 synced 的记录内容变了，也要更新内容但不改变状态
+                updates.append((existing['id'], src))
+            elif existing.get('sync_status') == 'synced':
+                unchanged_synced += 1
+            else:
+                unchanged_pending += 1
+
+    # 检测删除：现有记录在上游不存在
+    deletions = []
+    for key, row in existing_by_key.items():
+        if key not in new_keys and row.get('sync_status') == 'synced' and not row.get('confirmed', False):
+            deletions.append(row['id'])
+
+    # --- 批量执行 ---
+    col_list = ", ".join(all_insert_cols)
+    placeholders = ", ".join(f"%s" for _ in all_insert_cols)
+    conflict_cols = ", ".join(unique_keys)
+
+    # 1. INSERT new
+    if inserts:
+        insert_values = []
+        for src in inserts:
+            vals = [src.get(c) for c in all_insert_cols]
+            vals += ['pending_confirm', 'new']
+            insert_values.append(vals)
+        icols = col_list + ", sync_status, change_type"
+        iplaceholders = placeholders + ", %s, %s"
+        from psycopg2.extras import execute_values
+        execute_values(cur,
+            f"INSERT INTO {table_name} ({icols}) VALUES %s ON CONFLICT ({conflict_cols}) DO NOTHING",
+            insert_values, page_size=100)
+
+    # 2. UPDATE changed
+    if updates:
+        for existing_id, src in updates:
+            set_parts = ", ".join(
+                f"{c} = %s" for c in all_insert_cols
+            )
+            vals = [src.get(c) for c in all_insert_cols]
+            cur.execute(f"""
+                UPDATE {table_name}
+                SET {set_parts},
+                    sync_status = 'pending_confirm',
+                    change_type = 'update',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, vals + [existing_id])
+
+    # 3. UPDATE deletions
+    if deletions:
+        for del_id in deletions:
+            cur.execute(f"""
+                UPDATE {table_name}
+                SET sync_status = 'pending_delete',
+                    change_type = 'delete',
+                    confirmed = false,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND sync_status = 'synced'
+            """, (del_id,))
+
+    return {
+        'new': len(inserts),
+        'update': len(updates),
+        'delete': len(deletions),
+        'unchanged': unchanged_synced + unchanged_pending
+    }
 
 
 @app.context_processor
@@ -185,6 +322,8 @@ def inject_active_menu():
         'edit_trigger_prototype_review': 'trigger_prototypes_review',
         'webscenarios_review': 'webscenarios_review',
         'edit_webscenario_review': 'webscenarios_review',
+        'web_triggers_review': 'web_triggers_review',
+        'edit_web_trigger_review': 'web_triggers_review',
         'hosts': 'hosts',
         'add_host': 'hosts',
         'edit_host': 'hosts',
@@ -192,6 +331,9 @@ def inject_active_menu():
         'edit_discovery_rule': 'discovery_rules',
         'filter_conditions': 'filter_conditions',
         'edit_filter_condition': 'filter_conditions',
+        'webscenarios': 'webscenarios',
+        'add_webscenario': 'webscenarios',
+        'edit_webscenario': 'webscenarios',
     }
     return {'active_menu': menu_map.get(endpoint, '')}
 
@@ -224,6 +366,8 @@ def inject_breadcrumb():
         'edit_trigger_prototype_review': [('复核表管理', None), ('触发器原型复核', url_for('trigger_prototypes_review')), ('编辑复核记录', None)],
         'webscenarios_review': [('复核表管理', None), ('Web场景复核', url_for('webscenarios_review'))],
         'edit_webscenario_review': [('复核表管理', None), ('Web场景复核', url_for('webscenarios_review')), ('编辑复核记录', None)],
+        'web_triggers_review': [('复核表管理', None), ('Web触发器复核', url_for('web_triggers_review'))],
+        'edit_web_trigger_review': [('复核表管理', None), ('Web触发器复核', url_for('web_triggers_review')), ('编辑复核记录', None)],
         'hosts': [('主机管理', url_for('hosts'))],
         'add_host': [('主机管理', url_for('hosts')), ('添加主机', None)],
         'edit_host': [('主机管理', url_for('hosts')), ('编辑主机', None)],
@@ -231,6 +375,9 @@ def inject_breadcrumb():
         'edit_discovery_rule': [('预定义模版管理', None), ('自动发现规则列表', url_for('discovery_rules')), ('编辑规则', None)],
         'filter_conditions': [('预定义模版管理', None), ('自动发现过滤规则管理', url_for('filter_conditions'))],
         'edit_filter_condition': [('预定义模版管理', None), ('自动发现过滤规则管理', url_for('filter_conditions')), ('编辑过滤条件', None)],
+        'webscenarios': [('预定义模版管理', None), ('Web场景管理', url_for('webscenarios'))],
+        'add_webscenario': [('预定义模版管理', None), ('Web场景管理', url_for('webscenarios')), ('添加Web场景', None)],
+        'edit_webscenario': [('预定义模版管理', None), ('Web场景管理', url_for('webscenarios')), ('编辑Web场景', None)],
     }
     return {'page_breadcrumb': breadcrumb_map.get(endpoint, [])}
 
@@ -383,6 +530,202 @@ def import_item_prototypes():
         return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
     finally:
         conn.close()
+
+
+@app.route('/webscenarios')
+def webscenarios():
+    """Web场景管理"""
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
+    offset = (page - 1) * per_page
+
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        where_clause = ""
+        params = []
+        conditions = []
+        if system:
+            conditions.append("system ILIKE %s")
+            params.append(f'%{system}%')
+        if subsystem:
+            conditions.append("subsystem ILIKE %s")
+            params.append(f'%{subsystem}%')
+        if conditions:
+            where_clause = " WHERE " + " AND ".join(conditions)
+        cur.execute(f"SELECT COUNT(*) FROM webscenario_items{where_clause}", params)
+        total = cur.fetchone()['count']
+        cur.execute(f"SELECT * FROM webscenario_items{where_clause} ORDER BY id LIMIT %s OFFSET %s", params + [per_page, offset])
+        webscenarios = cur.fetchall()
+    conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('webscenarios.html', webscenarios=webscenarios,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
+
+
+@app.route('/webscenarios/export')
+def export_webscenarios():
+    """导出 webscenario_items 表到 Excel"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM webscenario_items ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='webscenario_items')
+        output.seek(0)
+        return send_file(output, download_name='webscenario_items.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenarios/import', methods=['POST'])
+def import_webscenarios():
+    """从 Excel 导入数据到 webscenario_items 表（清空后写入）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM webscenario_items")
+            deleted = cur.rowcount
+            columns = _sanitize_import_columns('webscenario_items', list(df.columns))
+            placeholders = ', '.join(['%s'] * len(columns))
+            column_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, str) and (val.startswith('{') or val.startswith('[')):
+                        try:
+                            values.append(json.dumps(ast.literal_eval(val)))
+                        except (ValueError, SyntaxError):
+                            values.append(val)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO webscenario_items ({column_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'webscenario_items 导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/webscenario/add', methods=['GET', 'POST'])
+def add_webscenario():
+    """添加Web场景"""
+    conn = get_db_connection()
+
+    if request.method == 'POST':
+        system = request.form.get('system', '')
+        subsystem = request.form.get('subsystem', '')
+        nginx_clb = request.form.get('nginx_clb') or None
+        nginx = request.form.get('nginx') or None
+        clb = request.form.get('clb') or None
+        pod = request.form.get('pod') or None
+        webtest_api = request.form['webtest_api']
+        webtest_nginx_api = request.form['webtest_nginx_api']
+        in_room = request.form.get('in_room') or None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO webscenario_items (system, subsystem, nginx_clb, nginx, clb, pod,
+                                                    webtest_api, webtest_nginx_api, in_room)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (system, subsystem, nginx_clb, nginx, clb, pod,
+                      webtest_api, webtest_nginx_api, in_room))
+            conn.commit()
+            flash('Web场景添加成功')
+            return redirect(url_for('webscenarios'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'添加失败: {e}')
+
+    conn.close()
+    return render_template('add_webscenario.html')
+
+
+@app.route('/webscenario/edit/<int:ws_id>', methods=['GET', 'POST'])
+def edit_webscenario(ws_id):
+    """编辑Web场景"""
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM webscenario_items WHERE id = %s", (ws_id,))
+        ws = cur.fetchone()
+
+    if not ws:
+        flash('Web场景不存在')
+        return redirect(url_for('webscenarios'))
+
+    if request.method == 'POST':
+        system = request.form.get('system', '')
+        subsystem = request.form.get('subsystem', '')
+        nginx_clb = request.form.get('nginx_clb') or None
+        nginx = request.form.get('nginx') or None
+        clb = request.form.get('clb') or None
+        pod = request.form.get('pod') or None
+        webtest_api = request.form['webtest_api']
+        webtest_nginx_api = request.form['webtest_nginx_api']
+        in_room = request.form.get('in_room') or None
+
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE webscenario_items SET system=%s, subsystem=%s,
+                        nginx_clb=%s, nginx=%s, clb=%s, pod=%s,
+                        webtest_api=%s, webtest_nginx_api=%s, in_room=%s,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE id=%s
+                """, (system, subsystem, nginx_clb, nginx, clb, pod,
+                      webtest_api, webtest_nginx_api, in_room, ws_id))
+            conn.commit()
+            flash('Web场景更新成功')
+            return redirect(url_for('webscenarios'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+
+    conn.close()
+    return render_template('edit_webscenario.html', ws=ws)
+
+
+@app.route('/webscenario/delete/<int:ws_id>')
+def delete_webscenario(ws_id):
+    """删除Web场景"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM webscenario_items WHERE id = %s", (ws_id,))
+        conn.commit()
+        flash('Web场景删除成功')
+    except Exception as e:
+        conn.rollback()
+        flash(f'删除失败: {e}')
+    conn.close()
+    return redirect(url_for('webscenarios'))
 
 
 @app.route('/trigger-prototypes')
@@ -1107,30 +1450,32 @@ def sync_hosts():
         with conn.cursor(cursor_factory=DictCursor) as cur:
             # 1. 增量发现：LEFT JOIN 对比，找出新增或变更的记录
             cur.execute("""
-                SELECT sa.system, sa.subsystem, sa.hostname, sa.ip, sa.template_id
+                SELECT sa.system, sa.subsystem, sa.hostname, sa.ip, sa.template_id, sa.in_room
                 FROM ops.sub_assets sa
                 LEFT JOIN hosts h ON sa.ip = h.name
                 WHERE h.id IS NULL
                    OR h.system IS DISTINCT FROM sa.system
                    OR h.subsystem IS DISTINCT FROM sa.subsystem
                    OR h.template_name IS DISTINCT FROM sa.template_id::varchar
+                   OR h.in_room IS DISTINCT FROM sa.in_room
             """)
             to_sync = cur.fetchall()
 
             # 2. 逐条 UPSERT 到 zabbix_mac.hosts
             for row in to_sync:
                 cur.execute("""
-                    INSERT INTO hosts (name, system, subsystem, template_name, description)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO hosts (name, system, subsystem, template_name, description, in_room)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (name)
                     DO UPDATE SET
                         system = EXCLUDED.system,
                         subsystem = EXCLUDED.subsystem,
                         template_name = EXCLUDED.template_name,
                         description = EXCLUDED.description,
+                        in_room = EXCLUDED.in_room,
                         updated_at = CURRENT_TIMESTAMP
                 """, (row['ip'], row['system'], row['subsystem'],
-                      row['template_id'], row['hostname']))
+                      row['template_id'], row['hostname'], row['in_room']))
                 synced_count += 1
 
         conn.commit()
@@ -1154,12 +1499,13 @@ def add_host():
         description = request.form.get('description')
         system = request.form.get('system')
         subsystem = request.form.get('subsystem')
-        
+        in_room = request.form.get('in_room') or None
+
         conn = get_db_connection()
         try:
             # 插入主机基本信息，直接存储template_name
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO hosts (name, template_name, description, system, subsystem) VALUES (%s, %s, %s, %s, %s)", (name, template_name, description, system, subsystem))
+                cur.execute("INSERT INTO hosts (name, template_name, description, system, subsystem, in_room) VALUES (%s, %s, %s, %s, %s, %s)", (name, template_name, description, system, subsystem, in_room))
             
             conn.commit()
             flash('主机添加成功')
@@ -1195,11 +1541,12 @@ def edit_host(host_id):
         description = request.form.get('description')
         system = request.form.get('system')
         subsystem = request.form.get('subsystem')
-        
+        in_room = request.form.get('in_room') or None
+
         try:
             # 更新主机基本信息，直接更新template_name
             with conn.cursor() as cur:
-                cur.execute("UPDATE hosts SET name = %s, template_name = %s, description = %s, system = %s, subsystem = %s WHERE id = %s", (name, template_name, description, system, subsystem, host_id))
+                cur.execute("UPDATE hosts SET name = %s, template_name = %s, description = %s, system = %s, subsystem = %s, in_room = %s WHERE id = %s", (name, template_name, description, system, subsystem, in_room, host_id))
             
             conn.commit()
             flash('主机更新成功')
@@ -1234,6 +1581,7 @@ def items_review():
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -1252,6 +1600,8 @@ def items_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if sync_filter == 'pending':
+            where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
         # 获取 system / subsystem 去重值供 datalist 下拉建议
         cur.execute("SELECT DISTINCT system FROM items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
@@ -1274,6 +1624,7 @@ def items_review():
     return render_template('items_review.html', items=items,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -1281,52 +1632,74 @@ def items_review():
 @app.route('/items-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_items_review():
-    """初始化 items_review 表：清空并重新从 items × hosts 填充"""
+    """初始化 items_review 表：基于 Diff 算法增量更新
+    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
+    data = request.get_json() if request.is_json else {}
+    system_filter = data.get('system', '').strip() if data else ''
+    subsystem_filter = data.get('subsystem', '').strip() if data else ''
+
     conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM items_review")
-            deleted = cur.fetchone()[0]
-            cur.execute("TRUNCATE items_review RESTART IDENTITY")
-            cur.execute("""
-                INSERT INTO items_review (
-                    item_id, host_ip, item_key, name, type, value_type, delay,
-                    description, units, multiplier, delta, history, trends,
-                    status, template_name, master_item, preprocessing, system, subsystem,
-                    modified, confirmed, status_verification
-                )
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            existing_conditions = ["1=1"]
+            existing_params = []
+            if system_filter:
+                existing_conditions.append("system = %s")
+                existing_params.append(system_filter)
+            if subsystem_filter:
+                existing_conditions.append("subsystem = %s")
+                existing_params.append(subsystem_filter)
+            existing_where = " AND ".join(existing_conditions)
+            cur.execute(f"SELECT * FROM items_review WHERE {existing_where}", existing_params)
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据
+            where_parts = ["i.template_name = %s", "h.template_name = i.template_name"]
+            query_params = [app.config['DEFAULT_TEMPLATE_NAME']]
+            if system_filter:
+                where_parts.append("h.system = %s")
+                query_params.append(system_filter)
+            if subsystem_filter:
+                where_parts.append("h.subsystem = %s")
+                query_params.append(subsystem_filter)
+            where_clause = " AND ".join(where_parts)
+
+            cur.execute(f"""
                 SELECT
-                    i.id,
+                    i.id as item_id,
                     h.name as host_ip,
-                    i.item_key,
-                    i.name,
-                    i.type,
-                    i.value_type,
-                    i.delay,
-                    i.description,
-                    i.units,
-                    i.multiplier,
-                    i.delta,
-                    i.history,
-                    i.trends,
-                    i.status,
-                    i.template_name,
-                    i.master_item,
-                    i.preprocessing,
-                    h.system,
-                    h.subsystem,
-                    false,
-                    false,
-                    'pending'
+                    i.item_key, i.name, i.type, i.value_type, i.delay,
+                    i.description, i.units, i.multiplier, i.delta, i.history, i.trends,
+                    i.status, i.template_name, i.master_item, i.preprocessing,
+                    h.system, h.subsystem, h.in_room
                 FROM items i
                 CROSS JOIN hosts h
-                WHERE i.template_name = %s AND h.template_name = i.template_name
-            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            inserted = cur.rowcount
+                WHERE {where_clause}
+                ORDER BY i.id, h.name
+            """, query_params)
+            new_rows = cur.fetchall()
+
+            all_insert_cols = [
+                'item_id', 'host_ip', 'item_key', 'name', 'type', 'value_type', 'delay',
+                'description', 'units', 'multiplier', 'delta', 'history', 'trends',
+                'status', 'template_name', 'master_item', 'preprocessing', 'system', 'subsystem', 'in_room'
+            ]
+            content_columns = [
+                'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
+                'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
+                'master_item', 'preprocessing', 'system', 'subsystem', 'in_room'
+            ]
+            unique_keys = ['item_id', 'host_ip']
+
+            result = _diff_and_merge(
+                cur, 'items_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'items_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+            'message': f'items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
         })
     except Exception as e:
         conn.rollback()
@@ -1465,6 +1838,20 @@ def sync_items_to_zabbix():
                     'deleted_count': deleted})
 
 
+@app.route('/review/sync-progress')
+def sync_progress():
+    """同步进度查询（非阻塞）"""
+    with _sync_progress_lock:
+        return jsonify(dict(_sync_progress))
+
+
+@app.route('/review/sync-abort', methods=['POST'])
+def abort_sync():
+    """中止正在运行的同步操作"""
+    _sync_abort_event.set()
+    return jsonify({'success': True, 'message': '已发出中止信号，同步将在当前主机完成后停止'})
+
+
 @app.route('/review/sync-all', methods=['POST'])
 @_with_sync_lock
 def sync_all_to_zabbix():
@@ -1487,6 +1874,15 @@ def sync_all_to_zabbix():
     if not env_config['url']:
         return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
 
+    # Feature 2: 初始化中止事件和进度
+    _sync_abort_event.clear()
+    _sync_progress['running'] = True
+    _sync_progress['errors'] = []
+
+    # Feature 4: 系统/模块筛选
+    system_filter = data.get('system', '').strip() if data else ''
+    subsystem_filter = data.get('subsystem', '').strip() if data else ''
+
     from zabbix_mac import ZabbixClient, ZabbixAPIException
     client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
 
@@ -1496,14 +1892,59 @@ def sync_all_to_zabbix():
         'triggers': {'created': 0, 'updated': 0, 'deleted': 0},
         'item_prototypes': {'created': 0, 'updated': 0, 'deleted': 0},
         'trigger_prototypes': {'created': 0, 'updated': 0, 'deleted': 0},
-        'errors': []
+        'errors': [],
+        'aborted': False
     }
+
+    # Feature 2: 预计算所有已确认实体涉及的总主机数
+    _sync_progress['hosts_done'] = 0
+    _sync_progress['current_host'] = ''
+    _sync_progress['message'] = '正在收集已确认的实体数据...'
+
+    all_hosts = set()
+    _build_where = lambda filters: (
+        " AND ".join(["confirmed = TRUE"] + [f"{k} = %s" for k in filters]),
+        list(filters.values())
+    )
+
+    # 先扫描所有 4 张复核表，收集唯一主机列表
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            filter_clause, filter_params = _build_where(
+                {k: v for k, v in [('system', system_filter), ('subsystem', subsystem_filter)] if v}
+            )
+            for table, col in [('items_review', 'host_ip'), ('triggers_review', 'host_ip'),
+                               ('item_prototypes_review', 'host_ip'), ('trigger_prototypes_review', 'host_ip')]:
+                cur.execute(f"SELECT DISTINCT {col} FROM {table} WHERE {filter_clause}", filter_params)
+                for row in cur.fetchall():
+                    all_hosts.add(row[col])
+    finally:
+        conn.close()
+
+    _sync_progress['hosts_total'] = len(all_hosts)
+    _sync_progress['message'] = ''
+
+    def _check_abort(result_obj):
+        if _sync_abort_event.is_set():
+            result_obj['aborted'] = True
+            result_obj['errors'].append('用户中止了同步操作')
+            return True
+        return False
+
+    def _update_progress(host_ip):
+        with _sync_progress_lock:
+            _sync_progress['hosts_done'] += 1
+            _sync_progress['current_host'] = host_ip
 
     # ==================== 1. 同步监控项 ====================
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT * FROM items_review WHERE confirmed = TRUE ORDER BY host_ip, item_key")
+            filter_clause, filter_params = _build_where(
+                {k: v for k, v in [('system', system_filter), ('subsystem', subsystem_filter)] if v}
+            )
+            cur.execute(f"SELECT * FROM items_review WHERE {filter_clause} ORDER BY host_ip, item_key", filter_params)
             confirmed_items = cur.fetchall()
     finally:
         conn.close()
@@ -1514,6 +1955,8 @@ def sync_all_to_zabbix():
             hosts.setdefault(row['host_ip'], []).append(row)
 
         for host_ip, rows in hosts.items():
+            if _check_abort(result):
+                break
             try:
                 host_id = client.get_host_id(host_ip)
                 if not host_id:
@@ -1563,14 +2006,19 @@ def sync_all_to_zabbix():
                             result['items']['deleted'] += 1
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[监控项] 删除 {host_ip}/{key}: {e}')
+                _update_progress(host_ip)
             except ZabbixAPIException as e:
                 result['errors'].append(f'[监控项] 主机 {host_ip}: {e}')
+                _update_progress(host_ip)
 
     # ==================== 2. 同步触发器 ====================
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT * FROM triggers_review WHERE confirmed = TRUE ORDER BY host_ip, name")
+            filter_clause, filter_params = _build_where(
+                {k: v for k, v in [('system', system_filter), ('subsystem', subsystem_filter)] if v}
+            )
+            cur.execute(f"SELECT * FROM triggers_review WHERE {filter_clause} ORDER BY host_ip, name", filter_params)
             confirmed_triggers = cur.fetchall()
     finally:
         conn.close()
@@ -1581,6 +2029,8 @@ def sync_all_to_zabbix():
             hosts.setdefault(row['host_ip'], []).append(row)
 
         for host_ip, rows in hosts.items():
+            if _check_abort(result):
+                break
             try:
                 host_id = client.get_host_id(host_ip)
                 if not host_id:
@@ -1626,8 +2076,10 @@ def sync_all_to_zabbix():
                             result['triggers']['deleted'] += 1
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[触发器] 删除 {host_ip}/{desc}: {e}')
+                _update_progress(host_ip)
             except ZabbixAPIException as e:
                 result['errors'].append(f'[触发器] 主机 {host_ip}: {e}')
+                _update_progress(host_ip)
 
     # ==================== 3 & 4. 同步监控项原型和触发器原型 ====================
     conn = get_db_connection()
@@ -1637,22 +2089,28 @@ def sync_all_to_zabbix():
             cur.execute("SELECT id, name, key FROM discovery_rules")
             dr_map = {row['id']: row for row in cur.fetchall()}
 
-            cur.execute("""
+            ip_filter_clause, ip_filter_params = _build_where(
+                {k: v for k, v in [('ipr.system', system_filter), ('ipr.subsystem', subsystem_filter)] if v}
+            )
+            cur.execute(f"""
                 SELECT ipr.*, dr.key as dr_key, dr.name as dr_name
                 FROM item_prototypes_review ipr
                 JOIN discovery_rules dr ON ipr.discovery_rule_id = dr.id
-                WHERE ipr.confirmed = TRUE
+                WHERE ipr.confirmed = TRUE AND {ip_filter_clause}
                 ORDER BY ipr.host_ip, ipr.key
-            """)
+            """, ip_filter_params)
             confirmed_ip = cur.fetchall()
 
-            cur.execute("""
+            tp_filter_clause, tp_filter_params = _build_where(
+                {k: v for k, v in [('tpr.system', system_filter), ('tpr.subsystem', subsystem_filter)] if v}
+            )
+            cur.execute(f"""
                 SELECT tpr.*, dr.key as dr_key, dr.name as dr_name
                 FROM trigger_prototypes_review tpr
                 JOIN discovery_rules dr ON tpr.discovery_rule_id = dr.id
-                WHERE tpr.confirmed = TRUE
+                WHERE tpr.confirmed = TRUE AND {tp_filter_clause}
                 ORDER BY tpr.host_ip, tpr.description
-            """)
+            """, tp_filter_params)
             confirmed_tp = cur.fetchall()
     finally:
         conn.close()
@@ -1667,6 +2125,8 @@ def sync_all_to_zabbix():
             host_dr_pairs.add((row['host_ip'], row['dr_key'], row['dr_name']))
 
         for host_ip, dr_key, dr_name in host_dr_pairs:
+            if _check_abort(result):
+                break
             try:
                 host_id = client.get_host_id(host_ip)
                 if not host_id:
@@ -1772,8 +2232,10 @@ def sync_all_to_zabbix():
                             except ZabbixAPIException as e:
                                 result['errors'].append(f'[触发器原型] 删除 {host_ip}/{desc}: {e}')
 
+                _update_progress(host_ip)
             except ZabbixAPIException as e:
                 result['errors'].append(f'[原型] {host_ip}/{dr_key}: {e}')
+                _update_progress(host_ip)
 
     # 构建汇总消息
     parts = []
@@ -1788,10 +2250,14 @@ def sync_all_to_zabbix():
     if result['errors']:
         msg += f'，{len(result["errors"])} 个错误'
 
+    _sync_progress['running'] = False
+    _sync_progress['message'] = msg
+
     return jsonify({
         'success': True, 'message': msg,
         'result': result,
-        'errors': result['errors'][:10] if result['errors'] else []
+        'errors': result['errors'][:10] if result['errors'] else [],
+        'aborted': result['aborted']
     })
 
 
@@ -1867,11 +2333,18 @@ def edit_item_review(review_id):
 
 @app.route('/item-review/confirm/<int:review_id>', methods=['POST'])
 def confirm_item_review(review_id):
-    """确认监控项复核表记录"""
+    """确认监控项复核表记录（含 Diff 状态更新）"""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE items_review SET confirmed = true WHERE id = %s", (review_id,))
+            cur.execute("""
+                UPDATE items_review
+                SET confirmed = true,
+                    sync_status = 'synced',
+                    change_type = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -1886,7 +2359,12 @@ def unconfirm_item_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE items_review SET confirmed = false WHERE id = %s", (review_id,))
+            cur.execute("""
+                UPDATE items_review SET confirmed = false,
+                    sync_status = 'pending_confirm',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -1973,6 +2451,7 @@ def triggers_review():
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -1991,6 +2470,8 @@ def triggers_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if sync_filter == 'pending':
+            where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
         # datalist 数据
         cur.execute("SELECT DISTINCT system FROM triggers_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
@@ -2013,6 +2494,7 @@ def triggers_review():
     return render_template('triggers_review.html', triggers=triggers,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -2020,42 +2502,77 @@ def triggers_review():
 @app.route('/triggers-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_triggers_review():
-    """初始化 triggers_review 表：清空并重新从 triggers × hosts 填充"""
+    """初始化 triggers_review 表：基于 Diff 算法增量更新
+    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
+    data = request.get_json() if request.is_json else {}
+    system_filter = data.get('system', '').strip() if data else ''
+    subsystem_filter = data.get('subsystem', '').strip() if data else ''
+
     conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM triggers_review")
-            deleted = cur.fetchone()[0]
-            cur.execute("TRUNCATE triggers_review RESTART IDENTITY")
-            cur.execute("""
-                INSERT INTO triggers_review (
-                    trigger_id, host_ip, name, expression, priority, description,
-                    status, template_name, system, subsystem,
-                    modified, confirmed, status_verification
-                )
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            existing_conditions = ["1=1"]
+            existing_params = []
+            if system_filter:
+                existing_conditions.append("system = %s")
+                existing_params.append(system_filter)
+            if subsystem_filter:
+                existing_conditions.append("subsystem = %s")
+                existing_params.append(subsystem_filter)
+            existing_where = " AND ".join(existing_conditions)
+            cur.execute(f"SELECT * FROM triggers_review WHERE {existing_where}", existing_params)
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据
+            where_parts = ["tr.template_name = %s", "h.template_name = tr.template_name"]
+            query_params = [app.config['DEFAULT_TEMPLATE_NAME']]
+            if system_filter:
+                where_parts.append("h.system = %s")
+                query_params.append(system_filter)
+            if subsystem_filter:
+                where_parts.append("h.subsystem = %s")
+                query_params.append(subsystem_filter)
+            where_clause = " AND ".join(where_parts)
+
+            cur.execute(f"""
                 SELECT
-                    tr.id,
+                    tr.id as trigger_id,
                     h.name as host_ip,
                     tr.name,
-                    tr.expression,
+                    REPLACE(tr.expression, '{{host:', '{{' || h.name || ':') as expression,
                     tr.priority,
                     tr.description,
                     tr.status,
                     tr.template_name,
                     h.system,
                     h.subsystem,
-                    false,
-                    false,
-                    'pending'
+                    h.in_room
                 FROM triggers tr
                 CROSS JOIN hosts h
-                WHERE tr.template_name = %s AND h.template_name = tr.template_name
-            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            inserted = cur.rowcount
+                WHERE {where_clause}
+                ORDER BY tr.id, h.name
+            """, query_params)
+            new_rows = cur.fetchall()
+
+            all_insert_cols = [
+                'trigger_id', 'host_ip', 'name', 'expression', 'priority', 'description',
+                'status', 'template_name', 'system', 'subsystem', 'in_room'
+            ]
+            content_columns = [
+                'name', 'expression', 'priority', 'description', 'status',
+                'template_name', 'system', 'subsystem', 'in_room'
+            ]
+            unique_keys = ['trigger_id', 'host_ip']
+
+            result = _diff_and_merge(
+                cur, 'triggers_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'triggers_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+            'message': f'triggers_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
         })
     except Exception as e:
         conn.rollback()
@@ -2118,7 +2635,7 @@ def confirm_trigger_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE triggers_review SET confirmed = true WHERE id = %s", (review_id,))
+            cur.execute("UPDATE triggers_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2133,7 +2650,7 @@ def unconfirm_trigger_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE triggers_review SET confirmed = false WHERE id = %s", (review_id,))
+            cur.execute("UPDATE triggers_review SET confirmed = false, sync_status = 'pending_confirm', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2366,6 +2883,7 @@ def webscenarios_review():
     host = request.args.get('host', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -2384,6 +2902,8 @@ def webscenarios_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if sync_filter == 'pending':
+            where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
         cur.execute("SELECT DISTINCT system FROM webscenario_items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
         distinct_systems = [r['system'] for r in cur.fetchall()]
@@ -2403,6 +2923,7 @@ def webscenarios_review():
     return render_template('webscenarios_review.html', webscenarios=webscenarios,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -2410,60 +2931,85 @@ def webscenarios_review():
 @app.route('/webscenarios-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_webscenarios_review():
-    """初始化 webscenario_items_review 表：清空并重新从 webscenario_items 填充"""
+    """初始化 webscenario_items_review 表：基于 Diff 算法增量更新
+    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
+    data = request.get_json() if request.is_json else {}
+    system_filter = data.get('system', '').strip() if data else ''
+    subsystem_filter = data.get('subsystem', '').strip() if data else ''
+
     conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM webscenario_items_review")
-            deleted = cur.fetchone()[0]
-            cur.execute("TRUNCATE webscenario_items_review RESTART IDENTITY")
-            cur.execute("""
-                INSERT INTO webscenario_items_review (system, subsystem, host, name, url, status_code, modified, confirmed, status_verification)
-                SELECT
-                    system, subsystem,
-                    'Zabbix server' as host,
-                    system || '_' || subsystem || '_clb' as name,
-                    nginx_clb as url,
-                    '200' as status_code,
-                    false, false, 'pending'
-                FROM webscenario_items
-                WHERE nginx_clb IS NOT NULL AND nginx_clb != ''
-                UNION ALL
-                SELECT
-                    system, subsystem,
-                    'Zabbix server' as host,
-                    system || '_' || subsystem || '_nginx' as name,
-                    nginx as url,
-                    '200' as status_code,
-                    false, false, 'pending'
-                FROM webscenario_items
-                WHERE nginx IS NOT NULL AND nginx != ''
-                UNION ALL
-                SELECT
-                    system, subsystem,
-                    'Zabbix server' as host,
-                    system || '_' || subsystem || '_clb_direct' as name,
-                    clb as url,
-                    '200' as status_code,
-                    false, false, 'pending'
-                FROM webscenario_items
-                WHERE clb IS NOT NULL AND clb != ''
-                UNION ALL
-                SELECT
-                    system, subsystem,
-                    'Zabbix server' as host,
-                    system || '_' || subsystem || '_pod' as name,
-                    pod as url,
-                    '200' as status_code,
-                    false, false, 'pending'
-                FROM webscenario_items
-                WHERE pod IS NOT NULL AND pod != ''
-            """)
-            inserted = cur.rowcount
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            existing_conditions = ["1=1"]
+            existing_params = []
+            if system_filter:
+                existing_conditions.append("system = %s")
+                existing_params.append(system_filter)
+            if subsystem_filter:
+                existing_conditions.append("subsystem = %s")
+                existing_params.append(subsystem_filter)
+            existing_where = " AND ".join(existing_conditions)
+            cur.execute(f"SELECT * FROM webscenario_items_review WHERE {existing_where}", existing_params)
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据（4 个 UNION ALL）
+            source_where = ""
+            source_params = []
+            if system_filter:
+                source_where += " AND system = %s"
+                source_params.append(system_filter)
+            if subsystem_filter:
+                source_where += " AND subsystem = %s"
+                source_params.append(subsystem_filter)
+
+            cur.execute(f"""
+                SELECT system, subsystem, host, name, url, status_code, in_room
+                FROM (
+                    SELECT system, subsystem,
+                        'Zabbix server' as host,
+                        system || '_' || subsystem || '_clb' as name,
+                        nginx_clb as url, '200' as status_code, in_room
+                    FROM webscenario_items
+                    WHERE nginx_clb IS NOT NULL AND nginx_clb != ''{source_where}
+                    UNION ALL
+                    SELECT system, subsystem,
+                        'Zabbix server' as host,
+                        system || '_' || subsystem || '_nginx' as name,
+                        nginx as url, '200' as status_code, in_room
+                    FROM webscenario_items
+                    WHERE nginx IS NOT NULL AND nginx != ''{source_where}
+                    UNION ALL
+                    SELECT system, subsystem,
+                        'Zabbix server' as host,
+                        system || '_' || subsystem || '_clb_direct' as name,
+                        clb as url, '200' as status_code, in_room
+                    FROM webscenario_items
+                    WHERE clb IS NOT NULL AND clb != ''{source_where}
+                    UNION ALL
+                    SELECT system, subsystem,
+                        'Zabbix server' as host,
+                        system || '_' || subsystem || '_pod' as name,
+                        pod as url, '200' as status_code, in_room
+                    FROM webscenario_items
+                    WHERE pod IS NOT NULL AND pod != ''{source_where}
+                ) src
+                ORDER BY name
+            """, source_params)
+            new_rows = cur.fetchall()
+
+            all_insert_cols = ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room']
+            content_columns = ['system', 'subsystem', 'url', 'status_code', 'in_room']
+            unique_keys = ['name', 'host', 'url']
+
+            result = _diff_and_merge(
+                cur, 'webscenario_items_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'webscenario_items_review 初始化成功：删除 {deleted} 条，导入 {inserted} 条'
+            'message': f'webscenario_items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
         })
     except Exception as e:
         conn.rollback()
@@ -2667,7 +3213,7 @@ def confirm_webscenario_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE webscenario_items_review SET confirmed = true, updated_at = NOW() WHERE id = %s", (review_id,))
+            cur.execute("UPDATE webscenario_items_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2683,7 +3229,7 @@ def unconfirm_webscenario_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE webscenario_items_review SET confirmed = false, updated_at = NOW() WHERE id = %s", (review_id,))
+            cur.execute("UPDATE webscenario_items_review SET confirmed = false, sync_status = 'pending_confirm', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2791,9 +3337,29 @@ def import_webscenarios_review():
         conn.close()
 
 
-@app.route('/item-prototypes-review')
-def item_prototypes_review():
-    """监控项原型复核表管理"""
+# ============================================================
+# Web触发器复核表管理路由
+# ============================================================
+
+def _update_verification_web_trigger(review_id, status):
+    """更新 web_trigger_review 单条记录的核验状态"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE web_trigger_review SET status_verification = %s WHERE id = %s",
+                        (status, review_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@app.route('/web-triggers-review')
+def web_triggers_review():
+    """Web触发器复核表列表"""
+    host = request.args.get('host', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+    sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -2801,14 +3367,323 @@ def item_prototypes_review():
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM item_prototypes_review")
+        where_parts = []
+        params = []
+        if host:
+            where_parts.append("host ILIKE %s")
+            params.append(f'%{host}%')
+        if system:
+            where_parts.append("system ILIKE %s")
+            params.append(f'%{system}%')
+        if subsystem:
+            where_parts.append("subsystem ILIKE %s")
+            params.append(f'%{subsystem}%')
+        if sync_filter == 'pending':
+            where_parts.append("(sync_status != 'synced' OR sync_status IS NULL)")
+        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        cur.execute(f"SELECT COUNT(*) FROM web_trigger_review{where_clause}", params)
         total = cur.fetchone()['count']
-        cur.execute("SELECT * FROM item_prototypes_review ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
+        cur.execute(f"SELECT * FROM web_trigger_review{where_clause} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
+        triggers = cur.fetchall()
+
+        cur.execute("SELECT DISTINCT system FROM web_trigger_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM web_trigger_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+
+    conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
+    return render_template('web_triggers_review.html', triggers=triggers,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems,
+                           sync_filter=sync_filter,
+                           page=page, per_page=per_page,
+                           total=total, total_pages=total_pages)
+
+
+@app.route('/web-triggers-review/initialize', methods=['POST'])
+@_with_sync_lock
+def initialize_web_triggers_review():
+    """初始化 web_trigger_review 表：基于 Diff 算法增量更新"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            cur.execute("SELECT * FROM web_trigger_review")
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据（从已确认的 Web 场景生成触发器）
+            cur.execute("""
+                SELECT
+                    host,
+                    name as web_scenario_name,
+                    name || '_trigger' as trigger_name,
+                    '{' || host || ':web.test.fail[' || name || '].count(#3,0,ne)}>2' as expression,
+                    3 as priority,
+                    0 as status,
+                    system,
+                    subsystem,
+                    in_room
+                FROM webscenario_items_review
+                WHERE confirmed = TRUE
+                ORDER BY host, name
+            """)
+            new_rows = cur.fetchall()
+
+            all_insert_cols = ['host', 'web_scenario_name', 'trigger_name', 'expression', 'priority',
+                               'status', 'system', 'subsystem', 'in_room']
+            content_columns = ['expression', 'priority', 'status', 'system', 'subsystem', 'in_room']
+            unique_keys = ['host', 'web_scenario_name', 'trigger_name']
+
+            result = _diff_and_merge(
+                cur, 'web_trigger_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'web_trigger_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/web-triggers-review/verify', methods=['POST'])
+def verify_web_triggers_review():
+    """核验 Web 触发器复核表"""
+    data = request.get_json() if request.is_json else {}
+    environment = data.get('environment', '').strip() if data else ''
+
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    try:
+        from zabbix_mac import ZabbixClient, ZabbixAPIException
+        client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute("SELECT * FROM web_trigger_review WHERE confirmed = TRUE ORDER BY host")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        verified = not_found = mismatch = 0
+        errors = []
+
+        for row in rows:
+            try:
+                host_id = client.get_host_id(row['host'])
+                if not host_id:
+                    _update_verification_web_trigger(row['id'], 'not_found')
+                    not_found += 1
+                    continue
+
+                # Try to find the trigger by name on this host
+                existing = client.zabbix_api.trigger.get({
+                    'hostids': host_id,
+                    'filter': {'description': [row['trigger_name']]},
+                    'output': ['triggerid', 'description', 'expression', 'priority']
+                })
+
+                if not existing:
+                    _update_verification_web_trigger(row['id'], 'not_found')
+                    not_found += 1
+                else:
+                    _update_verification_web_trigger(row['id'], 'verified')
+                    verified += 1
+            except ZabbixAPIException as e:
+                errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
+
+        msg = f'核验完成：已核验 {verified} 条，未找到 {not_found} 条'
+        return jsonify({'success': True, 'message': msg, 'errors': errors[:10]})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+
+
+@app.route('/web-trigger-review/confirm/<int:review_id>', methods=['POST'])
+def confirm_web_trigger_review(review_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE web_trigger_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/web-trigger-review/unconfirm/<int:review_id>', methods=['POST'])
+def unconfirm_web_trigger_review(review_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE web_trigger_review SET confirmed = false, sync_status = 'pending_confirm', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/web-trigger-review/add', methods=['POST'])
+def add_web_trigger_from_review():
+    form = request.form
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO web_trigger_review (host, web_scenario_name, trigger_name, expression,
+                                                 priority, status, system, subsystem,
+                                                 modified, confirmed, status_verification)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, false, 'pending')
+            """, (form.get('host'), form.get('web_scenario_name'), form.get('trigger_name'),
+                  form.get('expression'), int(form.get('priority', 3)), int(form.get('status', 0)),
+                  form.get('system'), form.get('subsystem')))
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Web触发器添加成功'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/web-trigger-review/edit/<int:review_id>', methods=['GET', 'POST'])
+def edit_web_trigger_review(review_id):
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM web_trigger_review WHERE id = %s", (review_id,))
+        trigger = cur.fetchone()
+
+    if not trigger:
+        conn.close()
+        flash('记录不存在')
+        return redirect(url_for('web_triggers_review'))
+
+    if request.method == 'POST':
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE web_trigger_review SET host=%s, web_scenario_name=%s, trigger_name=%s,
+                        expression=%s, priority=%s, status=%s, system=%s, subsystem=%s,
+                        modified=true, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=%s
+                """, (request.form.get('host'), request.form.get('web_scenario_name'),
+                      request.form.get('trigger_name'), request.form.get('expression'),
+                      int(request.form.get('priority', 3)), int(request.form.get('status', 0)),
+                      request.form.get('system'), request.form.get('subsystem'), review_id))
+            conn.commit()
+            flash('更新成功')
+            return redirect(url_for('web_triggers_review'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'更新失败: {e}')
+    conn.close()
+    return render_template('edit_web_trigger_review.html', trigger=trigger)
+
+
+@app.route('/web-triggers-review/export')
+def export_web_triggers_review():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM web_trigger_review ORDER BY id")
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+        df = pd.DataFrame(rows, columns=columns)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='web_trigger_review')
+        output.seek(0)
+        return send_file(output, download_name='web_trigger_review.xlsx',
+                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'导出失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/web-triggers-review/import', methods=['POST'])
+def import_web_triggers_review():
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    conn = get_db_connection()
+    try:
+        df = pd.read_excel(file, engine='openpyxl')
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM web_trigger_review")
+            deleted = cur.rowcount
+            columns = _sanitize_import_columns('web_trigger_review', list(df.columns))
+            placeholders = ', '.join(['%s'] * len(columns))
+            col_names = ', '.join(columns)
+            all_values = []
+            for _, row in df.iterrows():
+                values = []
+                for col in columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        values.append(None)
+                    else:
+                        values.append(val)
+                all_values.append(values)
+            cur.executemany(f"INSERT INTO web_trigger_review ({col_names}) VALUES ({placeholders})", all_values)
+            inserted = len(all_values)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'导入成功：删除 {deleted} 条，导入 {inserted} 条'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': f'导入失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/item-prototypes-review')
+def item_prototypes_review():
+    """监控项原型复核表管理"""
+    sync_filter = request.args.get('sync_filter', 'all').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    page, per_page = _safe_pagination(page, per_page)
+    offset = (page - 1) * per_page
+
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        where_extra = ""
+        params = []
+        if sync_filter == 'pending':
+            where_extra = " WHERE (sync_status != 'synced' OR sync_status IS NULL)"
+        cur.execute(f"SELECT COUNT(*) FROM item_prototypes_review{where_extra}", params)
+        total = cur.fetchone()['count']
+        cur.execute(f"SELECT * FROM item_prototypes_review{where_extra} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
 
     total_pages = (total + per_page - 1) // per_page
     return render_template('item_prototypes_review.html', prototypes=prototypes,
+                           sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -2871,7 +3746,7 @@ def confirm_item_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE item_prototypes_review SET confirmed = true WHERE id = %s", (review_id,))
+            cur.execute("UPDATE item_prototypes_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2886,7 +3761,7 @@ def unconfirm_item_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE item_prototypes_review SET confirmed = false WHERE id = %s", (review_id,))
+            cur.execute("UPDATE item_prototypes_review SET confirmed = false, sync_status = 'pending_confirm', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2898,6 +3773,7 @@ def unconfirm_item_prototype_review(review_id):
 @app.route('/trigger-prototypes-review')
 def trigger_prototypes_review():
     """触发器原型复核表管理"""
+    sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -2905,14 +3781,20 @@ def trigger_prototypes_review():
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT COUNT(*) FROM trigger_prototypes_review")
+        where_extra = ""
+        params = []
+        if sync_filter == 'pending':
+            where_extra = " WHERE (sync_status != 'synced' OR sync_status IS NULL)"
+        cur.execute(f"SELECT COUNT(*) FROM trigger_prototypes_review{where_extra}", params)
         total = cur.fetchone()['count']
-        cur.execute("SELECT * FROM trigger_prototypes_review ORDER BY id LIMIT %s OFFSET %s", (per_page, offset))
+        cur.execute(f"SELECT * FROM trigger_prototypes_review{where_extra} ORDER BY id LIMIT %s OFFSET %s",
+                    params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
 
     total_pages = (total + per_page - 1) // per_page
     return render_template('trigger_prototypes_review.html', prototypes=prototypes,
+                           sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -2965,7 +3847,7 @@ def confirm_trigger_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE trigger_prototypes_review SET confirmed = true WHERE id = %s", (review_id,))
+            cur.execute("UPDATE trigger_prototypes_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2980,7 +3862,7 @@ def unconfirm_trigger_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE trigger_prototypes_review SET confirmed = false WHERE id = %s", (review_id,))
+            cur.execute("UPDATE trigger_prototypes_review SET confirmed = false, sync_status = 'pending_confirm', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -2993,49 +3875,50 @@ def unconfirm_trigger_prototype_review(review_id):
 @app.route('/item-prototypes-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_item_prototypes_review():
-    """初始化 item_prototypes_review 表：清空并重新从 item_prototypes × discovery_rules × hosts 填充"""
+    """初始化 item_prototypes_review 表：基于 Diff 算法增量更新"""
     conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM item_prototypes_review")
-            deleted = cur.fetchone()[0]
-            cur.execute("TRUNCATE item_prototypes_review RESTART IDENTITY")
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            cur.execute("SELECT * FROM item_prototypes_review")
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据
             cur.execute("""
-                INSERT INTO item_prototypes_review (
-                    item_prototype_id, discovery_rule_id, host_ip, name, key, value_type, delay,
-                    description, units, multiplier, delta, history, trends, status,
-                    system, subsystem, modified, confirmed, status_verification
-                )
                 SELECT
-                    ip.id,
+                    ip.id as item_prototype_id,
                     ip.discovery_rule_id,
                     h.name as host_ip,
-                    ip.name,
-                    ip.key,
-                    ip.value_type,
-                    ip.delay,
-                    ip.description,
-                    ip.units,
-                    ip.multiplier,
-                    ip.delta,
-                    ip.history,
-                    ip.trends,
-                    ip.status,
-                    h.system,
-                    h.subsystem,
-                    false,
-                    false,
-                    'pending'
+                    ip.name, ip.key, ip.value_type, ip.delay,
+                    ip.description, ip.units, ip.multiplier, ip.delta, ip.history, ip.trends,
+                    ip.status, h.system, h.subsystem, h.in_room
                 FROM item_prototypes ip
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
                 WHERE dr.template_name = %s AND h.template_name = dr.template_name
+                ORDER BY ip.id, h.name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            inserted = cur.rowcount
+            new_rows = cur.fetchall()
+
+            all_insert_cols = [
+                'item_prototype_id', 'discovery_rule_id', 'host_ip', 'name', 'key',
+                'value_type', 'delay', 'description', 'units', 'multiplier', 'delta',
+                'history', 'trends', 'status', 'system', 'subsystem', 'in_room'
+            ]
+            content_columns = [
+                'name', 'key', 'value_type', 'delay', 'description', 'units',
+                'multiplier', 'delta', 'history', 'trends', 'status', 'system', 'subsystem', 'in_room'
+            ]
+            unique_keys = ['item_prototype_id', 'host_ip']
+
+            result = _diff_and_merge(
+                cur, 'item_prototypes_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'item_prototypes_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+            'message': f'item_prototypes_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
         })
     except Exception as e:
         conn.rollback()
@@ -3125,41 +4008,48 @@ def import_item_prototypes_review():
 @app.route('/trigger-prototypes-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_trigger_prototypes_review():
-    """初始化 trigger_prototypes_review 表：清空并重新从 trigger_prototypes × discovery_rules × hosts 填充"""
+    """初始化 trigger_prototypes_review 表：基于 Diff 算法增量更新"""
     conn = get_db_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM trigger_prototypes_review")
-            deleted = cur.fetchone()[0]
-            cur.execute("TRUNCATE trigger_prototypes_review RESTART IDENTITY")
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 1. 获取现有记录
+            cur.execute("SELECT * FROM trigger_prototypes_review")
+            existing_rows = cur.fetchall()
+
+            # 2. 获取上游最新数据
             cur.execute("""
-                INSERT INTO trigger_prototypes_review (
-                    trigger_prototype_id, discovery_rule_id, host_ip, description, expression, priority, status,
-                    system, subsystem, modified, confirmed, status_verification
-                )
                 SELECT
-                    tp.id,
+                    tp.id as trigger_prototype_id,
                     tp.discovery_rule_id,
                     h.name as host_ip,
                     tp.description,
-                    tp.expression,
-                    tp.priority,
-                    tp.status,
-                    h.system,
-                    h.subsystem,
-                    false,
-                    false,
-                    'pending'
+                    REPLACE(tp.expression, '{host:', '{' || h.name || ':') as expression,
+                    tp.priority, tp.status, h.system, h.subsystem, h.in_room
                 FROM trigger_prototypes tp
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
                 WHERE dr.template_name = %s AND h.template_name = dr.template_name
+                ORDER BY tp.id, h.name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            inserted = cur.rowcount
+            new_rows = cur.fetchall()
+
+            all_insert_cols = [
+                'trigger_prototype_id', 'discovery_rule_id', 'host_ip', 'description',
+                'expression', 'priority', 'status', 'system', 'subsystem', 'in_room'
+            ]
+            content_columns = [
+                'description', 'expression', 'priority', 'status', 'system', 'subsystem', 'in_room'
+            ]
+            unique_keys = ['trigger_prototype_id', 'host_ip']
+
+            result = _diff_and_merge(
+                cur, 'trigger_prototypes_review', unique_keys, content_columns,
+                new_rows, existing_rows, all_insert_cols
+            )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'trigger_prototypes_review 表初始化成功：删除 {deleted} 条，插入 {inserted} 条'
+            'message': f'trigger_prototypes_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
         })
     except Exception as e:
         conn.rollback()

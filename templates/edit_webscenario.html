@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block page_title %}编辑Web场景{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <form method="POST">
+        <div class="mb-3">
+            <label for="system" class="form-label">系统</label>
+            <input type="text" class="form-control" id="system" name="system" value="{{ ws.system or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="subsystem" class="form-label">子系统</label>
+            <input type="text" class="form-control" id="subsystem" name="subsystem" value="{{ ws.subsystem or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="nginx_clb" class="form-label">nginx_clb</label>
+            <input type="text" class="form-control" id="nginx_clb" name="nginx_clb" value="{{ ws.nginx_clb or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="nginx" class="form-label">nginx</label>
+            <input type="text" class="form-control" id="nginx" name="nginx" value="{{ ws.nginx or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="clb" class="form-label">clb</label>
+            <input type="text" class="form-control" id="clb" name="clb" value="{{ ws.clb or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="pod" class="form-label">pod</label>
+            <input type="text" class="form-control" id="pod" name="pod" value="{{ ws.pod or '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="webtest_api" class="form-label">webtest_api <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="webtest_api" name="webtest_api" value="{{ ws.webtest_api or '' }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="webtest_nginx_api" class="form-label">webtest_nginx_api <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="webtest_nginx_api" name="webtest_nginx_api" value="{{ ws.webtest_nginx_api or '' }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="in_room" class="form-label">机房</label>
+            <input type="text" class="form-control" id="in_room" name="in_room" value="{{ ws.in_room or '' }}">
+        </div>
+        <button type="submit" class="btn btn-primary">更新</button>
+        <a href="{{ url_for('webscenarios') }}" class="btn btn-secondary">取消</a>
+    </form>
+</div>
+{% endblock %}

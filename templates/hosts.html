@@ -22,6 +22,7 @@
                     <th>关联模板</th>
                     <th>系统名称</th>
                     <th>模块名称</th>
+                    <th>机房</th>
                     <th>描述</th>
                     <th>创建时间</th>
                     <th>操作</th>
@@ -35,6 +36,7 @@
                     <td>{{ host.template_name or '未设置' }}</td>
                     <td>{{ host.system or '未设置' }}</td>
                     <td>{{ host.subsystem or '未设置' }}</td>
+                    <td>{{ host.in_room or '未设置' }}</td>
                     <td>{{ host.description }}</td>
                     <td>{{ host.created_at }}</td>
                     <td>

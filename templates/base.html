@@ -138,6 +138,12 @@
                     <span>触发器原型管理</span>
                 </a>
 
+                <a href="{{ url_for('webscenarios') }}"
+                   class="sidebar-menu-item"
+                   data-route="webscenarios|add_webscenario|edit_webscenario|webscenario/add|webscenario/edit|webscenario/delete">
+                    <span>Web场景管理</span>
+                </a>
+
                 <a href="{{ url_for('discovery_rules') }}"
                    class="sidebar-menu-item"
                    data-route="discovery-rules|discovery-rule|edit_discovery_rule">
@@ -184,6 +190,12 @@
                    class="sidebar-menu-item"
                    data-route="webscenarios-review|webscenarios_review|webscenario-review|edit_webscenario_review">
                     <span>Web场景复核</span>
+                </a>
+
+                <a href="{{ url_for('web_triggers_review') }}"
+                   class="sidebar-menu-item"
+                   data-route="web-triggers-review|web_triggers_review|web-trigger-review|edit_web_trigger_review">
+                    <span>Web触发器复核</span>
                 </a>
 
                 <!-- 主机管理 -->

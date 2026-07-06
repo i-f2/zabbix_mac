@@ -461,7 +461,42 @@ class ZabbixClient:
                 else:
                     logger.error("达到最大重试次数，更新触发器失败")
                     return False
-    
+
+    def delete_trigger(self, trigger_id: str) -> bool:
+        """删除触发器
+
+        Args:
+            trigger_id: 触发器 ID
+
+        Returns:
+            是否成功
+        """
+        if self.dry_run:
+            logger.info(f"[模拟] 删除触发器 (ID: {trigger_id})")
+            return True
+
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                self.api.trigger.delete(trigger_id)
+                logger.info(f"成功删除触发器 (ID: {trigger_id})")
+                return True
+            except ZabbixAPIException as e:
+                logger.error(f"删除触发器失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除触发器失败")
+                    return False
+            except Exception as e:
+                logger.error(f"删除触发器时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除触发器失败")
+                    return False
+
     def get_managed_discovery_rules(self, host_id: str) -> List[Dict[str, Any]]:
         """获取主机的所有受管理自动发现规则
         
@@ -662,7 +697,80 @@ class ZabbixClient:
                 else:
                     logger.error("达到最大重试次数，创建监控项原型失败")
                     return None
-    
+
+    def update_item_prototype(self, prototype_id: str, prototype_data: Dict[str, Any]) -> bool:
+        """更新监控项原型
+
+        Args:
+            prototype_id: 监控项原型 ID
+            prototype_data: 监控项原型数据
+
+        Returns:
+            是否成功
+        """
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                # 添加管理标签
+                if "tags" not in prototype_data:
+                    prototype_data["tags"] = []
+                prototype_data["tags"].append(MANAGED_TAG)
+
+                prototype_data["itemid"] = prototype_id
+                self.api.itemprototype.update(prototype_data)
+                logger.info(f"成功更新监控项原型: {prototype_data.get('name')} (ID: {prototype_id})")
+                return True
+            except ZabbixAPIException as e:
+                logger.error(f"更新监控项原型失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，更新监控项原型失败")
+                    return False
+            except Exception as e:
+                logger.error(f"更新监控项原型时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，更新监控项原型失败")
+                    return False
+
+    def delete_item_prototype(self, prototype_id: str) -> bool:
+        """删除监控项原型
+
+        Args:
+            prototype_id: 监控项原型 ID
+
+        Returns:
+            是否成功
+        """
+        if self.dry_run:
+            logger.info(f"[模拟] 删除监控项原型 (ID: {prototype_id})")
+            return True
+
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                self.api.itemprototype.delete(prototype_id)
+                logger.info(f"成功删除监控项原型 (ID: {prototype_id})")
+                return True
+            except ZabbixAPIException as e:
+                logger.error(f"删除监控项原型失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除监控项原型失败")
+                    return False
+            except Exception as e:
+                logger.error(f"删除监控项原型时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除监控项原型失败")
+                    return False
+
     def get_trigger_prototypes(self, rule_id: str) -> List[Dict[str, Any]]:
         """获取自动发现规则的触发器原型
         
@@ -901,6 +1009,79 @@ class ZabbixClient:
                 else:
                     logger.error("达到最大重试次数，创建触发器原型失败")
                     return None
+
+    def update_trigger_prototype(self, prototype_id: str, prototype_data: Dict[str, Any]) -> bool:
+        """更新触发器原型
+
+        Args:
+            prototype_id: 触发器原型 ID
+            prototype_data: 触发器原型数据
+
+        Returns:
+            是否成功
+        """
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                # 添加管理标签
+                if "tags" not in prototype_data:
+                    prototype_data["tags"] = []
+                prototype_data["tags"].append(MANAGED_TAG)
+
+                prototype_data["triggerid"] = prototype_id
+                self.api.triggerprototype.update(prototype_data)
+                logger.info(f"成功更新触发器原型: {prototype_data.get('description')} (ID: {prototype_id})")
+                return True
+            except ZabbixAPIException as e:
+                logger.error(f"更新触发器原型失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，更新触发器原型失败")
+                    return False
+            except Exception as e:
+                logger.error(f"更新触发器原型时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，更新触发器原型失败")
+                    return False
+
+    def delete_trigger_prototype(self, prototype_id: str) -> bool:
+        """删除触发器原型
+
+        Args:
+            prototype_id: 触发器原型 ID
+
+        Returns:
+            是否成功
+        """
+        if self.dry_run:
+            logger.info(f"[模拟] 删除触发器原型 (ID: {prototype_id})")
+            return True
+
+        for attempt in range(MAX_RETRY_ATTEMPTS):
+            try:
+                self.api.triggerprototype.delete(prototype_id)
+                logger.info(f"成功删除触发器原型 (ID: {prototype_id})")
+                return True
+            except ZabbixAPIException as e:
+                logger.error(f"删除触发器原型失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除触发器原型失败")
+                    return False
+            except Exception as e:
+                logger.error(f"删除触发器原型时发生未知错误: {e}")
+                if attempt < MAX_RETRY_ATTEMPTS - 1:
+                    logger.info(f"{RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error("达到最大重试次数，删除触发器原型失败")
+                    return False
 
 
 class ConfigLoader:
@@ -2578,13 +2759,9 @@ class SyncEngine:
                 # 处理监控项引用
                 import re
                 
-                # 确保表达式使用 {hostname:item_key} 格式，而不是 {itemid} 格式
-                # 这样可以通过界面正确读取表达式
-                # 首先将 {host:item_key} 替换为 {hostname:item_key} 格式
-                expression = expression.replace("{host:", f"{{{host_name}:")
-                logger.info(f"将表达式中的 'host:' 替换为 '{host_name}:'，结果: {expression}")
-                
+                # 数据库中存储的表达式已在初始化阶段替换为实际主机名
                 # 跳过将 {hostname:item_key} 格式替换为 {itemid} 格式的步骤
+                # 保持 {hostname:item_key} 格式，这样可以通过界面正确读取
                 # 保持 {hostname:item_key} 格式，这样可以通过界面正确读取
                 
                 # 再次检查并替换剩余的宏变量
@@ -2640,13 +2817,9 @@ class SyncEngine:
                 # 处理监控项引用
                 import re
                 
-                # 确保表达式使用 {hostname:item_key} 格式，而不是 {itemid} 格式
-                # 这样可以通过界面正确读取表达式
-                # 首先将 {host:item_key} 替换为 {hostname:item_key} 格式
-                expression = expression.replace("{host:", f"{{{host_name}:")
-                logger.info(f"将表达式中的 'host:' 替换为 '{host_name}:'，结果: {expression}")
-                
+                # 数据库中存储的表达式已在初始化阶段替换为实际主机名
                 # 跳过将 {hostname:item_key} 格式替换为 {itemid} 格式的步骤
+                # 保持 {hostname:item_key} 格式，这样可以通过界面正确读取
                 # 保持 {hostname:item_key} 格式，这样可以通过界面正确读取
                 
                 # 再次检查并替换剩余的宏变量
@@ -3140,9 +3313,8 @@ class SyncEngine:
                     # 处理监控项引用
                     import re
                     
-                    # 首先将 {host:item_key} 替换为 {hostname:item_key} 格式
-                    expression = expression.replace("{host:", f"{{{host_name}:")
-                    logger.info(f"将触发器原型表达式中的 'host:' 替换为 '{host_name}:'，结果: {expression}")
+                    # 数据库中存储的表达式已在初始化阶段替换为实际主机名
+                    logger.info(f"触发器原型表达式使用数据库中已替换好的主机名")
                     
                     # 然后处理 {hostname:item_key} 格式，替换为 {itemid} 格式
                     host_item_matches = re.findall(r'\{[^:]+:([^}]+)\}', expression)

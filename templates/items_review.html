@@ -12,8 +12,8 @@
 
     <!-- 监控同步按钮组 -->
     <div class="btn-group">
-        <button id="syncItemsBtn" class="btn btn-outline-primary" onclick="syncAllToZabbix()" title="一键同步所有已确认项(监控项/触发器/原型)到指定环境">
-            <i class="bi bi-cloud-upload"></i> 一键同步
+        <button id="syncItemsBtn" class="btn btn-outline-primary" onclick="syncAllToZabbix()" title="监控同步 - 同步所有已确认项(监控项/触发器/原型)到指定环境">
+            <i class="bi bi-cloud-upload"></i> 监控同步
         </button>
         <button id="verifyItemsBtn" class="btn btn-outline-info" onclick="verifyItemsReview()" title="从 Zabbix 拉取实际状态并核验复核表">
             <i class="bi bi-check-circle"></i> 核验
@@ -42,8 +42,32 @@
     </div>
 </div>
 
+<!-- Tab 过滤器 -->
+<div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+    <form class="d-flex flex-wrap align-items-center gap-1" method="GET" action="{{ url_for('items_review') }}">
+        <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
+        <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
+        <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
+        <div class="btn-group btn-group-sm sync-tab-group">
+            <button type="submit" name="sync_filter" value="pending"
+                    class="btn {{ 'btn-primary' if sync_filter == 'pending' else 'btn-outline-primary' }}">
+                <i class="bi bi-hourglass-split"></i> 待处理
+            </button>
+            <button type="submit" name="sync_filter" value="all"
+                    class="btn {{ 'btn-primary' if sync_filter != 'pending' else 'btn-outline-primary' }}">
+                <i class="bi bi-list-ul"></i> 全部
+            </button>
+        </div>
+        <span class="text-muted small mx-1">|</span>
+        <span class="small text-muted">
+            {% if sync_filter == 'pending' %}仅显示待同步记录{% endif %}
+        </span>
+    </form>
+</div>
+
 <!-- 筛选器行 -->
 <form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('items_review') }}">
+    <input type="hidden" name="sync_filter" value="{{ sync_filter }}">
     <input type="text" name="ip" class="form-control form-control-sm" placeholder="主机IP" style="width: 140px;" value="{{ request.args.get('ip', '') }}">
 
     <input type="text" name="system" class="form-control form-control-sm" placeholder="系统名称" style="width: 140px;"
@@ -81,7 +105,9 @@
                 <th>模板</th>
                 <th>系统名称</th>
                 <th>模块名称</th>
-                <th class="col-sticky col-sticky-r4 col-fw-status">修改状态</th>
+                <th>机房</th>
+                <th class="col-sticky col-sticky-r5 col-fw-status">修改状态</th>
+                <th class="col-sticky col-sticky-r4 col-fw-status">同步状态</th>
                 <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
                 <th class="col-sticky col-sticky-r2 col-fw-status">状态核验</th>
                 <th class="col-sticky col-sticky-r1 col-fw-action">操作</th>
@@ -89,7 +115,7 @@
         </thead>
         <tbody>
             {% for item in items %}
-                <tr>
+                <tr class="{% if item.change_type == 'new' %}row-change-new{% elif item.change_type == 'update' %}row-change-update{% elif item.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-sticky col-sticky-l1 col-fw-id">{{ item.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ item.host_ip }}</td>
                     <td>{{ item.item_key }}</td>
@@ -100,7 +126,19 @@
                     <td>{{ item.template_name }}</td>
                     <td>{{ item.system or '' }}</td>
                     <td>{{ item.subsystem or '' }}</td>
-                    <td class="col-sticky col-sticky-r4 col-fw-status">{{ '已修改' if item.modified else '未修改' }}</td>
+                    <td>{{ item.in_room or '' }}</td>
+                    <td class="col-sticky col-sticky-r5 col-fw-status">{{ '已修改' if item.modified else '未修改' }}</td>
+                    <td class="col-sticky col-sticky-r4 col-fw-status">
+                        {% if item.sync_status == 'synced' %}
+                            <span class="status-badge synced"><i class="bi bi-check-circle-fill"></i> 已同步</span>
+                        {% elif item.sync_status == 'pending_confirm' or not item.sync_status %}
+                            <span class="status-badge pending-confirm"><i class="bi bi-exclamation-triangle-fill"></i> 待确认</span>
+                        {% elif item.sync_status == 'pending_delete' %}
+                            <span class="status-badge pending-delete"><i class="bi bi-trash-fill"></i> 待清理</span>
+                        {% else %}
+                            <span class="status-badge pending">{{ item.sync_status }}</span>
+                        {% endif %}
+                    </td>
                     <td class="col-sticky col-sticky-r3 col-fw-status">{{ '已确认' if item.confirmed else '未确认' }}</td>
                     <td class="col-sticky col-sticky-r2 col-fw-status">
                         {% if item.status_verification == 'verified' %}
@@ -116,9 +154,17 @@
                     <td class="col-sticky col-sticky-r1 col-fw-action">
                         <a href="{{ url_for('edit_item_review', review_id=item.id) }}" class="btn btn-sm btn-primary">编辑</a>
                         {% if not item.confirmed %}
-                            <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ item.id }}, 'confirm', this)">确认</button>
+                            {% if item.change_type == 'new' %}
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ item.id }}, 'confirm', this)" title="确认新增并同步到Zabbix"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                            {% elif item.change_type == 'update' %}
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirm({{ item.id }}, 'confirm', this)" title="确认变更并同步到Zabbix" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="内容已变更，确认后将同步更新到Zabbix"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                            {% elif item.change_type == 'delete' %}
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirm({{ item.id }}, 'confirm', this)" title="确认下线并清理Zabbix"><i class="bi bi-x-circle"></i> 确认下线</button>
+                            {% else %}
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ item.id }}, 'confirm', this)"><i class="bi bi-check-lg"></i> 确认</button>
+                            {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-warning" onclick="toggleConfirm({{ item.id }}, 'unconfirm', this)">取消确认</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleConfirm({{ item.id }}, 'unconfirm', this)"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -133,7 +179,7 @@
         <div class="empty-desc">当前没有待复核的监控项记录。</div>
     </div>
     {% endif %}
-    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', '')}) }}
+    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', ''), 'sync_filter': sync_filter}) }}
 </div>
 
 <!-- 添加监控项 Modal -->
@@ -267,18 +313,46 @@
     </div>
   </div>
 </div>
+<!-- 同步进度弹窗 -->
+<div class="modal fade" id="syncProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">同步进度</h5>
+      </div>
+      <div class="modal-body">
+        <div class="progress mb-3" style="height: 25px;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" id="syncProgressBar" style="width: 0%">0%</div>
+        </div>
+        <p id="syncProgressText">准备中...</p>
+        <div id="syncErrorList" class="text-danger small"></div>
+        <div class="mt-3 text-end">
+          <button class="btn btn-danger btn-sm" id="stopSyncBtn" onclick="stopSync()">
+            <i class="bi bi-stop-circle"></i> 停止同步
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts_extra %}
 <script>
 async function initItemsReview() {
+    var system = document.querySelector('input[name="system"]')?.value || '';
+    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
     var btn = document.getElementById('initItemsReviewBtn');
     if (!btn) return;
     var orig = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
     try {
-        var res = await fetch('/items-review/initialize', { method: 'POST' });
+        var res = await fetch('/items-review/initialize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ system: system, subsystem: subsystem })
+        });
         var data = await res.json();
         showToast(data.message, data.success ? 'success' : 'danger');
         if (data.success) setTimeout(function () { location.reload(); }, 1500);
@@ -330,34 +404,80 @@ async function submitAddItem() {
     }
 }
 
+var _syncPollTimer = null;
+
 async function syncAllToZabbix() {
-    var env = document.getElementById('syncEnvSelect').value;
+    var envSelect = document.querySelector('[id$="EnvSelect"], #syncEnvSelect');
+    var env = envSelect ? envSelect.value : '';
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
 
-    var btn = document.getElementById('syncItemsBtn');
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
+    var system = document.querySelector('input[name="system"]')?.value || '';
+    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
+
+    // Show progress modal
+    var modal = new bootstrap.Modal(document.getElementById('syncProgressModal'));
+    modal.show();
+
+    // Reset progress display
+    document.getElementById('syncProgressBar').style.width = '0%';
+    document.getElementById('syncProgressBar').textContent = '0%';
+    document.getElementById('syncProgressText').textContent = '正在启动同步...';
+    document.getElementById('syncErrorList').innerHTML = '';
+
+    // Fire-and-forget the sync request
+    fetch('/review/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
+    });
+
+    // Start polling
+    _syncPollTimer = setInterval(pollSyncProgress, 500);
+}
+
+async function pollSyncProgress() {
     try {
-        var res = await fetch('/review/sync-all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ environment: env })
-        });
+        var res = await fetch('/review/sync-progress');
         var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
+
+        var pct = data.hosts_total > 0 ? Math.round(data.hosts_done / data.hosts_total * 100) : 0;
+        var bar = document.getElementById('syncProgressBar');
+        bar.style.width = pct + '%';
+        bar.textContent = pct + '%';
+
+        document.getElementById('syncProgressText').textContent =
+            data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
+
         if (data.errors && data.errors.length > 0) {
-            console.log('同步错误:', data.errors);
+            document.getElementById('syncErrorList').innerHTML =
+                data.errors.slice(-3).map(function(e) { return '<div>' + e + '</div>'; }).join('');
+        }
+
+        if (!data.running) {
+            clearInterval(_syncPollTimer);
+            _syncPollTimer = null;
+            setTimeout(function() { location.reload(); }, 1500);
         }
     } catch (e) {
-        showToast('同步请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
+        clearInterval(_syncPollTimer);
+        _syncPollTimer = null;
+        showToast('进度查询失败: ' + e.message, 'danger');
+    }
+}
+
+async function stopSync() {
+    try {
+        await fetch('/review/sync-abort', { method: 'POST' });
+        showToast('已发送停止信号', 'warning');
+        document.getElementById('stopSyncBtn').disabled = true;
+    } catch (e) {
+        showToast('发送停止信号失败: ' + e.message, 'danger');
     }
 }
 
 async function verifyItemsReview() {
+    var system = document.querySelector('input[name="system"]')?.value || '';
+    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
     var env = document.getElementById('syncEnvSelect').value;
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
 
@@ -369,7 +489,7 @@ async function verifyItemsReview() {
         var res = await fetch('/items-review/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ environment: env })
+            body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
         });
         var data = await res.json();
         showToast(data.message, data.success ? 'success' : 'danger');

@@ -522,7 +522,8 @@ body.sidebar-collapsed .app-main {
 .col-sticky-r1 { right: 0; }       /* 操作 — rightmost */
 .col-sticky-r2 { right: 100px; }   /* 状态核验 */
 .col-sticky-r3 { right: 180px; }   /* 确认状态 */
-.col-sticky-r4 { right: 260px; }   /* 修改状态 */
+.col-sticky-r4 { right: 260px; }   /* 同步状态 (NEW) */
+.col-sticky-r5 { right: 340px; }   /* 修改状态 */
 
 /* Fixed widths for frozen columns */
 .col-fw-id     { width: 50px;  min-width: 50px; }
@@ -568,6 +569,77 @@ body.sidebar-collapsed .app-main {
 .status-badge.pending {
     background-color: #d3d3d3;
     color: #555;
+}
+
+/* ============================================================
+   Sync Status Badges
+   ============================================================ */
+.status-badge.synced {
+    background-color: #28a745;
+}
+.status-badge.pending-confirm {
+    background-color: #ffc107;
+    color: #333;
+}
+.status-badge.pending-delete {
+    background-color: #dc3545;
+}
+
+/* ============================================================
+   Diff Row Visual Cues (change_type-based row styling)
+   ============================================================ */
+/* 新增 — 绿色左边框 + 浅绿背景 */
+tr.row-change-new {
+    border-left: 4px solid #28a745 !important;
+    background-color: #f0fff4 !important;
+}
+.table-striped tbody tr.row-change-new:nth-of-type(odd) {
+    background-color: #e8f8ee !important;
+}
+.table-striped tbody tr.row-change-new:nth-of-type(even) {
+    background-color: #f0fff4 !important;
+}
+tr.row-change-new td {
+    background-color: transparent !important;
+}
+
+/* 更新 — 橙色左边框 + 浅橙背景 */
+tr.row-change-update {
+    border-left: 4px solid #fd7e14 !important;
+    background-color: #fff8f0 !important;
+}
+.table-striped tbody tr.row-change-update:nth-of-type(odd) {
+    background-color: #fef3e8 !important;
+}
+.table-striped tbody tr.row-change-update:nth-of-type(even) {
+    background-color: #fff8f0 !important;
+}
+tr.row-change-update td {
+    background-color: transparent !important;
+}
+
+/* 删除 — 红色左边框 + 灰色文字 + 删除线 */
+tr.row-change-delete {
+    border-left: 4px solid #dc3545 !important;
+    opacity: 0.75;
+}
+tr.row-change-delete td {
+    text-decoration: line-through;
+    color: #999 !important;
+}
+tr.row-change-delete td.col-sticky {
+    background-color: #f5f5f5 !important;
+}
+
+/* ============================================================
+   Sync Tab Filter
+   ============================================================ */
+.sync-tab-group .btn {
+    font-size: 13px;
+    padding: 2px 12px;
+}
+.sync-tab-group .btn-primary {
+    font-weight: 600;
 }
 
 /* --- Bootstrap badge extensions --- */
