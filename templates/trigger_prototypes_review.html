@@ -4,7 +4,7 @@
 {% block page_title %}触发器原型复核表管理{% endblock %}
 
 {% block toolbar %}
-<div class="d-flex flex-wrap align-items-center gap-2">
+<div class="toolbar-row">
     <!-- 初始化按钮 -->
     <button id="initTriggerPrototypesReviewBtn" class="btn btn-outline-warning" onclick="initTriggerPrototypesReview()" title="清空并重新初始化 trigger_prototypes_review 表">
         <i class="bi bi-arrow-counterclockwise"></i> 初始化
@@ -38,7 +38,10 @@
 </div>
 
 <!-- Tab 过滤器 -->
-<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('trigger_prototypes_review') }}">
+<div class="toolbar-row mt-2"><form class="d-flex align-items-center gap-1" method="GET" action="{{ url_for('trigger_prototypes_review') }}">
+    <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
+    <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
+    <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
     <div class="btn-group btn-group-sm sync-tab-group">
         <button type="submit" name="sync_filter" value="pending"
                 class="btn {{ 'btn-primary' if sync_filter == 'pending' else 'btn-outline-primary' }}">
@@ -49,10 +52,11 @@
             <i class="bi bi-list-ul"></i> 全部
         </button>
     </div>
-    <span class="text-muted small">
+    <span class="text-muted small mx-1">|</span>
+    <span class="small text-muted">
         {% if sync_filter == 'pending' %}仅显示待同步记录{% endif %}
     </span>
-</form>
+</form></div>
 {% endblock %}
 
 {% block content %}

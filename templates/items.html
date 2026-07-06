@@ -4,17 +4,19 @@
 {% block page_title %}监控项管理{% endblock %}
 
 {% block toolbar %}
+<div class="toolbar-row">
 <a href="{{ url_for('add_item') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加监控项</a>
 <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
 <a href="/items/export" class="btn btn-outline-success" title="导出为 Excel"><i class="bi bi-download"></i> 导出</a>
 <button class="btn btn-outline-info" onclick="document.getElementById('importItemsFile').click()" title="从 Excel 导入"><i class="bi bi-upload"></i> 导入</button>
 <input type="file" id="importItemsFile" accept=".xlsx" style="display:none" onchange="importItems(this)">
+</div>
 <!-- 模板筛选 -->
-<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('items') }}">
-    <input type="text" name="template" class="form-control form-control-sm" placeholder="模板" style="width: 140px;" value="{{ request.args.get('template', '') }}">
-    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+<form class="toolbar-row" method="GET" action="{{ url_for('items') }}">
+    <input type="text" name="template" class="form-control" placeholder="模板" value="{{ request.args.get('template', '') }}">
+    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
     {% if request.args %}
-    <a href="{{ url_for('items') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    <a href="{{ url_for('items') }}" class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
     {% endif %}
 </form>
 

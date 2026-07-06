@@ -4,7 +4,7 @@
 {% block page_title %}Web场景复核表管理{% endblock %}
 
 {% block toolbar %}
-<div class="d-flex flex-wrap align-items-center gap-2">
+<div class="toolbar-row">
     <!-- 初始化按钮 -->
     <button id="initWebScenariosReviewBtn" class="btn btn-outline-warning" onclick="initWebScenariosReview()" title="清空并重新初始化 webscenario_items_review 表">
         <i class="bi bi-arrow-counterclockwise"></i> 初始化
@@ -57,8 +57,8 @@
 </div>
 
 <!-- Tab 过滤器 -->
-<div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-    <form class="d-flex flex-wrap align-items-center gap-1" method="GET" action="{{ url_for('webscenarios_review') }}">
+<div class="toolbar-row mt-2">
+    <form class="d-flex align-items-center gap-1" method="GET" action="{{ url_for('webscenarios_review') }}">
         <input type="hidden" name="host" value="{{ request.args.get('host', '') }}">
         <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
         <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
@@ -80,25 +80,25 @@
 </div>
 
 <!-- 筛选器行 -->
-<form class="d-flex flex-wrap align-items-center gap-2 mt-2" method="GET" action="{{ url_for('webscenarios_review') }}">
+<form class="toolbar-row" method="GET" action="{{ url_for('webscenarios_review') }}">
     <input type="hidden" name="sync_filter" value="{{ sync_filter }}">
-    <input type="text" name="host" class="form-control form-control-sm" placeholder="主机" style="width: 140px;" value="{{ request.args.get('host', '') }}">
+    <input type="text" name="host" class="form-control" placeholder="主机" value="{{ request.args.get('host', '') }}">
 
-    <input type="text" name="system" class="form-control form-control-sm" placeholder="系统名称" style="width: 140px;"
+    <input type="text" name="system" class="form-control" placeholder="系统名称"
            list="systemList" autocomplete="off" value="{{ request.args.get('system', '') }}">
     <datalist id="systemList">
         {% for s in distinct_systems %}<option value="{{ s }}">{% endfor %}
     </datalist>
 
-    <input type="text" name="subsystem" class="form-control form-control-sm" placeholder="模块名称" style="width: 140px;"
+    <input type="text" name="subsystem" class="form-control" placeholder="模块名称"
            list="subsystemList" autocomplete="off" value="{{ request.args.get('subsystem', '') }}">
     <datalist id="subsystemList">
         {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
     </datalist>
 
-    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
     {% if request.args %}
-    <a href="{{ url_for('webscenarios_review') }}" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    <a href="{{ url_for('webscenarios_review') }}" class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
     {% endif %}
 </form>
 {% endblock %}
