@@ -1,0 +1,25 @@
+<!-- 差异预览模态框 (Batch sync diff preview modal) -->
+<div class="modal fade" id="diffPreviewModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-diff"></i> 同步差异预览</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="diff-summary mb-3"></div>
+        <!-- diff table injected by BatchSync.renderDiff() -->
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-3 text-muted">正在获取差异对比...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="confirmSyncBtn" onclick="BatchSync.applySync()" disabled>
+          <i class="bi bi-cloud-upload"></i> 确认同步下发
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

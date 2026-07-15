@@ -17,10 +17,12 @@
 
     <!-- 核验按钮组 -->
     <div class="btn-group">
-        <button id="syncTriggersBtn" class="btn btn-outline-primary" onclick="syncAllToZabbix()" title="监控同步 - 同步所有已确认项到指定环境">
+        <button id="syncBtn" class="btn btn-outline-primary" onclick="BatchSync.previewSync()" disabled
+                title="勾选行后点击预览同步差异">
             <i class="bi bi-cloud-upload"></i> 监控同步
         </button>
-        <button id="verifyTriggersBtn" class="btn btn-outline-info" onclick="verifyTriggersReview()" title="从 Zabbix 拉取实际状态并核验复核表">
+        <button id="verifyBtn" class="btn btn-outline-info" onclick="verifyTriggersReview()" disabled
+                title="勾选行后点击核验状态">
             <i class="bi bi-check-circle"></i> 核验
         </button>
         <select id="syncEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
@@ -95,6 +97,7 @@
         <table class="table table-hover">
             <thead>
                 <tr>
+                    <th class="col-cb"><input type="checkbox" id="selectAllCheckbox" onclick="BatchSync.toggleAll(this)" title="全选/全不选"></th>
                     <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
                     <th class="col-sticky col-sticky-l2 col-fw-ip">主机 IP</th>
                     <th>名称</th>
@@ -114,6 +117,7 @@
             <tbody>
                 {% for trigger in triggers %}
                 <tr class="{% if trigger.change_type == 'new' %}row-change-new{% elif trigger.change_type == 'update' %}row-change-update{% elif trigger.change_type == 'delete' %}row-change-delete{% endif %}">
+                    <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ trigger.id }}" onchange="BatchSync.onCheckboxChange()"></td>
                     <td class="col-sticky col-sticky-l1 col-fw-id">{{ trigger.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ trigger.host_ip }}</td>
                     <td>{{ trigger.name }}</td>
@@ -145,20 +149,22 @@
                             <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
-                    <td class="col-sticky col-sticky-r1 col-fw-action">
-                        <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                    <td class="col-sticky col-sticky-r1 col-fw-action" data-change-type="{{ trigger.change_type or '' }}">
+                        <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-outline-primary">修改</a>
+                        {% set confirmUrl = '/trigger-review/confirm/__ID__' %}
+                        {% set unconfirmUrl = '/trigger-review/unconfirm/__ID__' %}
                         {% if not trigger.confirmed %}
                             {% if trigger.change_type == 'new' %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ trigger.id }}, 'confirm', this)" title="确认新增并同步到Zabbix"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
                             {% elif trigger.change_type == 'update' %}
-                                <button class="btn btn-sm btn-warning" onclick="toggleConfirm({{ trigger.id }}, 'confirm', this)" title="确认变更并同步到Zabbix" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="内容已变更，确认后将同步更新到Zabbix"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
                             {% elif trigger.change_type == 'delete' %}
-                                <button class="btn btn-sm btn-danger" onclick="toggleConfirm({{ trigger.id }}, 'confirm', this)" title="确认下线并清理Zabbix"><i class="bi bi-x-circle"></i> 确认下线</button>
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
                             {% else %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ trigger.id }}, 'confirm', this)"><i class="bi bi-check-lg"></i> 确认</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleConfirm({{ trigger.id }}, 'unconfirm', this)"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ trigger.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -439,24 +445,11 @@ async function verifyTriggersReview() {
     }
 }
 
-async function toggleConfirm(id, action, btn) {
-    btn.disabled = true;
-    try {
-        var url = action === 'confirm'
-            ? '/trigger-review/confirm/' + id
-            : '/trigger-review/unconfirm/' + id;
-        var res = await fetch(url, { method: 'POST' });
-        var data = await res.json();
-        if (data.success) {
-            location.reload();
-        } else {
-            showToast(data.message || '操作失败', 'danger');
-        }
-    } catch (e) {
-        showToast('请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-    }
+// toggleConfirm now handled centrally by toggleConfirmRow() in app.js
 }
 </script>
+<script>
+window.BATCH_SYNC_CONFIG = { table: 'triggers_review' };
+</script>
+{% include '_batch_sync_modal.html' %}
 {% endblock %}

@@ -829,3 +829,37 @@ tr.row-change-delete td.col-sticky {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* Batch select checkbox column */
+.data-card .col-cb {
+    width: 36px;
+    min-width: 36px;
+    text-align: center;
+    padding: 8px 4px !important;
+}
+.data-card .col-cb input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #0d6efd;
+}
+
+/* Diff preview modal summary badges */
+.diff-summary .badge {
+    padding: 8px 14px;
+    font-weight: 500;
+}
+
+/* Popconfirm bubble */
+.popconfirm-box {
+    min-width: 200px;
+}
+.popconfirm-text {
+    font-size: 13px;
+    color: #333;
+    line-height: 1.5;
+}
+.popconfirm-actions .btn {
+    font-size: 12px;
+    padding: 2px 12px;
+}

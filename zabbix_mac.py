@@ -3581,10 +3581,10 @@ class StatusVerifier:
             logger.info(f"从 Zabbix 获取到 {len(zabbix_items)} 个监控项")
         except ZabbixAPIException as e:
             logger.error(f"从 Zabbix 获取监控项失败: {e}")
-            return stats
+            raise
         except Exception as e:
             logger.error(f"从 Zabbix 获取监控项时发生未知错误: {e}")
-            return stats
+            raise
 
         # 4. 逐条比对
         updates = []
@@ -3686,10 +3686,10 @@ class StatusVerifier:
             logger.info(f"从 Zabbix 获取到 {len(zabbix_triggers)} 个触发器")
         except ZabbixAPIException as e:
             logger.error(f"从 Zabbix 获取触发器失败: {e}")
-            return stats
+            raise
         except Exception as e:
             logger.error(f"从 Zabbix 获取触发器时发生未知错误: {e}")
-            return stats
+            raise
 
         # 4. 逐条比对（仅存在性检查）
         updates = []
@@ -3838,10 +3838,10 @@ class StatusVerifier:
             logger.info(f"从 Zabbix 获取到 {len(zabbix_scenarios)} 个 Web 场景")
         except ZabbixAPIException as e:
             logger.error(f"从 Zabbix 获取 Web 场景失败: {e}")
-            return stats
+            raise
         except Exception as e:
             logger.error(f"从 Zabbix 获取 Web 场景时发生未知错误: {e}")
-            return stats
+            raise
 
         # 逐条比对
         updates = []
@@ -3944,10 +3944,10 @@ class StatusVerifier:
             logger.info(f"从 Zabbix 获取到 {len(zabbix_rules)} 个发现规则")
         except ZabbixAPIException as e:
             logger.error(f"从 Zabbix 获取发现规则失败: {e}")
-            return stats
+            raise
         except Exception as e:
             logger.error(f"从 Zabbix 获取发现规则时发生未知错误: {e}")
-            return stats
+            raise
 
         # 获取所有发现规则的监控项原型
         all_zabbix_protos = {}  # key_ -> item prototype
@@ -4066,10 +4066,10 @@ class StatusVerifier:
             logger.info(f"从 Zabbix 获取到 {len(zabbix_rules)} 个发现规则")
         except ZabbixAPIException as e:
             logger.error(f"从 Zabbix 获取发现规则失败: {e}")
-            return stats
+            raise
         except Exception as e:
             logger.error(f"从 Zabbix 获取发现规则时发生未知错误: {e}")
-            return stats
+            raise
 
         # 获取所有发现规则的触发器原型
         all_zabbix_protos = set()  # set of descriptions
@@ -4107,6 +4107,78 @@ class StatusVerifier:
                 )
 
         logger.info(f"主机 {host_ip} 触发器原型核验完成: verified={stats['verified']}, "
+                    f"not_found={stats['not_found']}")
+        return stats
+
+    def verify_web_triggers(self, host_name: str) -> Dict[str, int]:
+        """核验单个主机的 Web 触发器（存在性核验）
+
+        Args:
+            host_name: Zabbix 主机名
+
+        Returns:
+            统计字典 {'verified': n, 'not_found': n}
+        """
+        stats = {'verified': 0, 'not_found': 0}
+
+        conn = self._get_db_connection()
+        review_items = []
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(
+                "SELECT id, trigger_name, host FROM web_trigger_review WHERE host = %s",
+                (host_name,)
+            )
+            review_items = cur.fetchall()
+
+        if not review_items:
+            logger.info(f"主机 {host_name} 的 web_trigger_review 表中没有记录，跳过核验")
+            return stats
+
+        logger.info(f"开始核验主机 {host_name} 的 {len(review_items)} 个 Web 触发器...")
+
+        host_id = self.zabbix_client.get_host_id(host_name)
+        if not host_id:
+            logger.warning(f"主机 {host_name} 在 Zabbix 中不存在，所有 Web 触发器标记为 not_found")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE web_trigger_review SET status_verification = 'not_found' WHERE host = %s",
+                    (host_name,)
+                )
+            stats['not_found'] = len(review_items)
+            return stats
+
+        try:
+            zabbix_triggers = self.zabbix_client.api.trigger.get({
+                'hostids': host_id,
+                'output': ['triggerid', 'description'],
+            })
+            zabbix_trigger_names = {t['description'] for t in zabbix_triggers}
+            logger.info(f"从 Zabbix 获取到 {len(zabbix_triggers)} 个 Web 触发器")
+        except ZabbixAPIException as e:
+            logger.error(f"从 Zabbix 获取 Web 触发器失败: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"从 Zabbix 获取 Web 触发器时发生未知错误: {e}")
+            raise
+
+        updates = []
+        for ritem in review_items:
+            trigger_name = ritem['trigger_name']
+            if trigger_name in zabbix_trigger_names:
+                updates.append(('verified', ritem['id']))
+                stats['verified'] += 1
+            else:
+                updates.append(('not_found', ritem['id']))
+                stats['not_found'] += 1
+
+        with conn.cursor() as cur:
+            for status, review_id in updates:
+                cur.execute(
+                    "UPDATE web_trigger_review SET status_verification = %s WHERE id = %s",
+                    (status, review_id)
+                )
+
+        logger.info(f"主机 {host_name} Web 触发器核验完成: verified={stats['verified']}, "
                     f"not_found={stats['not_found']}")
         return stats
 

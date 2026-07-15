@@ -12,10 +12,12 @@
 
     <!-- 同步Web场景按钮组 -->
     <div class="btn-group">
-        <button id="syncWebScenariosBtn" class="btn btn-outline-primary" onclick="syncWebScenarios()" title="同步已确认Web场景到指定环境">
+        <button id="syncBtn" class="btn btn-outline-primary" onclick="BatchSync.previewSync()" disabled
+                title="勾选行后点击预览同步差异">
             <i class="bi bi-cloud-upload"></i> 同步Web场景
         </button>
-        <button id="verifyWebScenariosBtn" class="btn btn-outline-info" onclick="verifyWebScenariosReview()" title="从 Zabbix 拉取实际状态并核验复核表">
+        <button id="verifyBtn" class="btn btn-outline-info" onclick="verifyWebScenariosReview()" disabled
+                title="勾选行后点击核验状态">
             <i class="bi bi-check-circle"></i> 核验
         </button>
         <select id="syncEnvSelectScenarios" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
@@ -109,6 +111,7 @@
     <table class="table table-hover">
         <thead>
             <tr>
+                <th class="col-cb"><input type="checkbox" id="selectAllCheckbox" onclick="BatchSync.toggleAll(this)" title="全选/全不选"></th>
                 <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
                 <th class="col-sticky col-sticky-l2 col-fw-ip">主机</th>
                 <th>系统名称</th>
@@ -127,6 +130,7 @@
         <tbody>
             {% for ws in webscenarios %}
                 <tr class="{% if ws.change_type == 'new' %}row-change-new{% elif ws.change_type == 'update' %}row-change-update{% elif ws.change_type == 'delete' %}row-change-delete{% endif %}">
+                    <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ ws.id }}" onchange="BatchSync.onCheckboxChange()"></td>
                     <td class="col-sticky col-sticky-l1 col-fw-id">{{ ws.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ ws.host }}</td>
                     <td>{{ ws.system }}</td>
@@ -159,20 +163,22 @@
                             <span class="status-badge pending">未核验</span>
                         {% endif %}
                     </td>
-                    <td class="col-sticky col-sticky-r1 col-fw-action">
-                        <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                    <td class="col-sticky col-sticky-r1 col-fw-action" data-change-type="{{ ws.change_type or '' }}">
+                        <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-outline-primary">修改</a>
+                        {% set confirmUrl = '/webscenario-review/confirm/__ID__' %}
+                        {% set unconfirmUrl = '/webscenario-review/unconfirm/__ID__' %}
                         {% if not ws.confirmed %}
                             {% if ws.change_type == 'new' %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ ws.id }}, 'confirm', this)" title="确认新增并同步到Zabbix"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
                             {% elif ws.change_type == 'update' %}
-                                <button class="btn btn-sm btn-warning" onclick="toggleConfirm({{ ws.id }}, 'confirm', this)" title="确认变更并同步到Zabbix" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="内容已变更，确认后将同步更新到Zabbix"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
                             {% elif ws.change_type == 'delete' %}
-                                <button class="btn btn-sm btn-danger" onclick="toggleConfirm({{ ws.id }}, 'confirm', this)" title="确认下线并清理Zabbix"><i class="bi bi-x-circle"></i> 确认下线</button>
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
                             {% else %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirm({{ ws.id }}, 'confirm', this)"><i class="bi bi-check-lg"></i> 确认</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleConfirm({{ ws.id }}, 'unconfirm', this)"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ ws.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -448,24 +454,11 @@ async function verifyWebScenariosReview() {
     }
 }
 
-async function toggleConfirm(id, action, btn) {
-    btn.disabled = true;
-    try {
-        var url = action === 'confirm'
-            ? '/webscenario-review/confirm/' + id
-            : '/webscenario-review/unconfirm/' + id;
-        var res = await fetch(url, { method: 'POST' });
-        var data = await res.json();
-        if (data.success) {
-            location.reload();
-        } else {
-            showToast(data.message || '操作失败', 'danger');
-        }
-    } catch (e) {
-        showToast('请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-    }
+// toggleConfirm now handled centrally by toggleConfirmRow() in app.js
 }
 </script>
+<script>
+window.BATCH_SYNC_CONFIG = { table: 'webscenario_items_review' };
+</script>
+{% include '_batch_sync_modal.html' %}
 {% endblock %}
