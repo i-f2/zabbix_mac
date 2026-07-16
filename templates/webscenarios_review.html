@@ -178,7 +178,7 @@
                                 <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ ws.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ ws.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -458,7 +458,7 @@ async function verifyWebScenariosReview() {
 }
 </script>
 <script>
-window.BATCH_SYNC_CONFIG = { table: 'webscenario_items_review' };
+window.BATCH_SYNC_CONFIG = { table: 'webscenario_items_review', action_type: 'webscenario' };
 </script>
 {% include '_batch_sync_modal.html' %}
 {% endblock %}

@@ -162,7 +162,7 @@
                                 <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ t.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ t.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ t.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -435,7 +435,7 @@ async function verifyWebTriggersReview() {
 }
 </script>
 <script>
-window.BATCH_SYNC_CONFIG = { table: 'web_trigger_review' };
+window.BATCH_SYNC_CONFIG = { table: 'web_trigger_review', action_type: 'webtrigger' };
 </script>
 {% include '_batch_sync_modal.html' %}
 {% endblock %}

@@ -128,7 +128,7 @@
                                 <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ prototype.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ prototype.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消确认</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ prototype.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -303,7 +303,7 @@ async function verifyTriggerPrototypesReview() {
 }
 </script>
 <script>
-window.BATCH_SYNC_CONFIG = { table: 'trigger_prototypes_review' };
+window.BATCH_SYNC_CONFIG = { table: 'trigger_prototypes_review', action_type: 'triggerprototype' };
 </script>
 {% include '_batch_sync_modal.html' %}
 {% endblock %}

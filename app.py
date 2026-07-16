@@ -9,6 +9,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 import logging
 import os
+import re
 import secrets
 import ast
 import io
@@ -562,9 +563,32 @@ def webscenarios():
     conn.close()
 
     total_pages = (total + per_page - 1) // per_page
+    app.logger.info(f"Web场景管理: 查询到 {total} 条记录 (page={page}, per_page={per_page})")
     return render_template('webscenarios.html', webscenarios=webscenarios,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
+
+
+@app.route('/webscenarios/seed', methods=['POST'])
+def seed_webscenarios():
+    """初始化测试数据到 webscenario_items 表"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO webscenario_items (system, subsystem, nginx_clb, nginx, clb, pod, webtest_api, webtest_nginx_api, in_room)
+                VALUES
+                ('Seeded System 1', 'Seeded Sub 1', '10.0.1.1:8080', '10.0.1.2:8080', '10.0.1.3:8080', '10.0.1.4:8080', '/api/health', '/nginx/api/health', 'Seed Room A'),
+                ('Seeded System 2', 'Seeded Sub 2', '10.0.2.1:8080', '10.0.2.2:8080', '10.0.2.3:8080', '10.0.2.4:8080', '/api/status', '/nginx/api/status', 'Seed Room B')
+            """)
+        conn.commit()
+        app.logger.info("Web场景管理: 已插入 2 条测试数据")
+        return jsonify({'success': True, 'message': '已插入 2 条测试数据'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/webscenarios/export')
@@ -4955,6 +4979,153 @@ _ALLOWED_SYNC_TABLES = {
     'item_prototypes_review', 'trigger_prototypes_review', 'webscenario_items_review'
 }
 
+_ACTION_TYPE_TO_TABLE = {
+    'item': 'items_review',
+    'trigger': 'triggers_review',
+    'webscenario': 'webscenario_items_review',
+}
+
+
+def _resolve_table(table: str = '', action_type: str = '') -> str:
+    """Resolve either table or action_type to an internal table name.
+    Backward compatible: existing callers send 'table', new callers send 'action_type'.
+    """
+    if table:
+        return table
+    if action_type:
+        resolved = _ACTION_TYPE_TO_TABLE.get(action_type)
+        if resolved:
+            return resolved
+        raise ValueError(f'无效的 action_type: {action_type}。支持: item, trigger, webscenario')
+    raise ValueError('请提供 table 或 action_type 参数')
+
+
+def _parse_trigger_item_keys(expression: str):
+    """Extract item keys from a Zabbix trigger expression.
+
+    Zabbix trigger expressions look like:
+      {hostname:item.key[param1,param2].last()}>0
+      {hostname:mysql.status[uptime].last()}=0
+
+    Returns a list of unique item key strings, e.g. ['item.key[param1,param2]'].
+    """
+    if not expression or not isinstance(expression, str):
+        return []
+
+    # Match {hostname:item_key.function(params)} patterns
+    # The item_key is everything between : and the .function() part
+    # Supported Zabbix trigger functions
+    func_names = (
+        r'last|avg|min|max|sum|count|change|diff|rate|kurtosis|band|prev|'
+        r'nodata|date|dayofweek|trendavg|trendmax|trendmin|logeventid|logseverity|logsource|'
+        r'forecast|timeleft|abschange|baselinewma|baselineavg|baselinemad|str|strlen|'
+        r'regexp|iregexp|fuzzytime|percentile'
+    )
+    pattern = re.compile(
+        r'\{[^}:]+:([^}]+?)\.(?:' + func_names + r')\s*\([^)]*\)\}',
+        re.IGNORECASE
+    )
+
+    keys = set()
+    for match in pattern.finditer(expression):
+        key = match.group(1).strip()
+        if key:
+            keys.add(key)
+
+    return sorted(keys)
+
+
+def _check_item_exists_in_zabbix(client, host_id: str, item_key: str) -> bool:
+    """Check if a specific item key exists on a given host in Zabbix."""
+    try:
+        items = client.api.item.get(
+            hostids=host_id,
+            filter={'key_': item_key},
+            output=['itemid']
+        )
+        return len(items) > 0
+    except Exception as e:
+        app.logger.error(f"查询监控项 {item_key} 失败 (host_id={host_id}): {e}")
+        return False
+
+
+def _batch_check_items_exist(client, host_id: str, keys: list) -> tuple:
+    """Batch check if multiple item keys exist on a host. Returns (existing_keys, missing_keys)."""
+    if not keys:
+        return set(), []
+    try:
+        # Zabbix API filter supports array for key_ for batch lookup
+        items = client.api.item.get(
+            hostids=host_id,
+            filter={'key_': keys},
+            output=['itemid', 'key_']
+        )
+        existing_keys = {item['key_'] for item in items}
+        missing = [k for k in keys if k not in existing_keys]
+        return existing_keys, missing
+    except Exception as e:
+        app.logger.error(f"批量查询监控项失败 (host_id={host_id}): {e}")
+        # Fall back to per-key check on batch failure
+        existing = set()
+        missing = []
+        for key in keys:
+            if _check_item_exists_in_zabbix(client, host_id, key):
+                existing.add(key)
+            else:
+                missing.append(key)
+        return existing, missing
+
+
+def _validate_trigger_dependencies(client, rows: list, host_col: str):
+    """Validate that all item keys referenced in trigger expressions exist in Zabbix.
+
+    Returns:
+        (is_valid, error_dict) where error_dict is None if valid,
+        or {"success": False, "status": "error", "message": "..."} if invalid.
+    """
+    # Step 1: Extract item keys per host from trigger expressions
+    host_item_keys = {}  # {host: set of item keys}
+
+    for row in rows:
+        host = row[host_col]
+        expression = row.get('expression', '')
+        keys = _parse_trigger_item_keys(expression)
+        if host not in host_item_keys:
+            host_item_keys[host] = set()
+        host_item_keys[host].update(keys)
+
+    # Step 2: For each host, check if ALL referenced item keys exist in Zabbix
+    missing_by_host = {}
+
+    for host, keys in host_item_keys.items():
+        if not keys:
+            continue
+
+        host_id = client.get_host_id(host)
+        if not host_id:
+            missing_by_host[host] = sorted(keys)
+            continue
+
+        # Batch check all keys for this host in one API call
+        _, missing_for_host = _batch_check_items_exist(client, host_id, sorted(keys))
+
+        if missing_for_host:
+            missing_by_host[host] = sorted(missing_for_host)
+
+    if missing_by_host:
+        missing_summary = []
+        for host, keys in missing_by_host.items():
+            missing_summary.append(f'{host}: [{", ".join(keys)}]')
+        msg = (
+            f'同步失败：触发器依赖的监控项尚未在 Zabbix 中同步，'
+            f'请先去【监控项复核】页面完成该监控项的同步！\n'
+            f'缺失详情：{"; ".join(missing_summary)}'
+        )
+        return False, {'success': False, 'status': 'error', 'message': msg}
+
+    return True, None
+
+
 def _get_entity_type(table: str) -> str:
     mapping = {
         'items_review': 'Item',
@@ -5209,7 +5380,14 @@ def api_sync_preview():
     data = request.get_json()
     ids = data.get('ids', []) if data else []
     table = data.get('table', '').strip() if data else ''
+    action_type = data.get('action_type', '').strip() if data else ''
     environment = data.get('environment', '').strip() if data else ''
+
+    # Resolve table: prefer explicit table, fall back to action_type mapping
+    try:
+        table = _resolve_table(table, action_type)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
 
     if table not in _ALLOWED_SYNC_TABLES:
         return jsonify({'success': False, 'message': f'无效的表名: {table}'}), 400
@@ -5468,6 +5646,237 @@ def api_sync_apply():
         })
     except Exception as e:
         app.logger.error(f"批量同步失败: {e}")
+        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/sync/execute', methods=['POST'])
+@_with_sync_lock
+def api_sync_execute():
+    """分页面独立同步：根据 action_type 执行针对性同步。
+
+    接受 JSON: {action_type: "item"|"trigger"|"webscenario", ids: [...], environment: "..."}
+
+    - action_type='item': 仅同步 items_review 中的监控项（3-pass independent/dependent）
+    - action_type='trigger': 先执行严格的依赖项前置校验，通过后方可同步触发器
+    - action_type='webscenario': 独立同步 Web 场景配置
+    """
+    data = request.get_json()
+    ids = data.get('ids', []) if data else []
+    action_type = data.get('action_type', '').strip() if data else ''
+    environment = data.get('environment', '').strip() if data else ''
+
+    if not action_type:
+        return jsonify({'success': False, 'message': '请提供 action_type 参数 (item/trigger/webscenario)'}), 400
+    if not ids or not isinstance(ids, list):
+        return jsonify({'success': False, 'message': '请提供有效的 ID 列表'}), 400
+    if environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config['url']:
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 Zabbix URL'}), 500
+
+    try:
+        table = _resolve_table(action_type=action_type)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+    app.logger.info(f"开始同步执行: action_type={action_type}, table={table}, ids={ids[:20]}..., environment={environment}")
+
+    from zabbix_mac import ZabbixClient, ZabbixAPIException
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+    if not getattr(client, 'api', None):
+        return jsonify({'success': False, 'message': f'无法连接到 {environment} Zabbix API，请检查配置'}), 500
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            placeholders = ','.join(['%s'] * len(ids))
+            cur.execute(f"SELECT * FROM {table} WHERE id IN ({placeholders})", ids)
+            rows = cur.fetchall()
+
+        if not rows:
+            return jsonify({'success': False, 'message': '未找到匹配的记录'}), 404
+
+        host_col = _get_host_col(table)
+        hosts = {}
+        for row in rows:
+            h = row[host_col]
+            hosts.setdefault(h, []).append(row)
+
+        # ========== TRIGGER DEPENDENCY VALIDATION (strict gate) ==========
+        if action_type == 'trigger':
+            is_valid, error_response = _validate_trigger_dependencies(client, rows, host_col)
+            if not is_valid:
+                app.logger.warning(f"触发器依赖验证失败: {error_response.get('message', '')}")
+                return jsonify(error_response), 400
+
+        # ========== ACTUAL SYNC (reuses apply logic per entity type) ==========
+        created = updated = deleted = 0
+        errors = []
+
+        for host_key, host_rows in hosts.items():
+            try:
+                host_id = client.get_host_id(host_key)
+                if not host_id:
+                    errors.append(f'主机 {host_key} 在 Zabbix 中不存在')
+                    continue
+
+                if table == 'items_review':
+                    interface_id = client.get_host_interface_id(host_id)
+                    if not interface_id:
+                        errors.append(f'主机 {host_key} 无可用接口')
+                        continue
+
+                    existing_items = client.get_managed_items(host_id)
+                    current_map = {it['key_']: it for it in existing_items}
+
+                    # 3-pass: independent first, then dependent
+                    independent = []
+                    dependent = []
+                    for row in host_rows:
+                        item_type = int(row.get('type', 0))
+                        if item_type in (15, 18) and row.get('master_item'):
+                            dependent.append(row)
+                        else:
+                            independent.append(row)
+
+                    for row in independent:
+                        if row.get('change_type') == 'delete':
+                            key = row['item_key']
+                            if key in current_map:
+                                client.delete_item(current_map[key]['itemid'])
+                                deleted += 1
+                            continue
+                        item_data = _build_item_data_from_row(row, host_id, interface_id)
+                        key = row['item_key']
+                        if key in current_map:
+                            if client.calculate_fingerprint(item_data) != client.calculate_fingerprint(current_map[key]):
+                                client.update_item(current_map[key]['itemid'], item_data)
+                                updated += 1
+                        else:
+                            item_id = client.create_item(item_data)
+                            if item_id:
+                                current_map[key] = {'itemid': item_id, 'key_': key}
+                                created += 1
+
+                    for row in dependent:
+                        if row.get('change_type') == 'delete':
+                            key = row['item_key']
+                            if key in current_map:
+                                client.delete_item(current_map[key]['itemid'])
+                                deleted += 1
+                            continue
+                        item_data = _build_item_data_from_row(row, host_id, interface_id)
+                        key = row['item_key']
+                        master_key = row.get('master_item', '')
+                        if master_key in current_map:
+                            item_data['master_itemid'] = current_map[master_key]['itemid']
+                        else:
+                            errors.append(f'{host_key}/{key}: 主监控项 {master_key} 不存在，跳过')
+                            continue
+                        if key in current_map:
+                            if client.calculate_fingerprint(item_data) != client.calculate_fingerprint(current_map[key]):
+                                client.update_item(current_map[key]['itemid'], item_data)
+                                updated += 1
+                        else:
+                            item_id = client.create_item(item_data)
+                            if item_id:
+                                current_map[key] = {'itemid': item_id, 'key_': key}
+                                created += 1
+
+                elif table == 'triggers_review':
+                    existing_triggers = client.get_managed_triggers(host_id)
+                    current_map = {t['description']: t for t in existing_triggers}
+                    for row in host_rows:
+                        name = row['name']
+                        if row.get('change_type') == 'delete':
+                            if name in current_map:
+                                client.delete_trigger(current_map[name]['triggerid'])
+                                deleted += 1
+                            continue
+                        trigger_data = {
+                            'description': name,
+                            'expression': row.get('expression', ''),
+                            'priority': int(row.get('priority', 0)),
+                        }
+                        if name in current_map:
+                            if client.calculate_fingerprint(trigger_data) != client.calculate_fingerprint(current_map[name]):
+                                client.update_trigger(current_map[name]['triggerid'], trigger_data)
+                                updated += 1
+                        else:
+                            client.create_trigger(trigger_data)
+                            created += 1
+
+                elif table == 'web_trigger_review':
+                    from zabbix_mac import ZabbixUltimateAutomator
+                    automator = ZabbixUltimateAutomator(client)
+                    for row in host_rows:
+                        try:
+                            automator.create_web_scenario_triggers(
+                                host_name=row['host'],
+                                scenario_name=row.get('web_scenario_name', ''),
+                                triggers_config=[{
+                                    'description': row['trigger_name'],
+                                    'expression': row.get('expression', ''),
+                                    'priority': int(row.get('priority', 3)),
+                                }]
+                            )
+                            created += 1
+                        except Exception as e:
+                            errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
+
+                elif table == 'webscenario_items_review':
+                    existing_scenarios = client.get_managed_web_scenarios(host_id)
+                    scenario_map = {s['name']: s for s in existing_scenarios}
+                    for row in host_rows:
+                        name = row['name']
+                        if row.get('change_type') == 'delete':
+                            if name in scenario_map:
+                                client.delete_web_scenario(scenario_map[name]['httptestid'])
+                                deleted += 1
+                            continue
+                        scenario_data = {
+                            'name': name,
+                            'hostid': host_id,
+                            'url': row.get('url', ''),
+                            'status_codes': int(row.get('status_code', 200)),
+                            'timeout': '15s',
+                        }
+                        if name in scenario_map:
+                            existing = scenario_map[name]
+                            if client.calculate_fingerprint(scenario_data) != client.calculate_fingerprint(existing):
+                                client.update_web_scenario(existing['httptestid'], scenario_data)
+                                updated += 1
+                        else:
+                            client.create_web_scenario(scenario_data)
+                            created += 1
+
+                else:
+                    errors.append(f'{host_key}: 该类型同步请使用全局"监控同步"功能')
+                    continue
+
+            except ZabbixAPIException as e:
+                errors.append(f'{host_key}: Zabbix API 错误 - {e}')
+            except Exception as e:
+                errors.append(f'{host_key}: {e}')
+
+        msg = f'同步至{environment}完成：新建 {created}，更新 {updated}，删除 {deleted}'
+        if errors:
+            msg += f'，{len(errors)} 个失败'
+        app.logger.info(f"同步执行完成: {msg}")
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'created': created,
+            'updated': updated,
+            'deleted': deleted,
+            'errors': errors[:10]
+        })
+    except Exception as e:
+        app.logger.error(f"同步执行失败: {e}")
         return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
     finally:
         conn.close()

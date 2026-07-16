@@ -158,6 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html: true,
             trigger: 'manual',
             placement: 'top',
+            container: 'body',
             fallbackPlacements: ['bottom', 'right'],
             content: '<div class="popconfirm-box">' +
                 '<span class="popconfirm-text">' + message + '</span>' +
@@ -212,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     btn.innerHTML = origHTML;
                     return;
                 }
-                showToast(action === 'confirm' ? '已确认' : '已取消确认', 'success');
+                showToast(action === 'confirm' ? '已确认' : '已取消', 'success');
 
                 // Update confirm status cell in the same row
                 var row = btn.closest('tr');
@@ -234,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 '<button class="btn btn-sm btn-outline-danger" ' +
                                 'onclick="toggleConfirmRow(' + id + ', \'unconfirm\', this, ' +
                                 '\'' + confirmUrl + '\', \'' + unconfirmUrl + '\')">' +
-                                '<i class="bi bi-arrow-return-left"></i> 取消确认</button>';
+                                '<i class="bi bi-arrow-return-left"></i> 取消</button>';
                         } else {
                             // Now unconfirmed → show confirm button (read change_type from data attr)
                             var changeType = actionCell.getAttribute('data-change-type') || '';
@@ -421,6 +422,7 @@ window.BatchSync = {
                 body: JSON.stringify({
                     ids: ids,
                     table: window.BATCH_SYNC_CONFIG.table,
+                    action_type: window.BATCH_SYNC_CONFIG.action_type || window.BATCH_SYNC_CONFIG.table,
                     environment: env
                 })
             });
@@ -431,7 +433,7 @@ window.BatchSync = {
             }
             BatchSync.renderDiff(data);
             confirmBtn.disabled = false;
-            previewModalEl._syncPayload = { ids: ids, table: window.BATCH_SYNC_CONFIG.table, environment: env };
+            previewModalEl._syncPayload = { ids: ids, table: window.BATCH_SYNC_CONFIG.table, action_type: window.BATCH_SYNC_CONFIG.action_type || window.BATCH_SYNC_CONFIG.table, environment: env };
         } catch (e) {
             body.innerHTML = '<div class="alert alert-danger m-3">请求失败: ' + BatchSync._escapeHtml(e.message) + '</div>';
         }
@@ -487,21 +489,57 @@ window.BatchSync = {
         confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
 
         try {
-            var res = await fetch('/api/sync/apply', {
+            var res = await fetch('/api/sync/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    ids: payload.ids,
+                    action_type: payload.action_type,
+                    environment: payload.environment
+                })
             });
             var data = await res.json();
+
+            // Differentiated error handling: status==='error' means dependency validation failure
+            if (!data.success) {
+                var modal = bootstrap.Modal.getInstance(modalEl);
+                if (data.status === 'error') {
+                    // Dependency validation error — show in modal, don't close it
+                    BatchSync._showErrorModal(data.message);
+                } else {
+                    modal.hide();
+                    showToast(data.message, 'danger');
+                }
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> 确认同步下发';
+                return;
+            }
+
             var modal = bootstrap.Modal.getInstance(modalEl);
             modal.hide();
-            showToast(data.message, data.success ? 'success' : 'danger');
-            if (data.success) setTimeout(function() { location.reload(); }, 1500);
+            showToast(data.message, 'success');
+            setTimeout(function() { location.reload(); }, 1500);
         } catch (e) {
             showToast('同步请求失败: ' + e.message, 'danger');
             confirmBtn.disabled = false;
             confirmBtn.innerHTML = '<i class="bi bi-cloud-upload"></i> 确认同步下发';
         }
+    },
+
+    _showErrorModal: function(message) {
+        // Show error in the already-open diffPreviewModal
+        var modalEl = document.getElementById('diffPreviewModal');
+        if (modalEl) {
+            var body = modalEl.querySelector('.modal-body');
+            var summary = modalEl.querySelector('.diff-summary');
+            if (body) {
+                body.innerHTML = '<div class="alert alert-danger m-3" style="white-space: pre-wrap; word-break: break-word;"><i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+                    BatchSync._escapeHtml(message) + '</div>';
+            }
+            if (summary) summary.innerHTML = '';
+        }
+        // Also show toast as backup notification
+        showToast('同步失败：触发器依赖的监控项缺失，请查看弹窗详情', 'danger');
     },
 
     _escapeHtml: function(text) {
