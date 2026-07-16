@@ -1,164 +1,172 @@
 {% extends 'base.html' %}
 
-{% block page_title %}系统详细信息{% endblock %}
+{% block page_title %}系统信息{% endblock %}
 
 {% block content %}
-    
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-primary mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">主机数</h5>
-                    <p class="card-text display-4">{{ stats.hosts }}</p>
+<div class="container-fluid px-4 py-3">
+    <!-- ===== 状态健康卡片行 ===== -->
+    <div class="row g-3 mb-4">
+        <!-- 平台核心引擎 -->
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="card border-start border-success border-4 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center py-3">
+                    <div>
+                        <h6 class="text-muted mb-1 text-uppercase font-monospace" style="font-size: 0.85rem;">平台核心引擎</h6>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">RUNNING 正常</span>
+                    </div>
+                    <div class="text-success fs-3"><i class="bi bi-cpu-fill"></i></div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-success mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">模板数</h5>
-                    <p class="card-text display-4">{{ stats.templates }}</p>
+
+        <!-- Zabbix API 连通性 -->
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="card border-start {{ 'border-success' if sys_info.zabbix_connected else 'border-danger' }} border-4 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center py-3">
+                    <div>
+                        <h6 class="text-muted mb-1 text-uppercase font-monospace" style="font-size: 0.85rem;">Zabbix API 连通性</h6>
+                        {% if sys_info.zabbix_connected %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">CONNECTED {{ sys_info.zabbix_latency }}ms</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">DISCONNECTED 离线</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-{{ 'success' if sys_info.zabbix_connected else 'danger' }} fs-3"><i class="bi bi-cloud-check-fill"></i></div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-info mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">监控项</h5>
-                    <p class="card-text display-4">{{ stats['items'] }}</p>
+
+        <!-- PostgreSQL 数据库 -->
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="card border-start {{ 'border-success' if sys_info.db_online else 'border-danger' }} border-4 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center py-3">
+                    <div>
+                        <h6 class="text-muted mb-1 text-uppercase font-monospace" style="font-size: 0.85rem;">PostgreSQL 数据库</h6>
+                        {% if sys_info.db_online %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">ONLINE 在线</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">OFFLINE 离线</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-{{ 'success' if sys_info.db_online else 'danger' }} fs-3"><i class="bi bi-database-fill-check"></i></div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">触发器</h5>
-                    <p class="card-text display-4">{{ stats.triggers }}</p>
+
+        <!-- 部署模式 -->
+        <div class="col-12 col-sm-6 col-md-3">
+            <div class="card border-start border-warning border-4 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center py-3">
+                    <div>
+                        <h6 class="text-muted mb-1 text-uppercase font-monospace" style="font-size: 0.85rem;">系统部署模式</h6>
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1">{{ sys_info.deploy_mode }}</span>
+                    </div>
+                    <div class="text-warning fs-3"><i class="bi bi-hourglass-split"></i></div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">自动发现规则</h5>
-                    <p class="card-text display-4">{{ stats.discovery_rules }}</p>
+
+    <!-- ===== 运行环境 + 依赖集成 双栏信息 ===== -->
+    <div class="row g-4 mb-4">
+        <!-- 系统运行环境 -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-transparent border-bottom py-3 d-flex align-items-center">
+                    <strong class="text-primary"><i class="bi bi-terminal me-2"></i>系统运行环境 (Runtime)</strong>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover table-striped mb-0 align-middle" style="font-size: 0.9rem;">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted ps-4" style="width: 35%;">应用系统版本</td>
+                                <td class="font-monospace fw-bold text-dark">{{ sys_info.version }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">Python 解释器</td>
+                                <td class="font-monospace text-secondary">{{ sys_info.python_version }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">宿主机操作系统</td>
+                                <td class="text-secondary"><i class="bi bi-apple me-1 text-secondary"></i> {{ sys_info.os_version }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">系统持续运行时间</td>
+                                <td class="text-dark fw-medium"><i class="bi bi-clock-history me-1 text-success"></i> {{ sys_info.uptime }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">系统部署模式</td>
+                                <td class="text-secondary"><span class="badge bg-secondary">{{ sys_info.deploy_mode }}</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">监控项原型</h5>
-                    <p class="card-text display-4">{{ stats.item_prototypes }}</p>
+
+        <!-- 依赖组件与服务集成 -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-transparent border-bottom py-3 d-flex align-items-center">
+                    <strong class="text-primary"><i class="bi bi-diagram-3 me-2"></i>依赖组件与服务集成 (Integrations)</strong>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">触发器原型</h5>
-                    <p class="card-text display-4">{{ stats.trigger_prototypes }}</p>
+                <div class="card-body p-0">
+                    <table class="table table-hover table-striped mb-0 align-middle" style="font-size: 0.9rem;">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted ps-4" style="width: 35%;">Zabbix Server 地址</td>
+                                <td class="font-monospace text-truncate text-secondary" style="max-width: 250px;">{{ sys_info.zabbix_url }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">Zabbix API 版本</td>
+                                <td class="font-monospace text-dark">{{ sys_info.zabbix_version }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">数据库驱动 &amp; 实例</td>
+                                <td class="text-secondary font-monospace">Psycopg2 / ops (Port: 5432)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">上游同步源 (Assets)</td>
+                                <td class="text-secondary">
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle">hosts 表联通 ({{ stats.hosts }} 台主机)</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted ps-4">上次全局刷新时间</td>
+                                <td class="text-muted font-monospace">{{ sys_info.last_check_time }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <h2 class="mt-5 mb-3">主机列表</h2>
-    <table class="table table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>ID</th>
-                <th>主机名</th>
-                <th>关联模板</th>
-                <th>监控项数量</th>
-                <th>触发器数量</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for host in hosts %}
-            <tr>
-                <td>{{ host.id }}</td>
-                <td>{{ host.name }}</td>
-                <td>{{ host.template_name or '未关联' }}</td>
-                <td>{{ host.item_count }}</td>
-                <td>{{ host.trigger_count }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h2 class="mt-5 mb-3">所有监控项</h2>
-    <table class="table table-striped table-sm">
-        <thead class="table-dark">
-            <tr>
-                <th>主机名</th>
-                <th>监控项键</th>
-                <th>名称</th>
-                <th>延迟</th>
-                <th>自定义</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in all_items %}
-            <tr>
-                <td>{{ item.host_name }}</td>
-                <td><code>{{ item.item_key }}</code></td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.delay }}</td>
-                <td>
-                    {% if item.has_custom_modification %}
-                    <span class="badge bg-warning">是</span>
-                    {% else %}
-                    <span class="badge bg-secondary">否</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h2 class="mt-5 mb-3">所有触发器</h2>
-    <table class="table table-striped table-sm">
-        <thead class="table-dark">
-            <tr>
-                <th>主机名</th>
-                <th>触发器名称</th>
-                <th>优先级</th>
-                <th>自定义</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for trigger in all_triggers %}
-            <tr>
-                <td>{{ trigger.host_name }}</td>
-                <td>{{ trigger.trigger_name }}</td>
-                <td>
-                    {% if trigger.priority == 0 %}
-                    <span class="badge bg-secondary">未分类</span>
-                    {% elif trigger.priority == 1 %}
-                    <span class="badge bg-info">信息</span>
-                    {% elif trigger.priority == 2 %}
-                    <span class="badge bg-warning">警告</span>
-                    {% elif trigger.priority == 3 %}
-                    <span class="badge bg-danger">严重</span>
-                    {% elif trigger.priority == 4 %}
-                    <span class="badge bg-dark">灾难</span>
-                    {% else %}
-                    {{ trigger.priority }}
-                    {% endif %}
-                </td>
-                <td>
-                    {% if trigger.has_custom_modification %}
-                    <span class="badge bg-warning">是</span>
-                    {% else %}
-                    <span class="badge bg-secondary">否</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- ===== 本地缓存资产统计快照 ===== -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent border-bottom py-3">
+            <strong class="text-primary"><i class="bi bi-bar-chart-line me-2"></i>本地缓存资产统计快照 (Cached Analytics)</strong>
+        </div>
+        <div class="card-body py-4">
+            <div class="row text-center g-3">
+                <div class="col-6 col-md-3 border-end">
+                    <div class="text-muted mb-1" style="font-size: 0.85rem;">已同步资产主机</div>
+                    <h3 class="fw-bold text-dark font-monospace mb-0">{{ stats.hosts }} <span class="fs-6 fw-normal text-muted">台</span></h3>
+                </div>
+                <div class="col-6 col-md-3 border-end">
+                    <div class="text-muted mb-1" style="font-size: 0.85rem;">复核监控项存量</div>
+                    <h3 class="fw-bold text-primary font-monospace mb-0">{{ stats.items }} <span class="fs-6 fw-normal text-muted">个</span></h3>
+                </div>
+                <div class="col-6 col-md-3 border-end">
+                    <div class="text-muted mb-1" style="font-size: 0.85rem;">复核触发器存量</div>
+                    <h3 class="fw-bold text-warning font-monospace mb-0">{{ stats.triggers }} <span class="fs-6 fw-normal text-muted">个</span></h3>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted mb-1" style="font-size: 0.85rem;">复核Web场景存量</div>
+                    <h3 class="fw-bold text-info font-monospace mb-0">{{ stats.web_scenarios }} <span class="fs-6 fw-normal text-muted">组</span></h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

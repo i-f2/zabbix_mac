@@ -14,6 +14,9 @@ import secrets
 import ast
 import io
 import tempfile
+import sys
+import platform
+import time
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -75,6 +78,18 @@ DB_CONFIG = get_db_config(_config)
 
 # Zabbix 环境机房配置
 ZABBIX_ENVIRONMENTS = get_zabbix_environments(_config)
+
+# ---- 系统运行时间追踪 ----
+START_TIME = time.time()
+
+
+def _format_uptime():
+    seconds = int(time.time() - START_TIME)
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    return f"{days}天 {hours}小时 {minutes}分钟"
+
 
 # ---- Excel 导入安全工具 ----
 # 每个表允许的列名白名单
@@ -400,22 +415,68 @@ def index():
 
 @app.route('/system-info')
 def system_info():
-    """系统信息详情页面"""
-    # 由于已删除所有 mac 开头的表，返回一个简单的系统信息页面
-    stats = {
-        'hosts': 0,
-        'templates': 0,
-        'items': 0,
-        'triggers': 0,
-        'discovery_rules': 0,
-        'item_prototypes': 0,
-        'trigger_prototypes': 0
+    """系统信息详情页面 — 实时采集运行环境、组件连通性与资产统计"""
+    # ---- 运行环境数据 ----
+    sys_info = {
+        'version': app.config.get('APP_VERSION', 'v1.2.5'),
+        'python_version': sys.version.split()[0],
+        'os_version': f"{platform.system()} {platform.release()} ({platform.version() or 'N/A'})",
+        'uptime': _format_uptime(),
+        'deploy_mode': 'Docker Container (K8s)' if os.path.exists('/.dockerenv') else 'Standalone (systemd)',
     }
-    hosts = []
-    all_items = []
-    all_triggers = []
-    
-    return render_template('system_info.html', stats=stats, hosts=hosts, all_items=all_items, all_triggers=all_triggers)
+
+    # ---- Zabbix API 连通性检测 ----
+    zabbix_connected = False
+    zabbix_version = 'N/A'
+    zabbix_latency = 0
+    zabbix_url_display = 'N/A'
+
+    for env_name, env_cfg in ZABBIX_ENVIRONMENTS.items():
+        if env_cfg.get('url'):
+            zabbix_url_display = env_cfg['url']
+            try:
+                from zabbix_mac import ZabbixAPI
+                t0 = time.time()
+                api = ZabbixAPI(env_cfg['url'])
+                ver = api.api_version
+                latency = int((time.time() - t0) * 1000)
+                zabbix_connected = True
+                zabbix_version = ver
+                zabbix_latency = latency
+                app.logger.info(f"Zabbix API ({env_name}) 连通正常: version={ver}, latency={latency}ms")
+            except Exception as e:
+                app.logger.warning(f"Zabbix API ({env_name}) 连通检测失败: {e}")
+            break  # 只检测第一个已配置的环境
+
+    sys_info['zabbix_connected'] = zabbix_connected
+    sys_info['zabbix_version'] = zabbix_version
+    sys_info['zabbix_latency'] = zabbix_latency
+    sys_info['zabbix_url'] = zabbix_url_display
+
+    # ---- 数据库连通性与资产统计 ----
+    db_online = False
+    stats = {'hosts': 0, 'items': 0, 'triggers': 0, 'web_scenarios': 0}
+
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM hosts")
+            stats['hosts'] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM items_review")
+            stats['items'] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM triggers_review")
+            stats['triggers'] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM webscenario_items_review")
+            stats['web_scenarios'] = cur.fetchone()[0]
+        conn.close()
+        db_online = True
+    except Exception as e:
+        app.logger.error(f"系统信息页 DB 统计查询失败: {e}")
+
+    sys_info['db_online'] = db_online
+    sys_info['last_check_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    return render_template('system_info.html', sys_info=sys_info, stats=stats)
 
 @app.route('/templates')
 def templates():
