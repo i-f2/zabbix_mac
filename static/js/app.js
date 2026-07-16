@@ -119,6 +119,33 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ========================================================
+    // Sidebar Pending Badges — 异步获取未确认复核数量
+    // ========================================================
+    fetch('/api/review/pending-counts')
+        .then(function(r) { return r.json(); })
+        .then(function(response) {
+            if (!response.success) return;
+            var data = response.data;
+            var badgeMap = {
+                items: 'badge-items-count',
+                triggers: 'badge-triggers-count',
+                web: 'badge-web-count'
+            };
+            Object.keys(badgeMap).forEach(function(k) {
+                var el = document.getElementById(badgeMap[k]);
+                if (!el) return;
+                var count = data[k] || 0;
+                el.textContent = count;
+                if (count > 0) {
+                    el.classList.remove('d-none');
+                } else {
+                    el.classList.add('d-none');
+                }
+            });
+        })
+        .catch(function() { /* 优雅降级：保持 Badge 隐藏 */ });
+
+    // ========================================================
     // Global Search
     // ========================================================
     const searchInput = document.getElementById('globalSearch');

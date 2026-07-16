@@ -100,7 +100,7 @@
         <aside class="app-sidebar" id="appSidebar">
             <nav class="sidebar-nav">
 
-                <!-- 系统信息 -->
+                <!-- ====== 系统信息 ====== -->
                 <a href="{{ url_for('system_info') }}"
                    class="sidebar-menu-item"
                    data-route="system_info|system-info">
@@ -108,103 +108,114 @@
                     <span>系统信息</span>
                 </a>
 
-                <!-- === 分组：预定义模版管理 === -->
-                <div class="sidebar-menu-group-title">
-                    <i class="bi bi-files"></i>
-                    <span>预定义模版管理</span>
-                </div>
-
-                <a href="{{ url_for('items') }}"
-                   class="sidebar-menu-item"
-                   data-route="items|add_item|edit_item|item/edit|item/add|item/delete">
-                    <span>监控项管理</span>
-                </a>
-
-                <a href="{{ url_for('triggers') }}"
-                   class="sidebar-menu-item"
-                   data-route="triggers|add_trigger|edit_trigger|trigger/edit|trigger/add|trigger/delete">
-                    <span>触发器管理</span>
-                </a>
-
-                <a href="{{ url_for('item_prototypes') }}"
-                   class="sidebar-menu-item"
-                   data-route="item-prototypes|item-prototype|edit_item_prototype">
-                    <span>监控项原型管理</span>
-                </a>
-
-                <a href="{{ url_for('trigger_prototypes') }}"
-                   class="sidebar-menu-item"
-                   data-route="trigger-prototypes|trigger-prototype|edit_trigger_prototype">
-                    <span>触发器原型管理</span>
-                </a>
-
-                <a href="{{ url_for('webscenarios') }}"
-                   class="sidebar-menu-item"
-                   data-route="webscenarios|add_webscenario|edit_webscenario|webscenario/add|webscenario/edit|webscenario/delete">
-                    <span>Web场景管理</span>
-                </a>
-
-                <a href="{{ url_for('discovery_rules') }}"
-                   class="sidebar-menu-item"
-                   data-route="discovery-rules|discovery-rule|edit_discovery_rule">
-                    <span>自动发现规则列表</span>
-                </a>
-
-                <a href="{{ url_for('filter_conditions') }}"
-                   class="sidebar-menu-item"
-                   data-route="filter-conditions|filter-condition|edit_filter_condition">
-                    <span>自动发现过滤规则管理</span>
-                </a>
-
-                <!-- === 分组：复核表管理 === -->
-                <div class="sidebar-menu-group-title">
-                    <i class="bi bi-check2-square"></i>
-                    <span>复核表管理</span>
-                </div>
-
-                <a href="{{ url_for('items_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="items-review|items_review|item-review|edit_item_review">
-                    <span>监控项复核</span>
-                </a>
-
-                <a href="{{ url_for('triggers_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="triggers-review|triggers_review|trigger-review|edit_trigger_review">
-                    <span>触发器复核</span>
-                </a>
-
-                <a href="{{ url_for('item_prototypes_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="item-prototypes-review|item-prototypes_review|item-prototype-review|edit_item_prototype_review">
-                    <span>监控项原型复核</span>
-                </a>
-
-                <a href="{{ url_for('trigger_prototypes_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="trigger-prototypes-review|trigger-prototypes_review|trigger-prototype-review|edit_trigger_prototype_review">
-                    <span>触发器原型复核</span>
-                </a>
-
-                <a href="{{ url_for('webscenarios_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="webscenarios-review|webscenarios_review|webscenario-review|edit_webscenario_review">
-                    <span>Web场景复核</span>
-                </a>
-
-                <a href="{{ url_for('web_triggers_review') }}"
-                   class="sidebar-menu-item"
-                   data-route="web-triggers-review|web_triggers_review|web-trigger-review|edit_web_trigger_review">
-                    <span>Web触发器复核</span>
-                </a>
-
-                <!-- 主机管理 -->
+                <!-- ====== 资产主机管理 ====== -->
                 <a href="{{ url_for('hosts') }}"
                    class="sidebar-menu-item"
                    data-route="hosts|add_host|edit_host|host/edit|host/add|host/delete">
-                    <i class="bi bi-hdd-stack"></i>
-                    <span>主机管理</span>
+                    <i class="bi bi-server"></i>
+                    <span>资产主机管理</span>
                 </a>
+
+                <!-- ====== 分组：监控复核工作台 (默认展开) ====== -->
+                <a class="sidebar-menu-group-title sidebar-group-toggle"
+                   data-bs-toggle="collapse" href="#sidebarCollapseReview" role="button"
+                   aria-expanded="true">
+                    <i class="bi bi-kanban"></i>
+                    <span>监控复核工作台</span>
+                    <i class="bi bi-chevron-down sidebar-group-arrow ms-auto"></i>
+                </a>
+                <div class="collapse show" id="sidebarCollapseReview">
+                    <a href="{{ url_for('items_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="items-review|items_review|item-review|edit_item_review">
+                        <span>监控项复核</span>
+                        <span class="badge rounded-pill bg-danger ms-auto d-none" id="badge-items-count">0</span>
+                    </a>
+
+                    <a href="{{ url_for('triggers_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="triggers-review|triggers_review|trigger-review|edit_trigger_review">
+                        <span>触发器复核</span>
+                        <span class="badge rounded-pill bg-danger ms-auto d-none" id="badge-triggers-count">0</span>
+                    </a>
+
+                    <a href="{{ url_for('item_prototypes_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="item-prototypes-review|item-prototypes_review|item-prototype-review|edit_item_prototype_review">
+                        <span>监控项原型复核</span>
+                    </a>
+
+                    <a href="{{ url_for('trigger_prototypes_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="trigger-prototypes-review|trigger-prototypes_review|trigger-prototype-review|edit_trigger_prototype_review">
+                        <span>触发器原型复核</span>
+                    </a>
+
+                    <a href="{{ url_for('webscenarios_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="webscenarios-review|webscenarios_review|webscenario-review|edit_webscenario_review">
+                        <span>Web场景复核</span>
+                        <span class="badge rounded-pill bg-danger ms-auto d-none" id="badge-web-count">0</span>
+                    </a>
+
+                    <a href="{{ url_for('web_triggers_review') }}"
+                       class="sidebar-menu-item sidebar-sub-item"
+                       data-route="web-triggers-review|web_triggers_review|web-trigger-review|edit_web_trigger_review">
+                        <span>Web触发器复核</span>
+                    </a>
+                </div>
+
+                <!-- ====== 分组：基础模板配置 (默认折叠) ====== -->
+                <a class="sidebar-menu-group-title sidebar-group-toggle"
+                   data-bs-toggle="collapse" href="#sidebarCollapseTemplate" role="button"
+                   aria-expanded="false">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span>基础模板配置</span>
+                    <i class="bi bi-chevron-right sidebar-group-arrow ms-auto"></i>
+                </a>
+                <div class="collapse" id="sidebarCollapseTemplate">
+                    <a href="{{ url_for('items') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="items|add_item|edit_item|item/edit|item/add|item/delete">
+                        <span>监控项管理</span>
+                    </a>
+
+                    <a href="{{ url_for('triggers') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="triggers|add_trigger|edit_trigger|trigger/edit|trigger/add|trigger/delete">
+                        <span>触发器管理</span>
+                    </a>
+
+                    <a href="{{ url_for('item_prototypes') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="item-prototypes|item-prototype|edit_item_prototype">
+                        <span>监控项原型管理</span>
+                    </a>
+
+                    <a href="{{ url_for('trigger_prototypes') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="trigger-prototypes|trigger-prototype|edit_trigger_prototype">
+                        <span>触发器原型管理</span>
+                    </a>
+
+                    <a href="{{ url_for('webscenarios') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="webscenarios|add_webscenario|edit_webscenario|webscenario/add|webscenario/edit|webscenario/delete">
+                        <span>Web场景管理</span>
+                    </a>
+
+                    <a href="{{ url_for('discovery_rules') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="discovery-rules|discovery-rule|edit_discovery_rule">
+                        <span>自动发现规则列表</span>
+                    </a>
+
+                    <a href="{{ url_for('filter_conditions') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="filter-conditions|filter-condition|edit_filter_condition">
+                        <span>自动发现过滤规则管理</span>
+                    </a>
+                </div>
 
             </nav>
         </aside>

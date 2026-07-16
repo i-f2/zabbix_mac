@@ -413,6 +413,26 @@ def index():
     
     return render_template('index.html', stats=stats, hosts=hosts)
 
+
+@app.route('/api/review/pending-counts')
+def api_review_pending_counts():
+    """返回各复核表的未确认记录数（用于侧边栏待办 Badge）"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM items_review WHERE confirmed = false")
+            items = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM triggers_review WHERE confirmed = false")
+            triggers = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM webscenario_items_review WHERE confirmed = false")
+            web = cur.fetchone()[0]
+        conn.close()
+        return jsonify({'success': True, 'data': {'items': items, 'triggers': triggers, 'web': web}})
+    except Exception as e:
+        app.logger.error(f"待办计数查询失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/system-info')
 def system_info():
     """系统信息详情页面 — 实时采集运行环境、组件连通性与资产统计"""
