@@ -229,19 +229,73 @@ class ZabbixClient:
                     logger.error("达到最大重试次数，获取监控项失败")
                     raise
     
+    def _resolve_application_ids(self, app_names: list, host_id: str) -> list:
+        """将应用集名称列表转换为 Zabbix 5.0 应用集 ID 列表（BUG-02 修复）
+
+        Zabbix 5.0 item.create 的 applications 参数需要已存在的应用集 ID（整数），
+        不接受名称字符串。本方法先查找已有应用集，不存在的自动创建。
+
+        Args:
+            app_names: 应用集名称列表，如 ["App1", "App2"]
+            host_id: 主机 ID
+
+        Returns:
+            应用集 ID 列表，如 [123, 456]
+        """
+        app_ids = []
+        for app_name in app_names:
+            if not isinstance(app_name, str) or not app_name.strip():
+                continue
+            try:
+                existing = self.api.application.get(
+                    output=["applicationid"],
+                    hostids=[host_id],
+                    filter={"name": app_name}
+                )
+                if existing and len(existing) > 0:
+                    app_id = existing[0]["applicationid"]
+                    logger.debug(f"找到已有应用集 '{app_name}': ID={app_id}")
+                    app_ids.append(app_id)
+                else:
+                    result = self.api.application.create({
+                        "name": app_name,
+                        "hostid": host_id
+                    })
+                    if "applicationids" in result:
+                        app_id = result["applicationids"][0]
+                        logger.info(f"自动创建应用集 '{app_name}': ID={app_id}")
+                        app_ids.append(app_id)
+            except Exception as e:
+                logger.warning(f"处理应用集 '{app_name}' 失败: {e}，跳过")
+        return app_ids
+
     def create_item(self, item_data: Dict[str, Any]) -> Optional[str]:
         """创建监控项
-        
+
         Args:
             item_data: 监控项数据
-            
+
         Returns:
-            监控项 ID 或 None
+            监控项 ID
+
+        Raises:
+            ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
         if self.dry_run:
             logger.info(f"[模拟] 创建监控项: {item_data.get('key_')}")
             return "98765"  # 模拟返回一个监控项 ID
-        
+
+        # BUG-02 修复: Zabbix 5.0 applications 字段需传应用集 ID 而非名称
+        # 自动将 application names → application IDs 转换
+        if "applications" in item_data and item_data.get("applications"):
+            app_names = item_data.pop("applications")
+            if isinstance(app_names, list) and app_names:
+                app_ids = self._resolve_application_ids(
+                    app_names, item_data.get("hostid", ""))
+                if app_ids:
+                    item_data["applicationids"] = app_ids
+
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 在 Zabbix 5.0 中，监控项没有标签功能，不添加管理标签
@@ -250,36 +304,53 @@ class ZabbixClient:
                 logger.info(f"成功创建监控项: {item_data.get('key_')} (ID: {item_id})")
                 return item_id
             except ZabbixAPIException as e:
+                last_error = e
                 logger.error(f"创建监控项失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建监控项失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建监控项失败: {item_data.get('key_')}")
+                    raise ZabbixAPIException(
+                        f"创建监控项失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
+                last_error = e
                 logger.error(f"创建监控项时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建监控项失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建监控项失败: {item_data.get('key_')}")
+                    raise ZabbixAPIException(
+                        f"创建监控项失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
     
     def update_item(self, item_id: str, item_data: Dict[str, Any]) -> bool:
         """更新监控项
-        
+
         Args:
             item_id: 监控项 ID
             item_data: 监控项数据
-            
+
         Returns:
-            是否成功
+            True 成功
+
+        Raises:
+            ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
         if self.dry_run:
             logger.info(f"[模拟] 更新监控项: {item_data.get('key_')} (ID: {item_id})")
             return True  # 模拟更新成功
-        
+
+        # BUG-02 修复: applications 名称→ID 转换
+        if "applications" in item_data and item_data.get("applications"):
+            app_names = item_data.pop("applications")
+            if isinstance(app_names, list) and app_names:
+                app_ids = self._resolve_application_ids(
+                    app_names, item_data.get("hostid", ""))
+                if app_ids:
+                    item_data["applicationids"] = app_ids
+
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 在 Zabbix 5.0 中，监控项没有标签功能，不添加管理标签
@@ -288,21 +359,25 @@ class ZabbixClient:
                 logger.info(f"成功更新监控项: {item_data.get('key_')} (ID: {item_id})")
                 return True
             except ZabbixAPIException as e:
+                last_error = e
                 logger.error(f"更新监控项失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，更新监控项失败")
-                    return False
+                    logger.error(f"达到最大重试次数，更新监控项失败: {item_data.get('key_')}")
+                    raise ZabbixAPIException(
+                        f"更新监控项失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
+                last_error = e
                 logger.error(f"更新监控项时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，更新监控项失败")
-                    return False
+                    logger.error(f"达到最大重试次数，更新监控项失败: {item_data.get('key_')}")
+                    raise ZabbixAPIException(
+                        f"更新监控项失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
     
     def delete_item(self, item_id: str) -> bool:
         """删除监控项
@@ -389,78 +464,94 @@ class ZabbixClient:
     
     def create_trigger(self, trigger_data: Dict[str, Any]) -> Optional[str]:
         """创建触发器
-        
+
         Args:
             trigger_data: 触发器数据
-            
+
         Returns:
-            触发器 ID 或 None
+            触发器 ID
+
+        Raises:
+            ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
                 if "tags" not in trigger_data:
                     trigger_data["tags"] = []
                 trigger_data["tags"].append(MANAGED_TAG)
-                
+
                 result = self.api.trigger.create(trigger_data)
                 trigger_id = result["triggerids"][0]
                 logger.info(f"成功创建触发器: {trigger_data.get('description')} (ID: {trigger_id})")
                 return trigger_id
             except ZabbixAPIException as e:
+                last_error = e
                 logger.error(f"创建触发器失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建触发器失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建触发器失败: {trigger_data.get('description')}")
+                    raise ZabbixAPIException(
+                        f"创建触发器失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
+                last_error = e
                 logger.error(f"创建触发器时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建触发器失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建触发器失败: {trigger_data.get('description')}")
+                    raise ZabbixAPIException(
+                        f"创建触发器失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
     
     def update_trigger(self, trigger_id: str, trigger_data: Dict[str, Any]) -> bool:
         """更新触发器
-        
+
         Args:
             trigger_id: 触发器 ID
             trigger_data: 触发器数据
-            
+
         Returns:
-            是否成功
+            True 成功
+
+        Raises:
+            ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
                 if "tags" not in trigger_data:
                     trigger_data["tags"] = []
                 trigger_data["tags"].append(MANAGED_TAG)
-                
+
                 trigger_data["triggerid"] = trigger_id
                 self.api.trigger.update(trigger_data)
                 logger.info(f"成功更新触发器: {trigger_data.get('description')} (ID: {trigger_id})")
                 return True
             except ZabbixAPIException as e:
+                last_error = e
                 logger.error(f"更新触发器失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，更新触发器失败")
-                    return False
+                    logger.error(f"达到最大重试次数，更新触发器失败: {trigger_data.get('description')}")
+                    raise ZabbixAPIException(
+                        f"更新触发器失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
+                last_error = e
                 logger.error(f"更新触发器时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，更新触发器失败")
-                    return False
+                    logger.error(f"达到最大重试次数，更新触发器失败: {trigger_data.get('description')}")
+                    raise ZabbixAPIException(
+                        f"更新触发器失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
 
     def delete_trigger(self, trigger_id: str) -> bool:
         """删除触发器
@@ -538,20 +629,24 @@ class ZabbixClient:
     
     def create_discovery_rule(self, rule_data: Dict[str, Any]) -> Optional[str]:
         """创建自动发现规则
-        
+
         Args:
             rule_data: 自动发现规则数据
-            
+
         Returns:
-            规则 ID 或 None
+            规则 ID
+
+        Raises:
+            ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
                 if "tags" not in rule_data:
                     rule_data["tags"] = []
                 rule_data["tags"].append(MANAGED_TAG)
-                
+
                 result = self.api.discoveryrule.create(rule_data)
                 # 检查 result 是否包含 ruleids 键
                 if "ruleids" in result and result["ruleids"]:
@@ -565,29 +660,90 @@ class ZabbixClient:
                     logger.info(f"成功创建自动发现规则: {rule_data.get('name')} (ID: {rule_id})")
                     return rule_id
                 else:
-                    logger.error(f"创建自动发现规则失败: API 返回结果中没有 ruleids 或 itemids 键: {result}")
+                    err_msg = f"创建自动发现规则失败: API 返回结果中没有 ruleids 或 itemids 键: {result}"
+                    logger.error(err_msg)
                     if attempt < MAX_RETRY_ATTEMPTS - 1:
                         logger.info(f"{RETRY_DELAY} 秒后重试...")
                         time.sleep(RETRY_DELAY)
                     else:
                         logger.error("达到最大重试次数，创建自动发现规则失败")
-                        return None
+                        raise ZabbixAPIException(err_msg)
             except ZabbixAPIException as e:
+                last_error = e
                 logger.error(f"创建自动发现规则失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建自动发现规则失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建自动发现规则失败: {rule_data.get('name')}")
+                    raise ZabbixAPIException(
+                        f"创建自动发现规则失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
+                last_error = e
                 logger.error(f"创建自动发现规则时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    logger.error("达到最大重试次数，创建自动发现规则失败")
-                    return None
+                    logger.error(f"达到最大重试次数，创建自动发现规则失败: {rule_data.get('name')}")
+                    raise ZabbixAPIException(
+                        f"创建自动发现规则失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
+
+    def ensure_discovery_rule(self, host_id: str, rule_key: str,
+                              rule_config: Dict[str, Any] = None,
+                              interface_id: str = None) -> str:
+        """确保 LLD 自动发现规则在目标主机上存在，不存在则自动创建。
+
+        先通过 Zabbix API 查找已有规则（按 hostid + key_ 过滤），
+        找到直接返回 rule_id (itemid)；找不到则用 rule_config 调用
+        discoveryrule.create 在目标主机上动态补齐。
+
+        Args:
+            host_id: Zabbix 主机 ID
+            rule_key: LLD 规则的 key_ (如 'vfs.fs.discovery')
+            rule_config: 本地 discovery_rules 表配置 {name, delay, evaltype, status, ...}
+            interface_id: 主机接口 ID（可选）
+
+        Returns:
+            rule_id (Zabbix 中的 itemid)
+
+        Raises:
+            ZabbixAPIException: 规则不存在且无法创建时抛出
+        """
+        # 1. 查找已有规则
+        try:
+            existing = self.api.discoveryrule.get(
+                hostids=[host_id],
+                output=['itemid', 'key_'],
+                filter={'key_': rule_key}
+            )
+            if existing and len(existing) > 0:
+                rule_id = existing[0]['itemid']
+                logger.info(f"找到已有 LLD 规则: {rule_key} (rule_id={rule_id})")
+                return rule_id
+        except ZabbixAPIException:
+            pass  # 查询失败继续走创建流程
+
+        # 2. 规则不存在 — 用本地配置创建
+        if not rule_config:
+            raise ZabbixAPIException(
+                f"LLD 规则 '{rule_key}' 在 Zabbix 上不存在，且无本地配置可创建")
+
+        rule_data = {
+            'hostid': host_id,
+            'name': rule_config.get('name', rule_key),
+            'key_': rule_key,
+            'type': 0,  # Zabbix agent
+            'delay': rule_config.get('delay', '60s'),
+            'status': str(rule_config.get('status', 0)),
+        }
+        if rule_config.get('evaltype') is not None:
+            rule_data['evaltype'] = str(rule_config['evaltype'])
+        if interface_id:
+            rule_data['interfaceid'] = interface_id
+
+        logger.info(f"LLD 规则 '{rule_key}' 不存在，自动创建...")
+        return self.create_discovery_rule(rule_data)
     
     def update_discovery_rule(self, rule_id: str, rule_data: Dict[str, Any]) -> bool:
         """更新自动发现规则
@@ -663,20 +819,41 @@ class ZabbixClient:
     
     def create_item_prototype(self, prototype_data: Dict[str, Any]) -> Optional[str]:
         """创建监控项原型
-        
+
         Args:
             prototype_data: 监控项原型数据
-            
+
         Returns:
-            原型 ID 或 None
+            原型 ID
+
+        Raises:
+            ZabbixAPIException: 创建失败时抛出
         """
+        last_error = None
+
+        # Zabbix 5.0 applications 兼容：名称→ID 转换
+        if "applications" in prototype_data and prototype_data.get("applications"):
+            app_names = prototype_data.pop("applications")
+            if isinstance(app_names, list) and app_names:
+                app_ids = self._resolve_application_ids(
+                    app_names, prototype_data.get("hostid", ""))
+                if app_ids:
+                    prototype_data["applicationids"] = app_ids
+
+        # Zabbix 5.0 delay 兼容：0/空值会导致 "Specified update interval is not valid"
+        delay = prototype_data.get("delay")
+        if not delay or str(delay) in ("0", "0s", "0m", "0h"):
+            prototype_data["delay"] = "60s"
+        else:
+            prototype_data["delay"] = str(delay)
+
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
                 if "tags" not in prototype_data:
                     prototype_data["tags"] = []
                 prototype_data["tags"].append(MANAGED_TAG)
-                
+
                 result = self.api.itemprototype.create(prototype_data)
                 prototype_id = result["itemids"][0]
                 logger.info(f"成功创建监控项原型: {prototype_data.get('name')} (ID: {prototype_id})")
@@ -687,16 +864,18 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建监控项原型失败")
-                    return None
+                    raise ZabbixAPIException(f"创建监控项原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"创建监控项原型时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建监控项原型失败")
-                    return None
+                    raise ZabbixAPIException(f"创建监控项原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
 
     def update_item_prototype(self, prototype_id: str, prototype_data: Dict[str, Any]) -> bool:
         """更新监控项原型
@@ -707,7 +886,11 @@ class ZabbixClient:
 
         Returns:
             是否成功
+
+        Raises:
+            ZabbixAPIException: 更新失败时抛出
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
@@ -725,16 +908,18 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新监控项原型失败")
-                    return False
+                    raise ZabbixAPIException(f"更新监控项原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"更新监控项原型时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新监控项原型失败")
-                    return False
+                    raise ZabbixAPIException(f"更新监控项原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
 
     def delete_item_prototype(self, prototype_id: str) -> bool:
         """删除监控项原型
@@ -856,13 +1041,17 @@ class ZabbixClient:
     
     def create_web_scenario(self, scenario_data: Dict[str, Any]) -> Optional[str]:
         """创建 web 场景
-        
+
         Args:
             scenario_data: web 场景数据
-            
+
         Returns:
-            web 场景 ID 或 None
+            web 场景 ID
+
+        Raises:
+            ZabbixAPIException: 创建失败时抛出
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 注意：Zabbix 5.0 API 不支持 web 场景的 tags 参数
@@ -889,27 +1078,33 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建 web 场景失败")
-                    return None
+                    raise ZabbixAPIException(f"创建 web 场景失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"创建 web 场景时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建 web 场景失败")
-                    return None
+                    raise ZabbixAPIException(f"创建 web 场景失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
     
     def update_web_scenario(self, scenario_id: str, scenario_data: Dict[str, Any]) -> bool:
         """更新 web 场景
-        
+
         Args:
             scenario_id: web 场景 ID
             scenario_data: web 场景数据
-            
+
         Returns:
             是否成功
+
+        Raises:
+            ZabbixAPIException: 更新失败时抛出
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
@@ -927,16 +1122,18 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新 web 场景失败")
-                    return False
+                    raise ZabbixAPIException(f"更新 web 场景失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"更新 web 场景时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新 web 场景失败")
-                    return False
+                    raise ZabbixAPIException(f"更新 web 场景失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
     
     def delete_web_scenario(self, scenario_id: str) -> bool:
         """删除 web 场景
@@ -971,13 +1168,17 @@ class ZabbixClient:
     
     def create_trigger_prototype(self, prototype_data: Dict[str, Any]) -> Optional[str]:
         """创建触发器原型
-        
+
         Args:
             prototype_data: 触发器原型数据
-            
+
         Returns:
-            原型 ID 或 None
+            原型 ID
+
+        Raises:
+            ZabbixAPIException: 创建失败时抛出
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
@@ -998,8 +1199,9 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建触发器原型失败")
-                    return None
+                    raise ZabbixAPIException(f"创建触发器原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"创建触发器原型时发生未知错误: {e}")
                 logger.debug(f"失败的原型数据: {prototype_data}")
@@ -1007,8 +1209,9 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，创建触发器原型失败")
-                    return None
+                    raise ZabbixAPIException(f"创建触发器原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
 
     def update_trigger_prototype(self, prototype_id: str, prototype_data: Dict[str, Any]) -> bool:
         """更新触发器原型
@@ -1019,7 +1222,11 @@ class ZabbixClient:
 
         Returns:
             是否成功
+
+        Raises:
+            ZabbixAPIException: 更新失败时抛出
         """
+        last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # 添加管理标签
@@ -1037,16 +1244,18 @@ class ZabbixClient:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新触发器原型失败")
-                    return False
+                    raise ZabbixAPIException(f"更新触发器原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
             except Exception as e:
                 logger.error(f"更新触发器原型时发生未知错误: {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
                     logger.info(f"{RETRY_DELAY} 秒后重试...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    last_error = e
                     logger.error("达到最大重试次数，更新触发器原型失败")
-                    return False
+                    raise ZabbixAPIException(f"更新触发器原型失败(重试{MAX_RETRY_ATTEMPTS}次): {last_error}")
 
     def delete_trigger_prototype(self, prototype_id: str) -> bool:
         """删除触发器原型

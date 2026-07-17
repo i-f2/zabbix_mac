@@ -9,6 +9,7 @@ Zabbix Monitor as Code (MaC) 管理界面
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 import logging
 import os
+import itertools
 import re
 import secrets
 import ast
@@ -2278,9 +2279,9 @@ def sync_all_to_zabbix():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 加载 discovery_rules 映射
-            cur.execute("SELECT id, name, key FROM discovery_rules")
-            dr_map = {row['id']: row for row in cur.fetchall()}
+            # 加载 discovery_rules 完整配置（供 LLD 自动补齐使用）
+            cur.execute("SELECT id, name, key, delay, evaltype, status FROM discovery_rules")
+            dr_map = {row['key']: row for row in cur.fetchall()}
 
             ip_filter_clause, ip_filter_params = _build_where(
                 {k: v for k, v in [('ipr.system', system_filter), ('ipr.subsystem', subsystem_filter)] if v}
@@ -2330,20 +2331,16 @@ def sync_all_to_zabbix():
                     result['errors'].append(f'[原型] 主机 {host_ip} 无可用接口')
                     continue
 
-                # 找到 Zabbix 上对应的 LLD 规则
+                # 确保 Zabbix 上存在对应的 LLD 规则（查/创建）
                 try:
-                    dr_list = client.api.discoveryrule.get(hostids=host_id, output='extend')
-                    zabbix_rule = None
-                    for r in dr_list:
-                        if r.get('key_') == dr_key or r.get('name') == dr_name:
-                            zabbix_rule = r
-                            break
-                    if not zabbix_rule:
-                        result['errors'].append(f'[原型] {host_ip}: LLD规则 {dr_key} 在 Zabbix 上不存在，跳过该规则下的原型')
-                        continue
-                    rule_id = zabbix_rule['itemid']
+                    rule_config = dr_map.get(dr_key, {})
+                    rule_id = client.ensure_discovery_rule(
+                        host_id, dr_key, rule_config, interface_id)
+                    result.setdefault('discovery_rules_created', 0)
+                    # ensure_discovery_rule 内部会创建，但我们只在新创建时计数
                 except ZabbixAPIException as e:
-                    result['errors'].append(f'[原型] {host_ip}: 查询LLD规则失败 - {e}')
+                    result['errors'].append(
+                        f'[原型] {host_ip}: LLD规则 {dr_key} 创建失败 - {e}')
                     continue
 
                 # 同步监控项原型
@@ -2368,7 +2365,7 @@ def sync_all_to_zabbix():
                             'ruleid': rule_id, 'hostid': host_id,
                             'name': row['name'], 'key_': row['key'],
                             'type': row.get('type', 0), 'value_type': row['value_type'],
-                            'delay': row.get('delay') or '30s', 'units': row.get('units', ''),
+                            'delay': _normalize_delay(row.get('delay')), 'units': row.get('units', ''),
                             'history': f"{row['history']}d" if row.get('history') else '7d',
                             'trends': f"{row['trends']}d" if row.get('trends') else '365d',
                         }
@@ -5070,6 +5067,8 @@ _ACTION_TYPE_TO_TABLE = {
     'item': 'items_review',
     'trigger': 'triggers_review',
     'webscenario': 'webscenario_items_review',
+    'itemprototype': 'item_prototypes_review',
+    'triggerprototype': 'trigger_prototypes_review',
 }
 
 
@@ -5083,7 +5082,8 @@ def _resolve_table(table: str = '', action_type: str = '') -> str:
         resolved = _ACTION_TYPE_TO_TABLE.get(action_type)
         if resolved:
             return resolved
-        raise ValueError(f'无效的 action_type: {action_type}。支持: item, trigger, webscenario')
+        raise ValueError(f'无效的 action_type: {action_type}。'
+                         f'支持: item, trigger, webscenario, itemprototype, triggerprototype')
     raise ValueError('请提供 table 或 action_type 参数')
 
 
@@ -5251,6 +5251,18 @@ def _get_entity_name(table: str, row: dict) -> str:
 def _get_host_col(table: str) -> str:
     return 'host' if table in ('webscenario_items_review', 'web_trigger_review') else 'host_ip'
 
+
+def _normalize_delay(delay) -> str:
+    """确保 delay 值为 Zabbix 5.0 合法的非零字符串格式。
+
+    Zabbix 5.0 LLD item prototype 拒绝 delay=0 或空值，
+    报错 "Specified update interval is not valid"。
+    """
+    if not delay or str(delay).strip() in ('', '0', '0s', '0m', '0h'):
+        return '60s'
+    return str(delay).strip()
+
+
 def _build_item_data_from_row(row: dict, host_id: str, interface_id: str = None) -> dict:
     """从 items_review 行构建 item_data (匹配 sync_items_to_zabbix 的逻辑)"""
     item_data = {
@@ -5278,7 +5290,8 @@ def _build_item_data_from_row(row: dict, host_id: str, interface_id: str = None)
     return item_data
 
 def _compare_entity(table: str, client, host_id: str, rows: list,
-                    changes: list, summary: dict, interface_id: str = None):
+                    changes: list, summary: dict, interface_id: str = None,
+                    dr_configs: dict = None):
     """对指定表的一批行与 Zabbix 实际状态做 dry-run 比对"""
     from zabbix_mac import ZabbixAPIException
 
@@ -5370,21 +5383,32 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 summary['create_count'] += 1
 
     elif table == 'item_prototypes_review':
-        dr_key = row.get('dr_key', '') if rows else ''
+        # 从本地 discovery_rules 获取 dr_key（替代原来不可用的 row.dr_key）
+        dr_configs = dr_configs or {}
         try:
-            discovery_rules = client.api.discoveryrule.get({
+            zabbix_rules = client.api.discoveryrule.get({
                 'hostids': host_id,
                 'output': ['itemid', 'key_'],
             })
         except Exception:
-            discovery_rules = []
+            zabbix_rules = []
         for row in rows:
-            dr_key = row.get('dr_key', '')
-            rule = next((r for r in discovery_rules if r['key_'] == dr_key), None)
-            if not rule:
-                changes.append({'host': row['host_ip'], 'type': 'ItemPrototype', 'key': row.get('key', ''),
+            dr_id = int(row.get('discovery_rule_id', 0))
+            dr_cfg = dr_configs.get(dr_id, {})
+            dr_key = dr_cfg.get('key', '')
+            if not dr_key:
+                changes.append({'host': row['host_ip'], 'type': 'ItemPrototype',
+                                'key': row.get('key', ''),
                                 'name': row.get('name', ''), 'action': 'CREATE',
-                                'details': f'发现规则 {dr_key} 不存在，将新建'})
+                                'details': '本地未找到关联的发现规则配置，将新建 LLD 规则后下发'})
+                summary['create_count'] += 1
+                continue
+            rule = next((r for r in zabbix_rules if r['key_'] == dr_key), None)
+            if not rule:
+                changes.append({'host': row['host_ip'], 'type': 'ItemPrototype',
+                                'key': row.get('key', ''),
+                                'name': row.get('name', ''), 'action': 'CREATE',
+                                'details': f'LLD 规则 {dr_key} 不存在，将自动创建后下发'})
                 summary['create_count'] += 1
                 continue
             try:
@@ -5402,21 +5426,31 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 summary['unchanged_count'] += 1
 
     elif table == 'trigger_prototypes_review':
-        dr_key = row.get('dr_key', '') if rows else ''
+        dr_configs = dr_configs or {}
         try:
-            discovery_rules = client.api.discoveryrule.get({
+            zabbix_rules = client.api.discoveryrule.get({
                 'hostids': host_id,
                 'output': ['itemid', 'key_'],
             })
         except Exception:
-            discovery_rules = []
+            zabbix_rules = []
         for row in rows:
-            dr_key = row.get('dr_key', '')
-            rule = next((r for r in discovery_rules if r['key_'] == dr_key), None)
-            if not rule:
-                changes.append({'host': row['host_ip'], 'type': 'TriggerPrototype', 'key': row.get('description', ''),
+            dr_id = int(row.get('discovery_rule_id', 0))
+            dr_cfg = dr_configs.get(dr_id, {})
+            dr_key = dr_cfg.get('key', '')
+            if not dr_key:
+                changes.append({'host': row['host_ip'], 'type': 'TriggerPrototype',
+                                'key': row.get('description', ''),
                                 'name': row.get('description', ''), 'action': 'CREATE',
-                                'details': f'发现规则 {dr_key} 不存在，将新建'})
+                                'details': '本地未找到关联的发现规则配置，将新建 LLD 规则后下发'})
+                summary['create_count'] += 1
+                continue
+            rule = next((r for r in zabbix_rules if r['key_'] == dr_key), None)
+            if not rule:
+                changes.append({'host': row['host_ip'], 'type': 'TriggerPrototype',
+                                'key': row.get('description', ''),
+                                'name': row.get('description', ''), 'action': 'CREATE',
+                                'details': f'LLD 规则 {dr_key} 不存在，将自动创建后下发'})
                 summary['create_count'] += 1
                 continue
             try:
@@ -5504,6 +5538,19 @@ def api_sync_preview():
         if not rows:
             return jsonify({'success': False, 'message': '未找到匹配的记录'}), 404
 
+        # 原型表需要 discovery_rules 配置做 dr_key 查找
+        dr_configs = {}
+        if table in ('item_prototypes_review', 'trigger_prototypes_review'):
+            dr_ids = list({int(r['discovery_rule_id']) for r in rows
+                           if r.get('discovery_rule_id')})
+            if dr_ids:
+                with conn.cursor(cursor_factory=DictCursor) as cur2:
+                    cur2.execute(
+                        f"SELECT id, name, key, delay, evaltype, status "
+                        f"FROM discovery_rules WHERE id IN ({','.join(['%s']*len(dr_ids))})",
+                        dr_ids)
+                    dr_configs = {r['id']: r for r in cur2.fetchall()}
+
         host_col = _get_host_col(table)
         hosts = {}
         for row in rows:
@@ -5516,7 +5563,8 @@ def api_sync_preview():
         for host_key, host_rows in hosts.items():
             host_id = client.get_host_id(host_key)
             interface_id = None
-            if table == 'items_review' and host_id:
+            if host_id and table in ('items_review', 'item_prototypes_review',
+                                      'trigger_prototypes_review'):
                 interface_id = client.get_host_interface_id(host_id)
 
             if not host_id:
@@ -5533,7 +5581,7 @@ def api_sync_preview():
                 continue
 
             _compare_entity(table, client, host_id, host_rows, changes, summary,
-                            interface_id=interface_id)
+                            interface_id=interface_id, dr_configs=dr_configs)
 
         app.logger.info(f"差异预览完成: {summary}")
         return jsonify({
@@ -5601,12 +5649,16 @@ def api_sync_apply():
                     errors.append(f'主机 {host_key} 在 Zabbix 中不存在')
                     continue
 
-                if table == 'items_review':
+                # Get interface_id for tables that need it (items + prototypes)
+                interface_id = None
+                if table in ('items_review', 'item_prototypes_review',
+                             'trigger_prototypes_review'):
                     interface_id = client.get_host_interface_id(host_id)
                     if not interface_id:
                         errors.append(f'主机 {host_key} 无可用接口')
                         continue
 
+                if table == 'items_review':
                     existing_items = client.get_managed_items(host_id)
                     current_map = {it['key_']: it for it in existing_items}
 
@@ -5706,9 +5758,166 @@ def api_sync_apply():
                         except Exception as e:
                             errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
 
-                elif table in ('item_prototypes_review', 'trigger_prototypes_review'):
-                    errors.append(f'{host_key}: 原型类同步请使用全局"监控同步"功能')
-                    continue
+                elif table == 'item_prototypes_review':
+                    # 查询所有涉及的 discovery_rules 配置
+                    dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
+                                   if r.get('discovery_rule_id')})
+                    if dr_ids:
+                        dr_placeholders = ','.join(['%s'] * len(dr_ids))
+                        cur2 = conn.cursor(cursor_factory=DictCursor)
+                        cur2.execute(
+                            f"SELECT id, name, key, delay, evaltype, status "
+                            f"FROM discovery_rules WHERE id IN ({dr_placeholders})",
+                            dr_ids)
+                        dr_configs = {r['id']: r for r in cur2.fetchall()}
+                        cur2.close()
+                    else:
+                        dr_configs = {}
+
+                    # 确保每个 LLD 规则存在，然后同步原型
+                    for dr_id, dr_rows_iter in itertools.groupby(
+                            sorted(host_rows, key=lambda r: r.get('discovery_rule_id', 0)),
+                            key=lambda r: r.get('discovery_rule_id', 0)):
+                        dr_rows = list(dr_rows_iter)
+                        dr_cfg = dr_configs.get(int(dr_id) if dr_id else 0, {})
+                        dr_key = dr_cfg.get('key', '')
+
+                        if not dr_key:
+                            errors.append(f'{host_key}: 未找到 discovery_rule_id={dr_id} 的配置')
+                            continue
+
+                        # 确保 LLD 规则存在
+                        try:
+                            rule_id = client.ensure_discovery_rule(
+                                host_id, dr_key, dr_cfg, interface_id)
+                        except ZabbixAPIException as e:
+                            errors.append(
+                                f'{host_key}/LLD {dr_key}: 规则创建失败 - {e}')
+                            continue
+
+                        # 同步监控项原型
+                        existing_protos = client.get_item_prototypes(rule_id)
+                        current_map = {p['key_']: p for p in existing_protos}
+                        target_keys = set()
+
+                        for row in dr_rows:
+                            key = row.get('key', '')
+                            target_keys.add(key)
+                            try:
+                                proto_data = {
+                                    'ruleid': rule_id, 'hostid': host_id,
+                                    'name': row['name'], 'key_': key,
+                                    'type': int(row.get('type', 0)),
+                                    'value_type': row.get('value_type', 3),
+                                    'delay': _normalize_delay(row.get('delay')),
+                                }
+                                if interface_id:
+                                    proto_data['interfaceid'] = interface_id
+                                if row.get('description'):
+                                    proto_data['description'] = row['description']
+                                if row.get('history'):
+                                    proto_data['history'] = f"{row['history']}d"
+                                if row.get('trends'):
+                                    proto_data['trends'] = f"{row['trends']}d"
+                                if row.get('status') is not None:
+                                    proto_data['status'] = row['status']
+
+                                if key in current_map:
+                                    fp_t = client.calculate_fingerprint(proto_data)
+                                    fp_c = client.calculate_fingerprint(current_map[key])
+                                    if fp_t != fp_c:
+                                        client.api.itemprototype.update(
+                                            {'itemid': current_map[key]['itemid'], **proto_data})
+                                        updated += 1
+                                else:
+                                    result_id = client.create_item_prototype(proto_data)
+                                    if result_id:
+                                        current_map[key] = {'itemid': result_id, 'key_': key}
+                                        created += 1
+                            except ZabbixAPIException as e:
+                                errors.append(f'{host_key}/{key}: {e}')
+
+                        # 清理孤儿
+                        for key, p in current_map.items():
+                            if key not in target_keys:
+                                try:
+                                    client.api.itemprototype.delete(p['itemid'])
+                                    deleted += 1
+                                except ZabbixAPIException as e:
+                                    errors.append(f'{host_key}/删除原型 {key}: {e}')
+
+                elif table == 'trigger_prototypes_review':
+                    # 查询 discovery_rules 配置
+                    dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
+                                   if r.get('discovery_rule_id')})
+                    if dr_ids:
+                        dr_placeholders = ','.join(['%s'] * len(dr_ids))
+                        cur2 = conn.cursor(cursor_factory=DictCursor)
+                        cur2.execute(
+                            f"SELECT id, name, key, delay, evaltype, status "
+                            f"FROM discovery_rules WHERE id IN ({dr_placeholders})",
+                            dr_ids)
+                        dr_configs = {r['id']: r for r in cur2.fetchall()}
+                        cur2.close()
+                    else:
+                        dr_configs = {}
+
+                    for dr_id, dr_rows_iter in itertools.groupby(
+                            sorted(host_rows, key=lambda r: r.get('discovery_rule_id', 0)),
+                            key=lambda r: r.get('discovery_rule_id', 0)):
+                        dr_rows = list(dr_rows_iter)
+                        dr_cfg = dr_configs.get(int(dr_id) if dr_id else 0, {})
+                        dr_key = dr_cfg.get('key', '')
+
+                        if not dr_key:
+                            errors.append(f'{host_key}: 未找到 discovery_rule_id={dr_id} 的配置')
+                            continue
+
+                        try:
+                            rule_id = client.ensure_discovery_rule(
+                                host_id, dr_key, dr_cfg, interface_id)
+                        except ZabbixAPIException as e:
+                            errors.append(
+                                f'{host_key}/LLD {dr_key}: 规则创建失败 - {e}')
+                            continue
+
+                        existing_tprotos = client.get_trigger_prototypes(rule_id)
+                        current_map = {t['description']: t for t in existing_tprotos}
+                        target_descs = set()
+
+                        for row in dr_rows:
+                            desc = row.get('description', '')
+                            target_descs.add(desc)
+                            try:
+                                tp_data = {
+                                    'description': desc,
+                                    'expression': row.get('expression', ''),
+                                    'priority': int(row.get('priority', 0)),
+                                }
+                                if row.get('status') is not None:
+                                    tp_data['status'] = int(row['status'])
+
+                                if desc in current_map:
+                                    fp_t = client.calculate_fingerprint(tp_data)
+                                    fp_c = client.calculate_fingerprint(current_map[desc])
+                                    if fp_t != fp_c:
+                                        tp_data['triggerid'] = current_map[desc]['triggerid']
+                                        client.api.triggerprototype.update(tp_data)
+                                        updated += 1
+                                else:
+                                    tp_data['discoveryruleid'] = rule_id
+                                    client.create_trigger_prototype(tp_data)
+                                    created += 1
+                            except ZabbixAPIException as e:
+                                errors.append(f'{host_key}/{desc}: {e}')
+
+                        for desc, t in current_map.items():
+                            if desc not in target_descs:
+                                try:
+                                    client.api.triggerprototype.delete(t['triggerid'])
+                                    deleted += 1
+                                except ZabbixAPIException as e:
+                                    errors.append(f'{host_key}/删除触发器原型 {desc}: {e}')
 
                 elif table == 'webscenario_items_review':
                     errors.append(f'{host_key}: Web 场景同步请使用全局"监控同步"功能')
@@ -5811,12 +6020,16 @@ def api_sync_execute():
                     errors.append(f'主机 {host_key} 在 Zabbix 中不存在')
                     continue
 
-                if table == 'items_review':
+                # Get interface_id for tables that need it (items + prototypes)
+                interface_id = None
+                if table in ('items_review', 'item_prototypes_review',
+                             'trigger_prototypes_review'):
                     interface_id = client.get_host_interface_id(host_id)
                     if not interface_id:
                         errors.append(f'主机 {host_key} 无可用接口')
                         continue
 
+                if table == 'items_review':
                     existing_items = client.get_managed_items(host_id)
                     current_map = {it['key_']: it for it in existing_items}
 
@@ -5940,6 +6153,140 @@ def api_sync_execute():
                         else:
                             client.create_web_scenario(scenario_data)
                             created += 1
+
+                elif table == 'item_prototypes_review':
+                    dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
+                                   if r.get('discovery_rule_id')})
+                    if dr_ids:
+                        with conn.cursor(cursor_factory=DictCursor) as cur2:
+                            cur2.execute(
+                                f"SELECT id, name, key, delay, evaltype, status "
+                                f"FROM discovery_rules WHERE id IN "
+                                f"({','.join(['%s']*len(dr_ids))})", dr_ids)
+                            dr_cfgs = {r['id']: r for r in cur2.fetchall()}
+                    else:
+                        dr_cfgs = {}
+
+                    for dr_id, dr_rows_iter in itertools.groupby(
+                            sorted(host_rows, key=lambda r: r.get('discovery_rule_id', 0)),
+                            key=lambda r: r.get('discovery_rule_id', 0)):
+                        dr_rows = list(dr_rows_iter)
+                        dr_cfg = dr_cfgs.get(int(dr_id) if dr_id else 0, {})
+                        dr_key = dr_cfg.get('key', '')
+                        if not dr_key:
+                            errors.append(f'{host_key}: 未找到 discovery_rule_id={dr_id} 的配置')
+                            continue
+                        try:
+                            rule_id = client.ensure_discovery_rule(
+                                host_id, dr_key, dr_cfg, interface_id)
+                        except ZabbixAPIException as e:
+                            errors.append(f'{host_key}/LLD {dr_key}: 规则创建失败 - {e}')
+                            continue
+                        existing_protos = client.get_item_prototypes(rule_id)
+                        current_map = {p['key_']: p for p in existing_protos}
+                        target_keys = set()
+                        for row in dr_rows:
+                            key = row.get('key', '')
+                            target_keys.add(key)
+                            try:
+                                proto_data = {
+                                    'ruleid': rule_id, 'hostid': host_id,
+                                    'name': row['name'], 'key_': key,
+                                    'type': int(row.get('type', 0)),
+                                    'value_type': row.get('value_type', 3),
+                                    'delay': _normalize_delay(row.get('delay')),
+                                }
+                                if interface_id:
+                                    proto_data['interfaceid'] = interface_id
+                                if row.get('description'):
+                                    proto_data['description'] = row['description']
+                                if row.get('history'):
+                                    proto_data['history'] = f"{row['history']}d"
+                                if row.get('status') is not None:
+                                    proto_data['status'] = row['status']
+                                if key in current_map:
+                                    fp_t = client.calculate_fingerprint(proto_data)
+                                    fp_c = client.calculate_fingerprint(current_map[key])
+                                    if fp_t != fp_c:
+                                        client.api.itemprototype.update(
+                                            {'itemid': current_map[key]['itemid'], **proto_data})
+                                        updated += 1
+                                else:
+                                    result_id = client.create_item_prototype(proto_data)
+                                    if result_id:
+                                        current_map[key] = {'itemid': result_id, 'key_': key}
+                                        created += 1
+                            except ZabbixAPIException as e:
+                                errors.append(f'{host_key}/{key}: {e}')
+                        for key, p in current_map.items():
+                            if key not in target_keys:
+                                try:
+                                    client.api.itemprototype.delete(p['itemid'])
+                                    deleted += 1
+                                except ZabbixAPIException as e:
+                                    errors.append(f'{host_key}/删除原型 {key}: {e}')
+
+                elif table == 'trigger_prototypes_review':
+                    dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
+                                   if r.get('discovery_rule_id')})
+                    if dr_ids:
+                        with conn.cursor(cursor_factory=DictCursor) as cur2:
+                            cur2.execute(
+                                f"SELECT id, name, key, delay, evaltype, status "
+                                f"FROM discovery_rules WHERE id IN "
+                                f"({','.join(['%s']*len(dr_ids))})", dr_ids)
+                            dr_cfgs = {r['id']: r for r in cur2.fetchall()}
+                    else:
+                        dr_cfgs = {}
+                    for dr_id, dr_rows_iter in itertools.groupby(
+                            sorted(host_rows, key=lambda r: r.get('discovery_rule_id', 0)),
+                            key=lambda r: r.get('discovery_rule_id', 0)):
+                        dr_rows = list(dr_rows_iter)
+                        dr_cfg = dr_cfgs.get(int(dr_id) if dr_id else 0, {})
+                        dr_key = dr_cfg.get('key', '')
+                        if not dr_key:
+                            errors.append(f'{host_key}: 未找到 discovery_rule_id={dr_id} 的配置')
+                            continue
+                        try:
+                            rule_id = client.ensure_discovery_rule(
+                                host_id, dr_key, dr_cfg, interface_id)
+                        except ZabbixAPIException as e:
+                            errors.append(f'{host_key}/LLD {dr_key}: 规则创建失败 - {e}')
+                            continue
+                        existing_tprotos = client.get_trigger_prototypes(rule_id)
+                        current_map = {t['description']: t for t in existing_tprotos}
+                        target_descs = set()
+                        for row in dr_rows:
+                            desc = row.get('description', '')
+                            target_descs.add(desc)
+                            try:
+                                tp_data = {
+                                    'description': desc,
+                                    'expression': row.get('expression', ''),
+                                    'priority': int(row.get('priority', 0)),
+                                }
+                                if row.get('status') is not None:
+                                    tp_data['status'] = int(row['status'])
+                                if desc in current_map:
+                                    fp_t = client.calculate_fingerprint(tp_data)
+                                    fp_c = client.calculate_fingerprint(current_map[desc])
+                                    if fp_t != fp_c:
+                                        tp_data['triggerid'] = current_map[desc]['triggerid']
+                                        client.api.triggerprototype.update(tp_data)
+                                        updated += 1
+                                else:
+                                    tp_data['discoveryruleid'] = rule_id
+                                    client.create_trigger_prototype(tp_data)
+                                    created += 1
+                            except ZabbixAPIException as e:
+                                errors.append(f'{host_key}/{desc}: {e}')
+                        for desc, t in current_map.items():
+                            if desc not in target_descs:
+                                try:
+                                    client.api.triggerprototype.delete(t['triggerid'])
+                                    deleted += 1
+                                except ZabbixAPIException as e:
+                                    errors.append(f'{host_key}/删除触发器原型 {desc}: {e}')
 
                 else:
                     errors.append(f'{host_key}: 该类型同步请使用全局"监控同步"功能')

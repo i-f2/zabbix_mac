@@ -308,6 +308,13 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
         new bootstrap.Tooltip(el);
     });
+
+    // ========================================================
+    // Cross-page checkbox selection restoration
+    // ========================================================
+    if (window.BATCH_SYNC_CONFIG && window.BATCH_SYNC_CONFIG.table) {
+        BatchSync._restoreCheckboxes();
+    }
 });
 
 // ========================================================
@@ -371,10 +378,63 @@ function showToast(message, type) {
 // ============================================================
 // BatchSync: shared checkbox + diff-preview logic for all review tables
 // ============================================================
+// Cross-page selection persistence via sessionStorage.
+// Pagination does full page reload, so DOM-only checkbox state is lost.
+// sessionStorage survives navigations within the same tab.
 window.BatchSync = {
+    _getStorageKey: function() {
+        var table = (window.BATCH_SYNC_CONFIG && window.BATCH_SYNC_CONFIG.table) || 'unknown';
+        return 'selectedIds_' + table;
+    },
+
+    _getSelectedSet: function() {
+        var raw = sessionStorage.getItem(BatchSync._getStorageKey());
+        if (!raw) return new Set();
+        try { return new Set(JSON.parse(raw)); } catch(e) { return new Set(); }
+    },
+
+    _saveSelectedSet: function(s) {
+        sessionStorage.setItem(BatchSync._getStorageKey(), JSON.stringify(Array.from(s)));
+    },
+
+    _restoreCheckboxes: function() {
+        var selected = BatchSync._getSelectedSet();
+        var anyChecked = false;
+        document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+            if (selected.has(cb.value)) {
+                cb.checked = true;
+                anyChecked = true;
+            }
+        });
+        BatchSync._updateUI(selected.size);
+    },
+
     onCheckboxChange: function() {
-        var checked = document.querySelectorAll('.row-checkbox:checked');
-        var count = checked.length;
+        var selected = BatchSync._getSelectedSet();
+        document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+            if (cb.checked) { selected.add(cb.value); }
+            else { selected.delete(cb.value); }
+        });
+        BatchSync._saveSelectedSet(selected);
+        BatchSync._updateUI(selected.size);
+    },
+
+    toggleAll: function(el) {
+        var selected = BatchSync._getSelectedSet();
+        document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+            cb.checked = el.checked;
+            if (el.checked) { selected.add(cb.value); }
+            else { selected.delete(cb.value); }
+        });
+        BatchSync._saveSelectedSet(selected);
+        BatchSync._updateUI(selected.size);
+    },
+
+    getSelectedIds: function() {
+        return Array.from(BatchSync._getSelectedSet()).map(function(id) { return parseInt(id); });
+    },
+
+    _updateUI: function(count) {
         var syncBtn = document.getElementById('syncBtn');
         var verifyBtn = document.getElementById('verifyBtn');
         var selectAll = document.getElementById('selectAllCheckbox');
@@ -400,24 +460,11 @@ window.BatchSync = {
         }
 
         if (selectAll) {
-            var total = document.querySelectorAll('.row-checkbox').length;
-            selectAll.checked = (count === total && total > 0);
-            selectAll.indeterminate = (count > 0 && count < total);
+            var pageTotal = document.querySelectorAll('.row-checkbox').length;
+            var pageChecked = document.querySelectorAll('.row-checkbox:checked').length;
+            selectAll.checked = (pageChecked === pageTotal && pageTotal > 0);
+            selectAll.indeterminate = (pageChecked > 0 && pageChecked < pageTotal);
         }
-    },
-
-    toggleAll: function(el) {
-        var checkboxes = document.querySelectorAll('.row-checkbox');
-        checkboxes.forEach(function(cb) { cb.checked = el.checked; });
-        BatchSync.onCheckboxChange();
-    },
-
-    getSelectedIds: function() {
-        var ids = [];
-        document.querySelectorAll('.row-checkbox:checked').forEach(function(cb) {
-            ids.push(parseInt(cb.value));
-        });
-        return ids;
     },
 
     previewSync: async function() {
@@ -438,7 +485,7 @@ window.BatchSync = {
         var confirmBtn = previewModalEl.querySelector('#confirmSyncBtn');
 
         summary.innerHTML = '';
-        body.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3 text-muted">正在获取差异对比...</p></div>';
+        body.innerHTML = '<div class="diff-summary mb-3"></div><div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3 text-muted">正在获取差异对比...</p></div>';
         confirmBtn.disabled = true;
         modal.show();
 
@@ -455,21 +502,28 @@ window.BatchSync = {
             });
             var data = await res.json();
             if (!data.success) {
-                body.innerHTML = '<div class="alert alert-danger m-3">' + BatchSync._escapeHtml(data.message) + '</div>';
+                body.innerHTML = '<div class="diff-summary mb-3"></div><div class="alert alert-danger m-3">' + BatchSync._escapeHtml(data.message) + '</div>';
                 return;
             }
             BatchSync.renderDiff(data);
             confirmBtn.disabled = false;
             previewModalEl._syncPayload = { ids: ids, table: window.BATCH_SYNC_CONFIG.table, action_type: window.BATCH_SYNC_CONFIG.action_type || window.BATCH_SYNC_CONFIG.table, environment: env };
         } catch (e) {
-            body.innerHTML = '<div class="alert alert-danger m-3">请求失败: ' + BatchSync._escapeHtml(e.message) + '</div>';
+            body.innerHTML = '<div class="diff-summary mb-3"></div><div class="alert alert-danger m-3">请求失败: ' + BatchSync._escapeHtml(e.message) + '</div>';
         }
     },
 
     renderDiff: function(data) {
         var modalEl = document.getElementById('diffPreviewModal');
-        var summary = modalEl.querySelector('.diff-summary');
         var body = modalEl.querySelector('.modal-body');
+        var summary = modalEl.querySelector('.diff-summary');
+        // Defensive: recreate .diff-summary if destroyed by body.innerHTML overwrite
+        if (!summary && body) {
+            summary = document.createElement('div');
+            summary.className = 'diff-summary mb-3';
+            body.insertBefore(summary, body.firstChild);
+        }
+        if (!summary) return;  // fail gracefully if modal isn't in DOM
         var s = data.summary;
 
         summary.innerHTML =
@@ -560,10 +614,9 @@ window.BatchSync = {
             var body = modalEl.querySelector('.modal-body');
             var summary = modalEl.querySelector('.diff-summary');
             if (body) {
-                body.innerHTML = '<div class="alert alert-danger m-3" style="white-space: pre-wrap; word-break: break-word;"><i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+                body.innerHTML = '<div class="diff-summary mb-3"></div><div class="alert alert-danger m-3" style="white-space: pre-wrap; word-break: break-word;"><i class="bi bi-exclamation-triangle-fill me-2"></i>' +
                     BatchSync._escapeHtml(message) + '</div>';
             }
-            if (summary) summary.innerHTML = '';
         }
         // Also show toast as backup notification
         showToast('同步失败：触发器依赖的监控项缺失，请查看弹窗详情', 'danger');

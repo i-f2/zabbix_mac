@@ -15,3 +15,23 @@ zabbix_environments:
     url: "http://localhost:8080/api_jsonrpc.php"
     username: "Admin"
     password: "zabbix"
+  - key: szse_zw
+    name: "深交所证联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: szse_hlw
+    name: "深交所互联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: sse_zw
+    name: "上交所证联网"
+    url: ""
+    username: ""
+    password: ""
+  - key: sse_hlw
+    name: "上交所互联网"
+    url: ""
+    username: ""
+    password: ""
