@@ -612,5 +612,152 @@ Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-produ
 
 ---
 
-**文档版本**: 3.1
-**最后更新**: 2026-06-17
+## 13. 2026-07-17：本地沙箱联调与复核链路闭环重构
+
+> **涉及提交**: `d94491e` → `79a3152` (6 commits)
+> **核心目标**: 打通本地 Zabbix 5.0 Docker 沙箱 → 数据库 → 前端全链路，完成复核表同步下发、状态核验、跨页选择等功能闭环。
+
+---
+
+### 13.1 多环境动态路由 (Dynamic Environments)
+
+**修改前的问题**:
+- 6 个复核页面的环境下拉框 `#syncEnvSelect` 硬编码 4 个交所环境选项
+- `ZABBIX_ENVIRONMENTS` 已在 `app.py:80` 加载但从未传入模板
+- `config_local.yaml` 只有 1 条本地记录，`_deep_merge` 对 list 类型整列表替换，导致 `ENV=local` 时 4 个生产环境消失
+- `config.yaml.example` 缺少本地 Docker 沙箱条目
+
+**修复方案**:
+1. `app.py` 新增 `inject_zabbix_environments` context processor，全局注入环境列表
+2. 6 个模板中 `<option>` 硬编码替换为 `{% for env in zabbix_environments %}` 动态渲染
+3. `config_local.yaml` + `config_local.yaml.example` 包含全部 5 个环境（local + 4 production）
+4. `config.yaml.example` 添加本地 Docker 沙箱环境条目
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 新增 context processor `inject_zabbix_environments()` |
+| `config.yaml.example` | 添加 `local` 环境 |
+| `config_local.yaml` | 补回 4 个生产环境 |
+| `config_local.yaml.example` | 同步更新 5 个环境 |
+| `templates/*.html` (6 个) | 硬编码 → Jinja2 `{% for %}` 动态渲染 |
+
+---
+
+### 13.2 前端同步预览 Modal 崩溃修复 (DOM Null Pointer Fix)
+
+**修改前的问题**:
+- 点击"监控同步"按钮后 JS 报错：`null is not an object (evaluating 'summary.innerHTML')`
+- **根因**: `previewSync()` 中 `body.innerHTML = '...'` 覆写 `.modal-body` 全部 HTML 时销毁了 `.diff-summary` 子元素；后续 `renderDiff()` 查询 `.diff-summary` 返回 `null`
+
+**修复方案**:
+1. 所有 4 处 `body.innerHTML = '...'` 覆写统一保留 `<div class="diff-summary mb-3"></div>` 前缀
+2. `renderDiff()` 新增防御性 null check — 若 `.diff-summary` 缺失则自动 `createElement` + `insertBefore`
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `static/js/app.js` | 修复 `previewSync()`(3 处) + `_showErrorModal()`(1 处) + `renderDiff()` 防御检查 |
+
+---
+
+### 13.3 后端 UnboundLocalError 缺陷修复 (SQL Schema & Routing)
+
+**修改前的问题**:
+- 原型复核页面的 sync preview 报错：`cannot access local variable 'row' where it is not associated with a value`
+- **根因 #1**: `_compare_entity()` 中 `item_prototypes_review` 和 `trigger_prototypes_review` 分支在 `for row in rows:` 循环前访问了 `row`（两条死代码行）
+- **根因 #2**: `_compare_entity()` 使用 `row.get('dr_key', '')` 匹配 LLD 规则，但 `dr_key` 列仅存在于 JOIN 查询的别名中，`api_sync_preview` 的 `SELECT *` 不包含此列 → 永远返回 `''`
+- **根因 #3**: `api_sync_execute` 的 `else` 分支直接拒绝原型表（"该类型同步请使用全局监控同步功能"）
+
+**修复方案**:
+1. 删除 `_compare_entity()` 中两条死代码行
+2. `api_sync_preview` 预加载 `discovery_rules` 配置为 `dr_configs` dict，传 `_compare_entity()` 按 `discovery_rule_id` 查 `key`
+3. `_ACTION_TYPE_TO_TABLE` 新增 `itemprototype` / `triggerprototype` 映射
+4. `api_sync_execute` + `api_sync_apply` 补齐 `item_prototypes_review` + `trigger_prototypes_review` 完整同步分支
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 修复 `_compare_entity()` 原型分支 + 预览路由加载 dr_configs + execute/apply 原型分支 |
+
+---
+
+### 13.4 Zabbix LLD 级联依赖前置创建机制 (LLD Dependency Engine)
+
+**修改前的问题**:
+- 监控项原型/触发器原型下发时，若目标主机上未创建所属的 LLD 自动发现规则，Zabbix API 报 `ruleid` 缺失错误
+- `sync_all_to_zabbix()` 查到 LLD 规则不存在时直接 `errors.append` 跳过，无法自动恢复
+- `delay='0'` 值导致 Zabbix 5.0 API 报 `"Specified update interval is not valid"`
+- Zabbix 5.0 的 `applications` 参数需应用集 ID(整数) 而非名称(字符串)
+
+**修复方案**:
+1. **`zabbix_mac.py`**: 新增 `ensure_discovery_rule(host_id, dr_key, rule_config, interface_id)` — 先 `discoveryrule.get` 查找，不存在则从本地 `discovery_rules` 表取配置用 `discoveryrule.create` 补齐
+2. **`sync_all_to_zabbix()`**: `dr_map` 扩展为完整配置(key→dict)；查不到规则时调用 `ensure_discovery_rule()` 动态创建
+3. **`_normalize_delay()`**: `'0'`/`'0s'`/空值 → `'60s'`，统一 `str()` 强转
+4. **`_resolve_application_ids()`**: Zabbix 5.0 应用集名称→ID 自动转换（先 `application.get` 查，不存在则 `application.create`）
+5. **BUG-01 修复**: 10 个 `create_*`/`update_*` 方法的 `return None/False` → `raise ZabbixAPIException`，确保错误不被静默丢弃
+6. **`interface_id` 作用域修复**: apply/execute 两处路由中 `interface_id` 提升到 per-table 条件之前
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `zabbix_mac.py` | 新增 `ensure_discovery_rule()` + `_resolve_application_ids()`；修复 10 个方法的 BUG-01；`create_item_prototype()` 添加 applications/delay 处理 |
+| `app.py` | `sync_all_to_zabbix()` LLD 自动补齐；新增 `_normalize_delay()` 工具函数；`interface_id` 作用域修复 |
+
+---
+
+### 13.5 前端跨页勾选状态保持 (Cross-Page Checkbox Persistence)
+
+**修改前的问题**:
+- 分页使用服务端全页重载(`window.location.href`)，翻页后勾选全部丢失
+- `BatchSync.getSelectedIds()` 只读当前页 DOM 中的 `:checked` 复选框
+
+**修复方案**:
+1. 引入 `sessionStorage` 持久化（跨页面导航存活，关闭标签自动清除）
+2. `BatchSync` 新增 `_getStorageKey()` / `_getSelectedSet()` / `_saveSelectedSet()` / `_restoreCheckboxes()` / `_updateUI()`
+3. `onCheckboxChange()`: 同步更新 sessionStorage(add/delete)
+4. `toggleAll()`: 当前页全选/取消时更新 sessionStorage
+5. `getSelectedIds()`: 从 sessionStorage 读取而非 DOM 查询
+6. `DOMContentLoaded` 时自动调用 `_restoreCheckboxes()` 回显状态
+
+**关键设计**:
+- 存储键按表名隔离：`selectedIds_<table>`
+- 全选框基于当前页 DOM 状态（不受跨页选择干扰）
+- 按钮计数器显示全局选择数（`selected.size`）
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `static/js/app.js` | 重构 `BatchSync` 核心方法 (6 新增 + 3 重写) |
+
+---
+
+### 13.6 远程 Zabbix 状态审计引擎 (Remote State Audit Engine)
+
+**修改前的问题**:
+- 6 个模板中 `onclick` 函数引用不存在的 DOM ID（`verifyItemsBtn` 等）→ `TypeError` 无声崩溃，点击核验按钮无反应
+- `StatusVerifier` 复用外部连接时 `autocommit` 未设 → 所有 `UPDATE status_verification` 在 `conn.close()` 时回滚
+- 6 个独立 verify 路由各做全表校验，不按选中 ID 审计
+
+**修复方案**:
+1. **新增统一核验端点** `POST /api/review/verify`:
+   - Accepts `{action_type, ids, environment}`
+   - 逐条去远程 Zabbix 审计：`item.get(hostids, search={'key_': ...})` / `trigger.get(hostids, search={'description': ...})` / `itemprototype.get` / `triggerprototype.get` / `httptest.get`
+   - 存在 → `status_verification = 'verified'`；不存在 → `'not_found'`
+   - `conn.commit()` 确保落盘
+   - 返回 `{status: "success"|"warning", verified, not_found, failed_ids}`
+2. **前端 `verifySelected()`**: 调用统一端点，发 `action_type`，处理 `status: "warning"` 显示 failed_ids 提醒重新同步
+3. **6 个模板**: onclick 简化为 `BatchSync.verifySelected()`（无需传 URL）
+4. **commit 修复**: 6 个老 verify 路由中 `return jsonify(...)` 前统一添加 `conn.commit()`
+
+**涉及文件**:
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 新增 `POST /api/review/verify`；6 个老路由添加 `conn.commit()` + `ids` 支持 |
+| `static/js/app.js` | 重构 `verifySelected()`：统一端点 + `action_type` + warning 处理 |
+| `templates/*.html` (6 个) | onclick 简化 → `BatchSync.verifySelected()` |
+
+---
+
+**文档版本**: 3.2
+**最后更新**: 2026-07-17
