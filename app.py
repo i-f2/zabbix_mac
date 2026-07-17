@@ -458,7 +458,7 @@ def system_info():
                 from zabbix_mac import ZabbixAPI
                 t0 = time.time()
                 api = ZabbixAPI(env_cfg['url'])
-                ver = api.api_version
+                ver = api.api_version()
                 latency = int((time.time() - t0) * 1000)
                 zabbix_connected = True
                 zabbix_version = ver
