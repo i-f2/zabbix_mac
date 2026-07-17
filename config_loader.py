@@ -113,6 +113,20 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     # 应用环境变量覆盖
     _apply_env_overrides(config)
 
+    # ENV 感知：ENV=local 时自动加载 config_{ENV}.yaml 并深度合并
+    env_name = os.environ.get('ENV', '').strip()
+    if env_name:
+        local_path = f'config_{env_name}.yaml'
+        if os.path.exists(local_path):
+            try:
+                with open(local_path, 'r', encoding='utf-8') as f:
+                    local_config = yaml.safe_load(f)
+                if local_config:
+                    _deep_merge(config, local_config)
+            except Exception as e:
+                import sys
+                print(f"[WARN] 无法加载 ENV 配置文件 {local_path}: {e}", file=sys.stderr)
+
     return config
 
 

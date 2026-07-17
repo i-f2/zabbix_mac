@@ -13,6 +13,7 @@ __pycache__/
 
 # 配置文件（包含敏感信息，实际配置不提交）
 config.yaml
+config_local.yaml
 
 # 日志文件
 *.log

@@ -1,0 +1,58 @@
+# =============================================================================
+# Zabbix 5.0 本地开发沙箱 — PostgreSQL + Server + Web (Nginx)
+# =============================================================================
+# 启动:  docker-compose up -d
+# 停止:  docker-compose down
+# 清理:  docker-compose down -v   (同时删除数据卷)
+# Web:   http://localhost:8080  (Admin / zabbix)
+# API:   http://localhost:8080/api_jsonrpc.php
+# =============================================================================
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13-alpine
+    container_name: zbx50-postgres
+    environment:
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix_pwd
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-5.0-latest
+    container_name: zbx50-server
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix_pwd
+    depends_on:
+      - postgres
+    ports:
+      - "10051:10051"
+    restart: unless-stopped
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.0-latest
+    container_name: zbx50-web
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix_pwd
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: Asia/Shanghai
+    depends_on:
+      - postgres
+      - zabbix-server
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  pg_data:
