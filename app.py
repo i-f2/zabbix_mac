@@ -3676,6 +3676,7 @@ def verify_web_triggers_review():
     """核验 Web 触发器复核表：从 Zabbix 拉取实际状态并与复核表比对"""
     data = request.get_json() if request.is_json else {}
     environment = data.get('environment', '').strip() if data else ''
+    ids = data.get('ids', []) if data else []
 
     if environment not in ZABBIX_ENVIRONMENTS:
         return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
@@ -3699,7 +3700,11 @@ def verify_web_triggers_review():
             total_all = cur.fetchone()['total']
             cur.execute("SELECT COUNT(*) AS total FROM web_trigger_review WHERE confirmed = TRUE")
             total_confirmed = cur.fetchone()['total']
-            cur.execute("SELECT DISTINCT host FROM web_trigger_review WHERE confirmed = TRUE")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host FROM web_trigger_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host FROM web_trigger_review WHERE confirmed = TRUE")
             host_names = [r['host'] for r in cur.fetchall()]
 
         skipped = total_all - total_confirmed
@@ -3727,6 +3732,7 @@ def verify_web_triggers_review():
             msg += f'，跳过 {skipped} 条未确认记录'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,
@@ -4370,6 +4376,7 @@ def verify_items_review():
     """核验 items_review 状态：从 Zabbix 拉取实际监控项并与复核表比对"""
     data = request.get_json()
     environment = data.get('environment', '').strip() if data else ''
+    ids = data.get('ids', []) if data else []
 
     if environment not in ZABBIX_ENVIRONMENTS:
         return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
@@ -4388,7 +4395,11 @@ def verify_items_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT DISTINCT host_ip FROM items_review")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host_ip FROM items_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host_ip FROM items_review")
             host_ips = [r['host_ip'] for r in cur.fetchall()]
 
         if not host_ips:
@@ -4410,6 +4421,7 @@ def verify_items_review():
         msg = f'监控项核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,
@@ -4429,6 +4441,7 @@ def verify_triggers_review():
     """核验 triggers_review 状态：从 Zabbix 拉取实际触发器并与复核表比对"""
     data = request.get_json()
     environment = data.get('environment', '').strip() if data else ''
+    ids = data.get('ids', []) if data else []
 
     if environment not in ZABBIX_ENVIRONMENTS:
         return jsonify({'success': False, 'message': f'无效的环境: {environment}'}), 400
@@ -4447,7 +4460,11 @@ def verify_triggers_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT DISTINCT host_ip FROM triggers_review")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host_ip FROM triggers_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host_ip FROM triggers_review")
             host_ips = [r['host_ip'] for r in cur.fetchall()]
 
         if not host_ips:
@@ -4468,6 +4485,7 @@ def verify_triggers_review():
         msg = f'触发器核验完成：verified={total["verified"]}, not_found={total["not_found"]}'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,
@@ -4505,7 +4523,11 @@ def verify_webscenarios_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT DISTINCT host FROM webscenario_items_review")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host FROM webscenario_items_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host FROM webscenario_items_review")
             host_names = [r['host'] for r in cur.fetchall()]
 
         if not host_names:
@@ -4527,6 +4549,7 @@ def verify_webscenarios_review():
         msg = f'Web 场景核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,
@@ -4564,7 +4587,11 @@ def verify_item_prototypes_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT DISTINCT host_ip FROM item_prototypes_review")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host_ip FROM item_prototypes_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host_ip FROM item_prototypes_review")
             host_ips = [r['host_ip'] for r in cur.fetchall()]
 
         if not host_ips:
@@ -4586,6 +4613,7 @@ def verify_item_prototypes_review():
         msg = f'监控项原型核验完成：verified={total["verified"]}, mismatch={total["mismatch"]}, not_found={total["not_found"]}'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,
@@ -4623,7 +4651,11 @@ def verify_trigger_prototypes_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT DISTINCT host_ip FROM trigger_prototypes_review")
+            if ids:
+                placeholders = ','.join(['%s'] * len(ids))
+                cur.execute(f"SELECT DISTINCT host_ip FROM trigger_prototypes_review WHERE id IN ({placeholders})", ids)
+            else:
+                cur.execute("SELECT DISTINCT host_ip FROM trigger_prototypes_review")
             host_ips = [r['host_ip'] for r in cur.fetchall()]
 
         if not host_ips:
@@ -4644,6 +4676,7 @@ def verify_trigger_prototypes_review():
         msg = f'触发器原型核验完成：verified={total["verified"]}, not_found={total["not_found"]}'
         if errors:
             msg += f'，{len(errors)} 个主机失败'
+        conn.commit()
         app.logger.info(f"核验完成: {msg}")
         return jsonify({
             'success': True,

@@ -434,6 +434,38 @@ window.BatchSync = {
         return Array.from(BatchSync._getSelectedSet()).map(function(id) { return parseInt(id); });
     },
 
+    verifySelected: async function(verifyUrl) {
+        var ids = BatchSync.getSelectedIds();
+        if (ids.length === 0) {
+            showToast('请先勾选需要核验的行', 'warning');
+            return;
+        }
+        var env = (document.getElementById('syncEnvSelect') || document.getElementById('syncEnvSelectScenarios'))?.value;
+        if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+
+        var btn = document.getElementById('verifyBtn');
+        if (!btn) { showToast('核验按钮未找到，请刷新页面', 'danger'); return; }
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
+
+        try {
+            var res = await fetch(verifyUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ environment: env, ids: ids })
+            });
+            var data = await res.json();
+            showToast(data.message, data.success ? 'success' : 'danger');
+            if (data.success) setTimeout(function () { location.reload(); }, 1500);
+        } catch (e) {
+            showToast('核验请求失败: ' + e.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    },
+
     _updateUI: function(count) {
         var syncBtn = document.getElementById('syncBtn');
         var verifyBtn = document.getElementById('verifyBtn');
