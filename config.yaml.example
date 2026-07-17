@@ -32,6 +32,11 @@ database:
 #   ZABBIX_SSE_ZW_URL  / ZABBIX_SSE_ZW_USER  / ZABBIX_SSE_ZW_PASS
 #   ZABBIX_SSE_HLW_URL / ZABBIX_SSE_HLW_USER / ZABBIX_SSE_HLW_PASS
 zabbix_environments:
+  - key: local
+    name: "本地Docker沙箱"
+    url: "http://localhost:8080/api_jsonrpc.php"
+    username: "Admin"
+    password: "zabbix"
   - key: szse_zw
     name: "深交所证联网"
     url: ""

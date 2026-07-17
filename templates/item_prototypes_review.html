@@ -22,10 +22,9 @@
         </button>
         <select id="syncEnvSelect" class="form-select form-select-sm" style="width: auto; border-top-left-radius: 0; border-bottom-left-radius: 0;">
             <option value="">选择环境</option>
-            <option value="深交所证联网">深交所证联网</option>
-            <option value="深交所互联网">深交所互联网</option>
-            <option value="上交所证联网">上交所证联网</option>
-            <option value="上交所互联网">上交所互联网</option>
+            {% for env in zabbix_environments %}
+            <option value="{{ env.name }}">{{ env.name }}</option>
+            {% endfor %}
         </select>
     </div>
 

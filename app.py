@@ -398,6 +398,12 @@ def inject_breadcrumb():
     return {'page_breadcrumb': breadcrumb_map.get(endpoint, [])}
 
 
+@app.context_processor
+def inject_zabbix_environments():
+    """为所有模板注入 Zabbix 环境列表（用于环境下拉框动态渲染）"""
+    return {'zabbix_environments': _config.get('zabbix_environments', [])}
+
+
 @app.route('/')
 def index():
     """首页 - 系统信息"""
