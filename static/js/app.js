@@ -434,7 +434,7 @@ window.BatchSync = {
         return Array.from(BatchSync._getSelectedSet()).map(function(id) { return parseInt(id); });
     },
 
-    verifySelected: async function(verifyUrl) {
+    verifySelected: async function() {
         var ids = BatchSync.getSelectedIds();
         if (ids.length === 0) {
             showToast('请先勾选需要核验的行', 'warning');
@@ -442,6 +442,7 @@ window.BatchSync = {
         }
         var env = (document.getElementById('syncEnvSelect') || document.getElementById('syncEnvSelectScenarios'))?.value;
         if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
+        var actionType = (window.BATCH_SYNC_CONFIG && window.BATCH_SYNC_CONFIG.action_type) || 'item';
 
         var btn = document.getElementById('verifyBtn');
         if (!btn) { showToast('核验按钮未找到，请刷新页面', 'danger'); return; }
@@ -450,14 +451,20 @@ window.BatchSync = {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
 
         try {
-            var res = await fetch(verifyUrl, {
+            var res = await fetch('/api/review/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ environment: env, ids: ids })
+                body: JSON.stringify({ action_type: actionType, environment: env, ids: ids })
             });
             var data = await res.json();
-            showToast(data.message, data.success ? 'success' : 'danger');
-            if (data.success) setTimeout(function () { location.reload(); }, 1500);
+            if (data.status === 'warning') {
+                // Show failed IDs alert for user to re-sync
+                var failList = (data.failed_ids || []).join(', ');
+                showToast(data.message + (failList ? ' 未找到的ID: ' + failList : ''), 'warning');
+            } else {
+                showToast(data.message, data.success ? 'success' : 'danger');
+            }
+            if (data.success) setTimeout(function () { location.reload(); }, 2000);
         } catch (e) {
             showToast('核验请求失败: ' + e.message, 'danger');
         } finally {

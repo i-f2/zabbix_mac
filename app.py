@@ -440,6 +440,151 @@ def api_review_pending_counts():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/review/verify', methods=['POST'])
+def api_review_verify():
+    """统一核验端点：按选中 ID 去远程 Zabbix 逐条审计存在性。
+
+    接受 JSON: {action_type, ids, environment}
+    返回: {success, status, message, verified, not_found, failed_ids, errors}
+    """
+    data = request.get_json()
+    ids = data.get('ids', []) if data else []
+    action_type = data.get('action_type', '').strip() if data else ''
+    environment = data.get('environment', '').strip() if data else ''
+
+    if not action_type or not ids or environment not in ZABBIX_ENVIRONMENTS:
+        return jsonify({'success': False, 'message': '参数无效'}), 400
+
+    try:
+        table = _resolve_table(action_type=action_type)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+    env_config = ZABBIX_ENVIRONMENTS[environment]
+    if not env_config.get('url'):
+        return jsonify({'success': False, 'message': f'环境 "{environment}" 未配置 URL'}), 500
+
+    from zabbix_mac import ZabbixClient, ZabbixAPIException
+    client = ZabbixClient(env_config['url'], env_config['username'], env_config['password'])
+    if not getattr(client, 'api', None):
+        return jsonify({'success': False, 'message': f'无法连接 {environment}'}), 500
+
+    # Table → (host_col, key_col, zabbix_api_method)
+    table_meta = {
+        'items_review': ('host_ip', 'item_key', 'item'),
+        'triggers_review': ('host_ip', 'name', 'trigger'),
+        'item_prototypes_review': ('host_ip', 'key', 'itemprototype'),
+        'trigger_prototypes_review': ('host_ip', 'description', 'triggerprototype'),
+        'webscenario_items_review': ('host', 'name', 'httptest'),
+        'web_trigger_review': ('host', 'trigger_name', 'trigger'),
+    }
+    meta = table_meta.get(table)
+    if not meta:
+        return jsonify({'success': False, 'message': f'不支持的表: {table}'}), 400
+
+    host_col, key_col, ztype = meta
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            placeholders = ','.join(['%s'] * len(ids))
+            cur.execute(f"SELECT * FROM {table} WHERE id IN ({placeholders})", ids)
+            rows = cur.fetchall()
+
+        if not rows:
+            return jsonify({'success': False, 'message': '未找到匹配的记录'}), 404
+
+        verified = 0
+        not_found = 0
+        failed_ids = []
+        errors = []
+
+        for row in rows:
+            rid = row['id']
+            host_name = row[host_col]
+            key_val = row.get(key_col, '')
+
+            if not key_val:
+                not_found += 1
+                failed_ids.append(rid)
+                continue
+
+            try:
+                host_id = client.get_host_id(host_name)
+                if not host_id:
+                    not_found += 1
+                    failed_ids.append(rid)
+                    continue
+
+                # Remote Zabbix audit — per-item existence check
+                found = False
+                if ztype == 'item':
+                    result = client.api.item.get(
+                        hostids=[host_id], output=['itemid'],
+                        search={'key_': key_val})
+                    found = bool(result)
+                elif ztype == 'trigger':
+                    result = client.api.trigger.get(
+                        hostids=[host_id], output=['triggerid'],
+                        search={'description': key_val})
+                    found = bool(result)
+                elif ztype == 'itemprototype':
+                    result = client.api.itemprototype.get(
+                        hostids=[host_id], output=['itemid'],
+                        search={'key_': key_val})
+                    found = bool(result)
+                elif ztype == 'triggerprototype':
+                    result = client.api.triggerprototype.get(
+                        hostids=[host_id], output=['triggerid'],
+                        search={'description': key_val})
+                    found = bool(result)
+                elif ztype == 'httptest':
+                    result = client.api.httptest.get(
+                        hostids=[host_id], output=['httptestid'],
+                        search={'name': key_val})
+                    found = bool(result)
+
+                status = 'verified' if found else 'not_found'
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"UPDATE {table} SET status_verification = %s WHERE id = %s",
+                        (status, rid))
+
+                if found:
+                    verified += 1
+                else:
+                    not_found += 1
+                    failed_ids.append(rid)
+
+            except ZabbixAPIException as e:
+                errors.append(f'{host_name}/{key_val}: {e}')
+                app.logger.error(f"核验 {ztype} {key_val} 失败: {e}")
+            except Exception as e:
+                errors.append(f'{host_name}/{key_val}: {e}')
+
+        conn.commit()
+
+        msg = f'核验完成：{verified} 条已确认'
+        if not_found > 0:
+            msg += f'，{not_found} 条在 Zabbix 中未找到，请重新进行监控同步！'
+
+        resp_status = 'warning' if not_found > 0 else 'success'
+        return jsonify({
+            'success': True,
+            'status': resp_status,
+            'message': msg,
+            'verified': verified,
+            'not_found': not_found,
+            'failed_ids': failed_ids,
+            'errors': errors[:10] if errors else None,
+        })
+    except Exception as e:
+        app.logger.error(f"核验失败: {e}")
+        return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/system-info')
 def system_info():
     """系统信息详情页面 — 实时采集运行环境、组件连通性与资产统计"""
