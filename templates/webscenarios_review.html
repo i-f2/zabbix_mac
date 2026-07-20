@@ -133,7 +133,7 @@
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ ws.host }}</td>
                     <td>{{ ws.system }}</td>
                     <td>{{ ws.subsystem }}</td>
-                    <td>{{ ws.name }}</td>
+                    <td class="truncate" style="max-width:350px" title="{{ ws.name }}">{{ ws.name }}</td>
                     <td>{{ ws.url }}</td>
                     <td>{{ ws.status_code }}</td>
                     <td>{{ ws.in_room or '' }}</td>

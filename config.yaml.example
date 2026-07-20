@@ -59,6 +59,11 @@ zabbix_environments:
     password: ""
 
 # --- 同步引擎配置 ---
+# --- 机房→Zabbix Server IP 映射 (Web场景触发器名称动态注入) ---
+zabbix_room_mapping:
+  "Room A": "192.168.1.100"
+  "Room B": "192.168.2.100"
+
 sync:
   default_workers: 5
   max_retry_attempts: 3

@@ -869,6 +869,12 @@ tr.row-change-delete td.col-sticky {
     text-overflow: ellipsis;
 }
 
+/* WebScenario 触发器名称超长处理 */
+td.col-fw-name {
+    max-width: 350px;
+    word-break: break-word;
+}
+
 /* Batch select checkbox column */
 .data-card .col-cb {
     width: 36px;

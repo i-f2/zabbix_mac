@@ -3303,29 +3303,24 @@ def webscenarios_review():
 @app.route('/webscenarios-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_webscenarios_review():
-    """初始化 webscenario_items_review 表：基于 Diff 算法增量更新
-    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
+    """初始化 webscenario_items_review 表：全量清空重建。
+    触发器名称动态注入机房对应的 Zabbix Server IP:
+      格式: [{zabbix_ip}] Web scenario [{name}] failed
+    """
     data = request.get_json() if request.is_json else {}
     system_filter = data.get('system', '').strip() if data else ''
     subsystem_filter = data.get('subsystem', '').strip() if data else ''
 
+    # 加载机房映射
+    room_mapping = _config.get('zabbix_room_mapping', {}) or {}
+
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 获取现有记录
-            existing_conditions = ["1=1"]
-            existing_params = []
-            if system_filter:
-                existing_conditions.append("system = %s")
-                existing_params.append(system_filter)
-            if subsystem_filter:
-                existing_conditions.append("subsystem = %s")
-                existing_params.append(subsystem_filter)
-            existing_where = " AND ".join(existing_conditions)
-            cur.execute(f"SELECT * FROM webscenario_items_review WHERE {existing_where}", existing_params)
-            existing_rows = cur.fetchall()
+            # 1. 清空复核表
+            cur.execute("TRUNCATE webscenario_items_review RESTART IDENTITY")
 
-            # 2. 获取上游最新数据（4 个 UNION ALL）
+            # 2. 拉取源数据（4 个 UNION ALL）
             source_where = ""
             source_params = []
             if system_filter:
@@ -3368,23 +3363,39 @@ def initialize_webscenarios_review():
                 ) src
                 ORDER BY name
             """, source_params)
-            new_rows = cur.fetchall()
+            rows = cur.fetchall()
 
-            all_insert_cols = ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room']
-            content_columns = ['system', 'subsystem', 'url', 'status_code', 'in_room']
-            unique_keys = ['name', 'host', 'url']
+            if not rows:
+                conn.commit()
+                return jsonify({'success': True, 'message': '源表无数据，复核表已清空'})
 
-            result = _diff_and_merge(
-                cur, 'webscenario_items_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
+            # 3. 注入机房 IP → 转换名称
+            from psycopg2.extras import execute_values
+            insert_rows = []
+            for r in rows:
+                room = (r.get('in_room') or '').strip()
+                zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room))
+                if not zabbix_ip:
+                    zabbix_ip = 'Unknown'
+                new_name = f"[{zabbix_ip}] Web scenario [{r['name']}] failed"
+                insert_rows.append((
+                    r['system'], r['subsystem'], r['host'],
+                    new_name, r['url'], r['status_code'], r['in_room']
+                ))
+
+            # 4. 批量 INSERT
+            cols = ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room']
+            sql = f"INSERT INTO webscenario_items_review ({', '.join(cols)}) VALUES %s"
+            execute_values(cur, sql, insert_rows)
+
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'webscenario_items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
+            'message': f'webscenario_items_review 初始化完成：插入 {len(insert_rows)} 条记录'
         })
     except Exception as e:
         conn.rollback()
+        app.logger.error(f"WebScenario 复核表初始化失败: {e}")
         return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -3458,14 +3469,18 @@ def sync_webscenarios_to_zabbix():
                     scenario_name = row['name']
                     target_names.add(scenario_name)
 
+                    # Zabbix 5.0 httptest name 限 64 字符，超长截断
+                    safe_name = scenario_name[:60] if len(scenario_name) > 63 else scenario_name
+                    step_name = row['url'][:50] if row.get('url') else 'HTTP check'
+
                     scenario_data = {
-                        "name": scenario_name,
+                        "name": safe_name,
                         "hostid": host_id,
                         "agent": "0",
                         "retries": "1",
                         "steps": [{
                             "no": 1,
-                            "name": scenario_name,
+                            "name": step_name,
                             "url": row['url'],
                             "timeout": "30",
                             "status_codes": str(row.get('status_code', '200')),
@@ -3769,23 +3784,23 @@ def web_triggers_review():
 @app.route('/web-triggers-review/initialize', methods=['POST'])
 @_with_sync_lock
 def initialize_web_triggers_review():
-    """初始化 web_trigger_review 表：基于 Diff 算法增量更新"""
+    """初始化 web_trigger_review 表：全量清空重建。
+    触发器名称动态注入机房对应的 Zabbix Server IP:
+      格式: [{zabbix_ip}] Web scenario [{scenario_name}] failed
+    """
+    room_mapping = _config.get('zabbix_room_mapping', {}) or {}
+
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 获取现有记录
-            cur.execute("SELECT * FROM web_trigger_review")
-            existing_rows = cur.fetchall()
+            # 1. 清空复核表
+            cur.execute("TRUNCATE web_trigger_review RESTART IDENTITY")
 
-            # 2. 获取上游最新数据（从已确认的 Web 场景生成触发器）
+            # 2. 拉取已确认的 Web 场景数据
             cur.execute("""
                 SELECT
                     host,
                     name as web_scenario_name,
-                    name || '_trigger' as trigger_name,
-                    '{' || host || ':web.test.fail[' || name || '].count(#3,0,ne)}>2' as expression,
-                    3 as priority,
-                    0 as status,
                     system,
                     subsystem,
                     in_room
@@ -3793,24 +3808,53 @@ def initialize_web_triggers_review():
                 WHERE confirmed = TRUE
                 ORDER BY host, name
             """)
-            new_rows = cur.fetchall()
+            rows = cur.fetchall()
 
-            all_insert_cols = ['host', 'web_scenario_name', 'trigger_name', 'expression', 'priority',
-                               'status', 'system', 'subsystem', 'in_room']
-            content_columns = ['expression', 'priority', 'status', 'system', 'subsystem', 'in_room']
-            unique_keys = ['host', 'web_scenario_name', 'trigger_name']
+            if not rows:
+                conn.commit()
+                return jsonify({'success': True,
+                    'message': 'web_trigger_review 初始化完成：无已确认的 Web 场景，表已清空'})
 
-            result = _diff_and_merge(
-                cur, 'web_trigger_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
+            # 3. 注入机房 IP，构建触发器记录
+            from psycopg2.extras import execute_values
+            insert_rows = []
+            for r in rows:
+                room = (r.get('in_room') or '').strip()
+                zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room))
+                if not zabbix_ip:
+                    zabbix_ip = 'Unknown'
+
+                scenario_name = r['web_scenario_name']
+                host = r['host']
+                trigger_name = f"[{zabbix_ip}] Web scenario [{scenario_name}] failed"
+                expression = "{" + f"{host}:web.test.fail[{scenario_name}].count(#3,0,ne)" + "}>2"
+
+                insert_rows.append((
+                    host,
+                    scenario_name,
+                    trigger_name,
+                    expression,
+                    3,   # priority: warning
+                    0,   # status: enabled
+                    r.get('system', ''),
+                    r.get('subsystem', ''),
+                    r.get('in_room', '')
+                ))
+
+            # 4. 批量 INSERT
+            cols = ['host', 'web_scenario_name', 'trigger_name', 'expression',
+                    'priority', 'status', 'system', 'subsystem', 'in_room']
+            sql = f"INSERT INTO web_trigger_review ({', '.join(cols)}) VALUES %s"
+            execute_values(cur, sql, insert_rows)
+
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'web_trigger_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
+            'message': f'web_trigger_review 初始化完成：插入 {len(insert_rows)} 条记录'
         })
     except Exception as e:
         conn.rollback()
+        app.logger.error(f"Web 触发器复核表初始化失败: {e}")
         return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
     finally:
         conn.close()

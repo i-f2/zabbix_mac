@@ -1113,6 +1113,9 @@ class ZabbixClient:
                 scenario_data["tags"].append(MANAGED_TAG)
                 
                 scenario_data["httptestid"] = scenario_id
+                # Zabbix 5.0 httptest.update 不接受 hostid
+                if "hostid" in scenario_data:
+                    del scenario_data["hostid"]
                 self.api.httptest.update(scenario_data)
                 logger.info(f"成功更新 web 场景: {scenario_data.get('name')} (ID: {scenario_id})")
                 return True
