@@ -759,5 +759,172 @@ Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-produ
 
 ---
 
-**文档版本**: 3.2
-**最后更新**: 2026-07-17
+## 14. 2026-07-20：Web 场景/触发器复核全链路重构与沙箱同步打通
+
+> **涉及提交**: `ce646df` 等
+> **核心目标**: 机房 IP 动态注入、Web 场景同步 Zabbix 5.0 适配、核验引擎重构、初始化按钮修复
+
+---
+
+### 14.1 远程 Zabbix 真实状态审计引擎 (Real-Time State Audit Engine)
+
+**【修改前痛点/问题】**
+- 早期核验逻辑通过 `StatusVerifier` 按 host_ip 全量拉取 Zabbix 数据后逐字段比对，耗时且无法精确定位选中条目
+- 6 个独立 verify 路由各做全表校验，前端无法获知哪些具体条目核验失败
+- `StatusVerifier` 复用外部 DB 连接时 `autocommit` 未设，`UPDATE status_verification` 在 `conn.close()` 时回滚，DB 永不落盘
+
+**【核心重构/修复逻辑】**
+1. **统一核验端点** `POST /api/review/verify`:
+   - 接受 `{action_type, ids, environment}` 三个参数
+   - 逐条去远程 Zabbix 审计存在性：
+     - `item` → `item.get(hostids, search={'key_': ...})`
+     - `trigger` → `trigger.get(hostids, search={'description': ...})`
+     - `itemprototype` → `itemprototype.get(hostids, search={'key_': ...})`
+     - `triggerprototype` → `triggerprototype.get(hostids, search={'description': ...})`
+     - `webscenario` → `httptest.get(hostids, search={'name': ...})`
+   - 存在 → `status_verification = 'verified'`；不存在 → `'not_found'`
+   - **conn.commit() 确保落盘**
+2. **前端 `BatchSync.verifySelected()`**:
+   - 从 `sessionStorage` 读取选中 ID → POST `/api/review/verify`
+   - 返回 `{status: "success"|"warning", verified, not_found, failed_ids}`
+   - `status: "warning"` 时弹窗显示 failed_ids 提示重新同步
+3. **6 个老 verify 路由** `return jsonify(...)` 前统一添加 `conn.commit()`
+
+```
+用户勾选 → verifySelected() → POST /api/review/verify
+  → 逐条 Zabbix API 审计 → UPDATE status_verification
+  → conn.commit() → 返回 {verified, not_found, failed_ids}
+  → 前端 toast + warning 弹窗 → location.reload()
+```
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 新增 `POST /api/review/verify`；6 个老路由添加 `conn.commit()` + `ids` 支持 |
+| `static/js/app.js` | 重构 `verifySelected()`：统一端点 + `action_type` + warning 处理 |
+| `templates/*.html` (6 个) | onclick 简化 → `BatchSync.verifySelected()` |
+
+---
+
+### 14.2 机房 IP 映射与 Web 场景/触发器名称动态初始化 (IDC IP Mapping & Dynamic Naming)
+
+**【修改前痛点/问题】**
+- Web 场景复核初始化使用旧 `_diff_and_merge` 模式，不支持机房 IP 注入
+- Web 触发器复核初始化同上，触发器名称不含 Zabbix Server IP 标识
+- 机房字段 `in_room` 与 Zabbix Server IP 无映射关系
+
+**【核心重构/修复逻辑】**
+1. **配置层**: `config.yaml.example` 新增 `zabbix_room_mapping`:
+   ```yaml
+   zabbix_room_mapping:
+     "Room A": "192.168.1.100"
+     "Room B": "192.168.2.100"
+   ```
+2. **Web 场景初始化** (`/webscenarios-review/initialize`):
+   - `TRUNCATE webscenario_items_review RESTART IDENTITY`
+   - 4-UNION-ALL 查询源表 → Python 遍历注入 IP
+   - 名称格式: `[{zabbix_ip}] Web scenario [{name}] failed`
+   - `execute_values` 批量 INSERT → `conn.commit()`
+   - 映射缺失 → `[Unknown]`，不中断流程
+3. **Web 触发器初始化** (`/web-triggers-review/initialize`):
+   - `TRUNCATE web_trigger_review RESTART IDENTITY`
+   - 从已确认的 Web 场景生成触发器
+   - 名称格式: `[{zabbix_ip}] Web scenario [{scenario_name}] failed`
+   - 表达式: `{host:web.test.fail[{scenario_name}].count(#3,0,ne)}>2`
+   - 同样使用 `execute_values` + IP 注入
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 重写 `initialize_webscenarios_review()` + `initialize_web_triggers_review()` |
+| `config.yaml.example` | 新增 `zabbix_room_mapping` 配置块 |
+| `config_local.yaml.example` | 同步映射配置 |
+| `templates/webscenarios_review.html` | name 列添加 `.truncate` + `title` hover 提示 |
+| `static/css/app.css` | 新增 `td.col-fw-name` 超长处理规则 |
+
+---
+
+### 14.3 Web 场景同步 Zabbix 5.0 API 适配 (Web Sync Engine)
+
+**【修改前痛点/问题】**
+- Web 场景同步到本地 Docker Zabbix 5.0 沙箱持续失败
+- 报错 `Invalid parameter "/1/name": value is too long`（**根因**: IP 注入后 `httptest.name` 超过 Zabbix 5.0 的 64 字符限制，非 step name 问题）
+- `httptest.update` 传入 `hostid` 参数导致 `unexpected parameter "hostid"`
+- 旧代码 `delay='0'` 导致 LLD item prototype 创建被拒绝
+
+**【核心重构/修复逻辑】**
+
+| # | 缺陷 | Zabbix 5.0 限制 | 修复 |
+|:---|:---|:---|:---|
+| 1 | scenario name 超长 | `httptest.name` 限 64 字符 | 截断到 60 字符: `safe_name = scenario_name[:60]` |
+| 2 | update 含 hostid | `httptest.update` 不接受 hostid | `del scenario_data["hostid"]` |
+| 3 | step name 混淆 | step name 不应用完整 scenario 名 | 改为 URL 短名: `row['url'][:50]` |
+| 4 | delay=0 非法 | LLD prototype delay 必须非零 | `_normalize_delay()`: `'0'`→`'60s'` |
+| 5 | applications 名称 | 需应用集 ID(整数) 非名称 | `_resolve_application_ids()` 名称→ID 转换 |
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `app.py` | `sync_webscenarios_to_zabbix()`: truncate name + URL step name |
+| `app.py` | `_normalize_delay()` 工具函数 |
+| `zabbix_mac.py` | `update_web_scenario()`: strip hostid |
+| `zabbix_mac.py` | `_resolve_application_ids()` 应用集名称→ID |
+| `zabbix_mac.py` | `create_item_prototype()`: delay 规范化 |
+
+---
+
+### 14.4 前端跨页勾选状态保持 (Cross-Page Checkbox Persistence)
+
+**【修改前痛点/问题】**
+- 分页使用服务端全页重载 (`window.location.href`)，翻页后勾选全部丢失
+- `BatchSync.getSelectedIds()` 只读当前页 DOM 中的 `:checked` 复选框
+
+**【核心重构/修复逻辑】**
+1. 引入 `sessionStorage` 持久化（跨页面导航存活，关闭标签自动清除）
+2. `BatchSync` 新增 6 个方法:
+   - `_getStorageKey()` → 键名 `selectedIds_<table>`
+   - `_getSelectedSet()` / `_saveSelectedSet(s)` → Set↔JSON 序列化
+   - `_restoreCheckboxes()` → 页面加载时回显
+   - `_updateUI(count)` → 统一按钮状态更新
+3. `onCheckboxChange()` / `toggleAll()` → 同步更新 sessionStorage
+4. `getSelectedIds()` → 从 sessionStorage 读取，非 DOM 查询
+5. 全选框基于当前页 DOM 状态（不受跨页选择干扰）
+
+```
+勾选 → sessionStorage.setItem → 翻页(全页重载)
+  → DOMContentLoaded → _restoreCheckboxes()
+  → sessionStorage.getItem → 复选框回显
+```
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `static/js/app.js` | 重构 `BatchSync` (6 新增 + 3 重写) |
+
+---
+
+### 14.5 多环境动态路由 (Dynamic Environments)
+
+*（延续 13.1，本章补充 Zabbix 5.0 适配细节）*
+
+- `config.yaml` 驱动环境下拉框：`inject_zabbix_environments` context processor → Jinja2 `{% for %}`
+- `config_local.yaml` 包含全部 5 个环境（local + 4 production），防止 `_deep_merge` 列表替换
+- `_ACTION_TYPE_TO_TABLE` 扩展：`itemprototype` / `triggerprototype` 映射
+
+---
+
+### 14.6 LLD 级联依赖前置创建 (LLD Dependency Engine)
+
+*（延续 13.4，本章补充 Zabbix 5.0 适配细节）*
+
+- `ensure_discovery_rule(host_id, dr_key, rule_config, interface_id)`:
+  1. `discoveryrule.get` 查找已有规则
+  2. 不存在 → 从本地 `discovery_rules` 表取配置 `discoveryrule.create`
+- `_resolve_application_ids()`: Zabbix 5.0 应用集名称→ID 自动转换
+- BUG-01 修复: 10 个方法 `return None/False` → `raise ZabbixAPIException`
+- `interface_id` 作用域提升到 per-table 条件之前
+
+---
+
+**文档版本**: 3.3
+**最后更新**: 2026-07-20
