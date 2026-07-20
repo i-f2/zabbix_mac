@@ -989,5 +989,123 @@ Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-produ
 
 ---
 
-**文档版本**: 3.4
+### 14.9 UI/UX 业务级重构: 同步状态文案修正 + 操作列精简
+
+*（本节为 14.7 与 14.8 的汇总 — 详见上述小节）*
+
+---
+
+## 15. 2026-07-20：6 页面 UI/UX 业务降维重构 (Business-Level UI/UX Refactoring)
+
+> **核心目标**: 将 items_review 页面的试点重构（技术字段翻译、大盘卡片、基线打标、联动展开）推广至全部 6 个复核页面，并提取共享 JS 库消除代码重复。
+
+---
+
+### 15.1 共享前端库提取 (review_common.js)
+
+**【修改前痛点/问题】**
+- `pollSyncProgress()`、`stopSync()`、`syncProgressModal` HTML 在 6 个模板中完全重复（~130 行 × 6 = ~780 行重复代码）
+- 仪表盘统计、严重等级优先级映射、技术列切换在每个页面独立实现，维护成本高
+- 缺乏统一的审查页面 JS 架构
+
+**【核心重构逻辑】**
+1. **新建 `static/js/review_common.js`** — 4 个共享模块：
+
+| 模块 | 功能 |
+|------|------|
+| `ReviewDashboard` | 优先级映射常量 (PRIORITY_LABELS/COLORS/BS) + `fetchStats(tableName)` 大盘数据拉取 + `_renderSeverityBars()` 严重等级柱状图渲染 |
+| `TechViewToggle` | 列可见性切换 + localStorage 持久化 (`init(pageKey, toggleBtnId)` + `toggle(pageKey)`) |
+| `ReviewSyncPoller` | 统一同步进度轮询 (`start(syncFn)` → 弹窗 → 轮询 → 自动重载；`poll()` + `stop()`) |
+| `RenderHelpers` | `severityBadge(priority)`、`syncBadge(syncStatus)`、`confirmBadge(confirmed)` 统组渲染工具 |
+
+2. **扩充 `templates/_batch_sync_modal.html`** — 新增 `syncProgressModal`（消除 6 个页面的重复）
+3. **新建 `templates/_dashboard_cards.html`** — 共享 3 列 KPI 卡片 Partial
+4. **加载顺序**: `base.html` → `app.js` → `review_common.js`（通过 scripts_extra 引入）
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `static/js/review_common.js` | 新建 — 4 个共享模块 |
+| `templates/_batch_sync_modal.html` | 修改 — 新增 syncProgressModal |
+| `templates/_dashboard_cards.html` | 新建 — 共享 KPI 卡片 |
+
+---
+
+### 15.2 后端 LLD 规则名称 JOIN (Prototype Routes)
+
+**【修改前问题】**
+- `item_prototypes_review` 和 `trigger_prototypes_review` 的列表查询使用 `SELECT *`，仅返回 `discovery_rule_id`（整数 FK）而非 LLD 规则名称
+- 前端无法展示 "LLD: 磁盘自动发现" 等可读标签
+
+**【修复逻辑】**
+- `item_prototypes_review()` 路由: 改为 `SELECT ipr.*, dr.name AS dr_name, dr.key AS dr_key FROM item_prototypes_review ipr LEFT JOIN discovery_rules dr ON ipr.discovery_rule_id = dr.id`
+- `trigger_prototypes_review()` 路由: 相同 JOIN 模式
+- 新增表别名 `ipr`/`tpr`，同步修正 `sync_filter` 的 WHERE 子句中的列引用
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `app.py` | 2 个原型路由增加 LEFT JOIN discovery_rules |
+
+---
+
+### 15.3 6 个页面全量 UI/UX 降维改造
+
+#### 统一规范（全部 6 个页面继承）
+
+| 规范 | 说明 |
+|------|------|
+| 同步状态文案 | 未同步统一显示 **"待同步"**（14.7 已完成） |
+| 操作列精简 | 已确认状态仅保留 `[修改]`，移除 `[取消]`（14.8 已完成） |
+| 大盘 KPI 卡片 | 使用 `{% include '_dashboard_cards.html' %}` + `ReviewDashboard.fetchStats()` |
+| 技术列切换 | `[⚙️ 显示技术细节]` 按钮 + `col-tech` CSS 类 + localStorage |
+| 展开列 `[+]` | 统一加载 `review_common.js` 并在各页面绑定行展开/收起 |
+| ReviewSyncPoller | 统一替换 6 个页面重复的 `pollSyncProgress()` + `stopSync()` |
+
+#### 页面级定制
+
+| 页面 | 专项降维 |
+|------|----------|
+| **items_review** | 基线分类标签 (bb-mandatory/hardware/middleware/business)、类型/值类型着色 Badge、Name+Key 合并显示、展开 Child Row 显示关联触发器 |
+| **triggers_review** | 严重等级 Badge（灾难红/高危橙/警告黄/信息灰）、表达式 `<code>` 格式化 + 截断、告警名称/触发条件合并列、col-tech 隐藏表达式/模板 |
+| **item_prototypes_review** | LLD 规则名称 Tag (`<span class="badge">LLD: 磁盘自动发现</span>`)、值类型 Badge、基线分类标签、Name+Key 合并显示 |
+| **trigger_prototypes_review** | 严重等级 Badge、LLD 规则 Tag、描述+表达式合并列、col-tech 隐藏原始表达式 |
+| **webscenarios_review** | 机房 IP Badge (`.room-badge`)、步骤摘要列（"步骤: 1个 \| 响应码: 200"）、col-tech 隐藏 URL |
+| **web_triggers_review** | 严重等级 Badge、触发器名称+表达式合并列、机房 IP Badge、col-tech 隐藏表达式 |
+
+#### 新增 CSS 样式
+
+```css
+/* LLD 宏变量高亮（紫色） */
+.lld-macro { background-color: #f0e6ff; color: #7b2ff5; ... }
+/* 机房/IP Tag */
+.room-badge { background-color: #2c3e50; color: #fff; ... }
+/* 大盘卡片 */
+.dash-card { border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); ... }
+.dash-stat { font-size: 24px; font-weight: 700; ... }
+/* 技术列切换动画 */
+.col-tech { transition: opacity 0.25s ease, max-width 0.25s ease; }
+```
+
+---
+
+### 15.4 文件变更清单
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `static/js/review_common.js` | **新建** | 4 个共享模块 |
+| `templates/_dashboard_cards.html` | **新建** | 共享 KPI 卡片 Partial |
+| `templates/_batch_sync_modal.html` | 修改 | 新增 syncProgressModal |
+| `app.py` | 修改 | 2 个原型路由 LEFT JOIN discovery_rules |
+| `static/css/app.css` | 修改 | 新增 ~50 行样式 (lld-macro, room-badge, dash-card, col-tech) |
+| `templates/items_review.html` | 修改 | 内联 JS → review_common.js 调用 |
+| `templates/triggers_review.html` | 修改 | 严重等级 Badge + 表达式格式化 + 大盘卡片 |
+| `templates/item_prototypes_review.html` | 修改 | LLD 规则 Tag + 基线标签 + 值类型 Badge |
+| `templates/trigger_prototypes_review.html` | 修改 | 严重等级 Badge + LLD 规则 Tag |
+| `templates/webscenarios_review.html` | 修改 | 机房 Badge + 步骤摘要 + 大盘卡片 |
+| `templates/web_triggers_review.html` | 修改 | 严重等级 Badge + 合并列 + 机房 Badge |
+
+---
+
+**文档版本**: 3.5
 **最后更新**: 2026-07-20
