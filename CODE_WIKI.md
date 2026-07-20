@@ -926,5 +926,68 @@ Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-produ
 
 ---
 
-**文档版本**: 3.3
+### 14.7 同步状态文案修正: "待确认" → "待同步"
+
+**【修改前痛点/问题】**
+- "同步状态"（Sync Status）列在未同步时显示 **"待确认"**，与相邻的"确认状态"（Confirmation Status）列（"未确认/已确认"）产生严重语义混淆
+- 用户无法直观区分两列的含义
+- 无后端集中状态映射，显示文案在 6 个模板中各自内联定义
+
+**【修复逻辑】**
+1. **6 个 HTML 模板**：修改 `sync_status` 列的 Jinja2 分支渲染文案 `待确认` → `待同步`
+2. **CSS 类名同步**：`.pending-confirm` → `.pending-sync`，保持类名与显示文案一致
+3. **仅修改显示文案**：逻辑条件、CSS 颜色、图标均保持不变（黄底警告+感叹号图标）
+4. **未修改的部分**："确认状态"列的"未确认/已确认"文案不变；后端 `pending_confirm` DB 值不涉及前端显示，无需修改
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `templates/*_review.html` (6 个) | `待确认` → `待同步`，CSS class `pending-confirm` → `pending-sync` |
+| `static/css/app.css` | `.status-badge.pending-confirm` → `.status-badge.pending-sync` |
+
+---
+
+### 14.8 操作列重构: 移除取消按钮，确认后隐藏确认按钮
+
+**【修改前痛点/问题】**
+- **已确认状态**的操作列显示红色"取消"按钮 + 二次确认弹窗（"确认取消该监控项的审核状态吗？"），允许用户撤销确认
+- 这种设计不够严谨——确认后不应允许随意撤销
+- 交互冗余：用户需要多次点击和确认才能完成操作
+- `popConfirm` 弹窗组件（130+ 行）、`_buildConfirmButton` 按钮构建函数（45+ 行）均为"取消"功能服务，代码体积较大
+
+**【核心重构/修复逻辑】**
+
+**交互规则变更:**
+| 状态 | 修改前 | 修改后 |
+|------|--------|--------|
+| 未确认 | `[修改] [确认xxx]` | `[修改] [确认xxx]` **(不变)** |
+| 已确认 | `[修改] [取消]` + 二次确认弹窗 | `[修改]` **(仅保留修改按钮)** |
+
+**具体修改:**
+1. **6 个 HTML 模板**：
+   - 移除 `{% set unconfirmUrl = ... %}` 变量定义
+   - 移除 `{% else %}` 分支（取消按钮）及其全部模板代码
+   - `{% set confirmUrl = ... %}` 移入 `{% if not confirmed %}` 块内
+   - `toggleConfirmRow` 调用签名从 5 参数简化为 3 参数：`(id, btn, confirmUrl)`
+
+2. **`static/js/app.js`**：
+   - 移除 `popConfirm()` 函数（130+ 行 Bootstrap Popover 确认弹窗）
+   - 移除 `_buildConfirmButton()` 函数（按 change_type 重新构建确认按钮）
+   - 简化 `toggleConfirmRow()`：原为 `(id, action, btn, confirmUrl, unconfirmUrl)` → `(id, btn, confirmUrl)`，不再需要 `action` 分支和 `unconfirmUrl`
+   - 简化 `_executeToggle()`：
+     - 确认成功 → 更新状态列文本为"已确认" + **`btn.remove()`** 直接移除按钮
+     - 移除原代码中的确认→取消按钮互换逻辑（102-110 行）
+     - 移除原代码中的取消→确认按钮重建逻辑（通过 `_buildConfirmButton` + `data-change-type`）
+
+3. **后端**：6 个 unconfirm POST 路由保留（前端不再调用，标记为死代码）
+
+**【涉及核心源码文件】**
+| 文件 | 操作 |
+|------|------|
+| `templates/*_review.html` (6 个) | 移除取消按钮分支 + unconfirmUrl + 简化 toggleConfirmRow 签名 |
+| `static/js/app.js` | 移除 `popConfirm()`/`_buildConfirmButton()`；简化 `toggleConfirmRow()`/`_executeToggle()` |
+
+---
+
+**文档版本**: 3.4
 **最后更新**: 2026-07-20
