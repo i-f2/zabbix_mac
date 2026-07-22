@@ -38,6 +38,11 @@
     <button class="btn btn-outline-info" onclick="document.getElementById('importItemsFile').click()" title="从 Excel 导入 items_review"><i class="bi bi-upload"></i> 导入</button>
     <input type="file" id="importItemsFile" accept=".xlsx" style="display:none" onchange="importItemsReview(this)">
 
+    <!-- 技术细节切换按钮 -->
+    <button id="techViewToggle" class="btn btn-outline-secondary" onclick="TechViewToggle.toggle('items')" title="切换业务视图/技术视图">
+        <i class="bi bi-gear"></i> 显示技术细节
+    </button>
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -49,6 +54,7 @@
         <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
         <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
         <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
+        <input type="hidden" name="baseline" value="{{ baseline or '' }}">
         <div class="btn-group btn-group-sm sync-tab-group">
             <button type="submit" name="sync_filter" value="pending"
                     class="btn {{ 'btn-primary' if sync_filter == 'pending' else 'btn-outline-primary' }}">
@@ -83,6 +89,14 @@
         {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
     </datalist>
 
+    <select name="baseline" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+        <option value="">基线类别</option>
+        <option value="必选基线" {{ 'selected' if baseline == '必选基线' }}>必选基线</option>
+        <option value="硬件外设" {{ 'selected' if baseline == '硬件外设' }}>硬件外设</option>
+        <option value="中间件/服务" {{ 'selected' if baseline == '中间件/服务' }}>中间件/服务</option>
+        <option value="业务指标" {{ 'selected' if baseline == '业务指标' }}>业务指标</option>
+    </select>
+
     <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
     {% if request.args %}
     <a href="{{ url_for('items_review') }}" class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
@@ -92,20 +106,21 @@
 {% endblock %}
 
 {% block content %}
+{% include '_dashboard_cards.html' %}
 <div class="data-card">
     <div class="table-responsive">
     <table class="table table-striped">
         <thead>
             <tr>
                 <th class="col-cb"><input type="checkbox" id="selectAllCheckbox" onclick="BatchSync.toggleAll(this)" title="全选/全不选"></th>
-                <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                <th style="width:32px;min-width:32px;"></th>
+                <th class="col-sticky col-sticky-l1 col-fw-id col-tech">ID</th>
                 <th class="col-sticky col-sticky-l2 col-fw-ip">主机 IP</th>
-                <th>监控项键值</th>
-                <th>名称</th>
-                <th>类型</th>
-                <th>值类型</th>
-                <th>延迟</th>
-                <th>模板</th>
+                <th>监控项名称 / 键值</th>
+                <th class="col-tech">类型</th>
+                <th class="col-tech">值类型</th>
+                <th>采集周期</th>
+                <th class="col-tech">模板</th>
                 <th>系统名称</th>
                 <th>模块名称</th>
                 <th>机房</th>
@@ -120,14 +135,29 @@
             {% for item in items %}
                 <tr class="{% if item.change_type == 'new' %}row-change-new{% elif item.change_type == 'update' %}row-change-update{% elif item.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ item.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ item.id }}</td>
+                    <td style="text-align:center; cursor:pointer; width:32px;"
+                        onclick="toggleTriggerRow(this, '{{ item.host_ip|e }}', '{{ item.template_name|e }}', '{{ item.item_key|e }}')"
+                        title="展开/收起关联触发器">
+                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                    </td>
+                    <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ item.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ item.host_ip }}</td>
-                    <td>{{ item.item_key }}</td>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.type }}</td>
-                    <td>{{ item.value_type }}</td>
+                    <td>
+                        <div class="item-name-cell">
+                            <strong>{{ item.name }}</strong>
+                            <span class="baseline-badge {{ baseline_css_class(item.item_key) }}">{{ classify_baseline(item.item_key) }}</span>
+                            <br>
+                            <code class="item-key-sub">{{ item.item_key }}</code>
+                        </div>
+                    </td>
+                    <td class="col-tech">
+                        <span class="badge bg-{{ type_badge_color(item.type) }}">{{ translate_item_type(item.type) }}</span>
+                    </td>
+                    <td class="col-tech">
+                        <span class="badge bg-info">{{ translate_value_type(item.value_type) }}</span>
+                    </td>
                     <td>{{ item.delay }}</td>
-                    <td>{{ item.template_name }}</td>
+                    <td class="col-tech">{{ item.template_name }}</td>
                     <td>{{ item.system or '' }}</td>
                     <td>{{ item.subsystem or '' }}</td>
                     <td>{{ item.in_room or '' }}</td>
@@ -136,7 +166,7 @@
                         {% if item.sync_status == 'synced' %}
                             <span class="status-badge synced"><i class="bi bi-check-circle-fill"></i> 已同步</span>
                         {% elif item.sync_status == 'pending_confirm' or not item.sync_status %}
-                            <span class="status-badge pending-confirm"><i class="bi bi-exclamation-triangle-fill"></i> 待确认</span>
+                            <span class="status-badge pending-sync"><i class="bi bi-exclamation-triangle-fill"></i> 待同步</span>
                         {% elif item.sync_status == 'pending_delete' %}
                             <span class="status-badge pending-delete"><i class="bi bi-trash-fill"></i> 待清理</span>
                         {% else %}
@@ -157,20 +187,17 @@
                     </td>
                     <td class="col-sticky col-sticky-r1 col-fw-action" data-change-type="{{ item.change_type or '' }}">
                         <a href="{{ url_for('edit_item_review', review_id=item.id) }}" class="btn btn-sm btn-outline-primary">修改</a>
-                        {% set confirmUrl = '/item-review/confirm/__ID__' %}
-                        {% set unconfirmUrl = '/item-review/unconfirm/__ID__' %}
                         {% if not item.confirmed %}
+                            {% set confirmUrl = '/item-review/confirm/__ID__' %}
                             {% if item.change_type == 'new' %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ item.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ item.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
                             {% elif item.change_type == 'update' %}
-                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ item.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ item.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
                             {% elif item.change_type == 'delete' %}
-                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ item.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ item.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
                             {% else %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ item.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ item.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
-                        {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ item.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -185,7 +212,7 @@
         <div class="empty-desc">当前没有待复核的监控项记录。</div>
     </div>
     {% endif %}
-    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', ''), 'sync_filter': sync_filter}) }}
+    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', ''), 'sync_filter': sync_filter, 'baseline': baseline or ''}) }}
 </div>
 
 <!-- 添加监控项 Modal -->
@@ -344,6 +371,7 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 <script>
 async function initItemsReview() {
     var system = document.querySelector('input[name="system"]')?.value || '';
@@ -410,75 +438,19 @@ async function submitAddItem() {
     }
 }
 
-var _syncPollTimer = null;
-
 async function syncAllToZabbix() {
     var envSelect = document.querySelector('[id$="EnvSelect"], #syncEnvSelect');
     var env = envSelect ? envSelect.value : '';
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
-
     var system = document.querySelector('input[name="system"]')?.value || '';
     var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-
-    // Show progress modal
-    var modal = new bootstrap.Modal(document.getElementById('syncProgressModal'));
-    modal.show();
-
-    // Reset progress display
-    document.getElementById('syncProgressBar').style.width = '0%';
-    document.getElementById('syncProgressBar').textContent = '0%';
-    document.getElementById('syncProgressText').textContent = '正在启动同步...';
-    document.getElementById('syncErrorList').innerHTML = '';
-
-    // Fire-and-forget the sync request
-    fetch('/review/sync-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
+    ReviewSyncPoller.start(async function() {
+        return fetch('/review/sync-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
+        });
     });
-
-    // Start polling
-    _syncPollTimer = setInterval(pollSyncProgress, 500);
-}
-
-async function pollSyncProgress() {
-    try {
-        var res = await fetch('/review/sync-progress');
-        var data = await res.json();
-
-        var pct = data.hosts_total > 0 ? Math.round(data.hosts_done / data.hosts_total * 100) : 0;
-        var bar = document.getElementById('syncProgressBar');
-        bar.style.width = pct + '%';
-        bar.textContent = pct + '%';
-
-        document.getElementById('syncProgressText').textContent =
-            data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
-
-        if (data.errors && data.errors.length > 0) {
-            document.getElementById('syncErrorList').innerHTML =
-                data.errors.slice(-3).map(function(e) { return '<div>' + e + '</div>'; }).join('');
-        }
-
-        if (!data.running) {
-            clearInterval(_syncPollTimer);
-            _syncPollTimer = null;
-            setTimeout(function() { location.reload(); }, 1500);
-        }
-    } catch (e) {
-        clearInterval(_syncPollTimer);
-        _syncPollTimer = null;
-        showToast('进度查询失败: ' + e.message, 'danger');
-    }
-}
-
-async function stopSync() {
-    try {
-        await fetch('/review/sync-abort', { method: 'POST' });
-        showToast('已发送停止信号', 'warning');
-        document.getElementById('stopSyncBtn').disabled = true;
-    } catch (e) {
-        showToast('发送停止信号失败: ' + e.message, 'danger');
-    }
 }
 
 async function verifyItemsReview() {
@@ -509,6 +481,94 @@ async function verifyItemsReview() {
 }
 
 // toggleConfirm now handled centrally by toggleConfirmRow() in app.js
+
+// ======= Initialize shared modules =======
+(function() {
+    ReviewDashboard.fetchStats('items_review');
+    TechViewToggle.init('items', 'techViewToggle');
+})();
+
+// ======= Module 4: Item-to-Trigger Drill-Down =======
+var _triggerCache = {};
+
+window.toggleTriggerRow = function(tdElement, hostIp, templateName, itemKey) {
+    var row = tdElement.closest('tr');
+    var icon = tdElement.querySelector('.expand-toggle-icon');
+    var cacheKey = hostIp + '|' + templateName;
+    var existingChild = row.nextElementSibling;
+    if (existingChild && existingChild.classList.contains('trigger-child-row')) {
+        existingChild.remove();
+        icon.classList.remove('bi-dash-square');
+        icon.classList.add('bi-plus-square');
+        return;
+    }
+    icon.classList.remove('bi-plus-square');
+    icon.classList.add('bi-hourglass-split');
+    if (_triggerCache[cacheKey]) {
+        renderTriggerChildRow(row, _triggerCache[cacheKey], itemKey, icon);
+    } else {
+        fetch('/api/review/item-triggers?host_ip=' + encodeURIComponent(hostIp) + '&template_name=' + encodeURIComponent(templateName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    showToast('加载触发器失败: ' + (data.message || ''), 'warning');
+                    icon.classList.remove('bi-hourglass-split');
+                    icon.classList.add('bi-plus-square');
+                    return;
+                }
+                _triggerCache[cacheKey] = data.triggers || [];
+                renderTriggerChildRow(row, _triggerCache[cacheKey], itemKey, icon);
+            })
+            .catch(function(e) {
+                showToast('加载触发器失败: ' + e.message, 'danger');
+                icon.classList.remove('bi-hourglass-split');
+                icon.classList.add('bi-plus-square');
+            });
+    }
+};
+
+function renderTriggerChildRow(parentRow, triggers, itemKey, icon) {
+    var filtered = triggers.filter(function(t) {
+        return t.expression && t.expression.indexOf(itemKey) !== -1;
+    });
+    var childRow = document.createElement('tr');
+    childRow.className = 'trigger-child-row';
+    var td = document.createElement('td');
+    td.colSpan = 100;
+    td.style.padding = '8px 16px';
+    td.style.background = '#f8f9fc';
+    if (filtered.length === 0) {
+        td.innerHTML = '<div class="text-muted small p-2"><i class="bi bi-info-circle"></i> 没有找到关联该监控项键值的触发器</div>';
+    } else {
+        var cardsHtml = '<div class="trigger-cards-container">';
+        var prioMap = {0:'未分类',1:'信息',2:'警告',3:'一般',4:'严重',5:'灾难'};
+        var colorMap = {0:'secondary',1:'info',2:'warning',3:'warning',4:'danger',5:'danger'};
+        filtered.forEach(function(t) {
+            var prioLabel = prioMap[t.priority] || '未知';
+            var prioColor = colorMap[t.priority] || 'secondary';
+            var syncBadge = t.sync_status === 'synced'
+                ? '<span class="status-badge synced" style="font-size:10px;display:inline-block;">已同步</span>'
+                : '<span class="status-badge pending-sync" style="font-size:10px;display:inline-block;">待同步</span>';
+            var confBadge = t.confirmed
+                ? '<span class="badge bg-success" style="font-size:10px;">已确认</span>'
+                : '<span class="badge bg-secondary" style="font-size:10px;">未确认</span>';
+            cardsHtml += '<div class="trigger-card-item">' +
+                '<div class="d-flex justify-content-between align-items-start">' +
+                '<div><strong>' + (t.name || '') + '</strong> ' +
+                '<span class="badge bg-' + prioColor + '" style="font-size:10px;">' + prioLabel + '</span></div>' +
+                '<div class="text-end" style="white-space:nowrap;">' + syncBadge + ' ' + confBadge + '</div>' +
+                '</div>' +
+                '<code class="text-muted" style="font-size:11px;">' + (t.expression || '') + '</code>' +
+                '</div>';
+        });
+        cardsHtml += '</div>';
+        td.innerHTML = cardsHtml;
+    }
+    childRow.appendChild(td);
+    parentRow.parentNode.insertBefore(childRow, parentRow.nextSibling);
+    icon.classList.remove('bi-hourglass-split');
+    icon.classList.add('bi-dash-square');
+}
 
 </script>
 <script>
