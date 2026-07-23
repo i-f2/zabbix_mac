@@ -51,6 +51,10 @@
     <button class="btn btn-outline-info" onclick="document.getElementById('importWebScenariosFile').click()" title="从 Excel 导入"><i class="bi bi-upload"></i> 导入</button>
     <input type="file" id="importWebScenariosFile" accept=".xlsx" style="display:none" onchange="importWebScenariosReview(this)">
 
+    <button id="techViewToggle" class="btn btn-outline-secondary" onclick="TechViewToggle.toggle('webscenarios')" title="切换业务视图/技术视图">
+        <i class="bi bi-gear"></i> 显示技术细节
+    </button>
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -104,20 +108,22 @@
 {% endblock %}
 
 {% block content %}
+{% include '_dashboard_cards.html' %}
 <div class="data-card">
     <div class="table-responsive">
     <table class="table table-hover">
         <thead>
             <tr>
                 <th class="col-cb"><input type="checkbox" id="selectAllCheckbox" onclick="BatchSync.toggleAll(this)" title="全选/全不选"></th>
-                <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                <th style="width:32px;min-width:32px;"></th>
+                <th class="col-sticky col-sticky-l1 col-fw-id col-tech">ID</th>
                 <th class="col-sticky col-sticky-l2 col-fw-ip">主机</th>
                 <th>系统名称</th>
                 <th>模块名称</th>
-                <th>名称</th>
-                <th>URL</th>
+                <th>名称 / 步骤摘要</th>
+                <th class="col-tech">URL</th>
                 <th>状态码</th>
-                <th>机房</th>
+                <th>机房 / Zabbix IP</th>
                 <th class="col-sticky col-sticky-r5 col-fw-status">修改状态</th>
                 <th class="col-sticky col-sticky-r4 col-fw-status">同步状态</th>
                 <th class="col-sticky col-sticky-r3 col-fw-status">确认状态</th>
@@ -129,20 +135,31 @@
             {% for ws in webscenarios %}
                 <tr class="{% if ws.change_type == 'new' %}row-change-new{% elif ws.change_type == 'update' %}row-change-update{% elif ws.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ ws.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ ws.id }}</td>
+                    <td style="text-align:center; cursor:pointer; width:32px;"
+                        onclick="TriggerDrillDown.toggle(this, '{{ ws.host|e }}', '', '{{ ws.name|e }}')"
+                        title="展开/收起 Web 步骤">
+                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                    </td>
+                    <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ ws.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ ws.host }}</td>
                     <td>{{ ws.system }}</td>
                     <td>{{ ws.subsystem }}</td>
-                    <td class="truncate" style="max-width:350px" title="{{ ws.name }}">{{ ws.name }}</td>
-                    <td>{{ ws.url }}</td>
-                    <td>{{ ws.status_code }}</td>
-                    <td>{{ ws.in_room or '' }}</td>
+                    <td>
+                        <div class="item-name-cell">
+                            <strong>{{ ws.name }}</strong>
+                            <br>
+                            <code class="item-key-sub">步骤: 1个 | 响应码: {{ ws.status_code }}</code>
+                        </div>
+                    </td>
+                    <td class="col-tech">{{ ws.url }}</td>
+                    <td><span class="badge bg-light text-dark border">{{ ws.status_code }}</span></td>
+                    <td>{% if ws.in_room %}<span class="room-badge">{{ ws.in_room }}</span>{% endif %}</td>
                     <td class="col-sticky col-sticky-r5 col-fw-status">{{ '已修改' if ws.modified else '未修改' }}</td>
                     <td class="col-sticky col-sticky-r4 col-fw-status">
                         {% if ws.sync_status == 'synced' %}
                             <span class="status-badge synced"><i class="bi bi-check-circle-fill"></i> 已同步</span>
                         {% elif ws.sync_status == 'pending_confirm' or not ws.sync_status %}
-                            <span class="status-badge pending-confirm"><i class="bi bi-exclamation-triangle-fill"></i> 待确认</span>
+                            <span class="status-badge pending-sync"><i class="bi bi-exclamation-triangle-fill"></i> 待同步</span>
                         {% elif ws.sync_status == 'pending_delete' %}
                             <span class="status-badge pending-delete"><i class="bi bi-trash-fill"></i> 待清理</span>
                         {% else %}
@@ -163,20 +180,17 @@
                     </td>
                     <td class="col-sticky col-sticky-r1 col-fw-action" data-change-type="{{ ws.change_type or '' }}">
                         <a href="{{ url_for('edit_webscenario_review', review_id=ws.id) }}" class="btn btn-sm btn-outline-primary">修改</a>
-                        {% set confirmUrl = '/webscenario-review/confirm/__ID__' %}
-                        {% set unconfirmUrl = '/webscenario-review/unconfirm/__ID__' %}
                         {% if not ws.confirmed %}
+                            {% set confirmUrl = '/webscenario-review/confirm/__ID__' %}
                             {% if ws.change_type == 'new' %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
                             {% elif ws.change_type == 'update' %}
-                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ ws.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
                             {% elif ws.change_type == 'delete' %}
-                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ ws.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
                             {% else %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ ws.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
-                        {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ ws.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -241,125 +255,26 @@
     </div>
   </div>
 </div>
-<!-- 同步进度弹窗 -->
-<div class="modal fade" id="syncProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">同步进度</h5>
-      </div>
-      <div class="modal-body">
-        <div class="progress mb-3" style="height: 25px;">
-          <div class="progress-bar progress-bar-striped progress-bar-animated" id="syncProgressBar" style="width: 0%">0%</div>
-        </div>
-        <p id="syncProgressText">准备中...</p>
-        <div id="syncErrorList" class="text-danger small"></div>
-        <div class="mt-3 text-end">
-          <button class="btn btn-danger btn-sm" id="stopSyncBtn" onclick="stopSync()">
-            <i class="bi bi-stop-circle"></i> 停止同步
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 <script>
-async function initWebScenariosReview() {
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-    var btn = document.getElementById('initWebScenariosReviewBtn');
-    if (!btn) return;
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
-    try {
-        var res = await fetch('/webscenarios-review/initialize', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ system: system, subsystem: subsystem })
-        });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('初始化请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
-    }
-}
+async function initWebScenariosReview() { ReviewActions.initReview('initWebScenariosReviewBtn', '/webscenarios-review/initialize', true); }
 
-var _syncPollTimer = null;
 
 async function syncWebScenarios() {
     var env = document.getElementById('syncEnvSelectScenarios').value;
     if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
-
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-
-    // Show progress modal
-    var modal = new bootstrap.Modal(document.getElementById('syncProgressModal'));
-    modal.show();
-
-    // Reset progress display
-    document.getElementById('syncProgressBar').style.width = '0%';
-    document.getElementById('syncProgressBar').textContent = '0%';
-    document.getElementById('syncProgressText').textContent = '正在启动同步...';
-    document.getElementById('syncErrorList').innerHTML = '';
-
-    // Fire-and-forget the sync request
-    fetch('/webscenarios-review/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
+    var system = document.querySelector('input[name="system"]') ? document.querySelector('input[name="system"]').value : '';
+    var subsystem = document.querySelector('input[name="subsystem"]') ? document.querySelector('input[name="subsystem"]').value : '';
+    ReviewSyncPoller.start(function() {
+        return fetch('/webscenarios-review/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
+        });
     });
-
-    // Start polling
-    _syncPollTimer = setInterval(pollSyncProgress, 500);
-}
-
-async function pollSyncProgress() {
-    try {
-        var res = await fetch('/review/sync-progress');
-        var data = await res.json();
-
-        var pct = data.hosts_total > 0 ? Math.round(data.hosts_done / data.hosts_total * 100) : 0;
-        var bar = document.getElementById('syncProgressBar');
-        bar.style.width = pct + '%';
-        bar.textContent = pct + '%';
-
-        document.getElementById('syncProgressText').textContent =
-            data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
-
-        if (data.errors && data.errors.length > 0) {
-            document.getElementById('syncErrorList').innerHTML =
-                data.errors.slice(-3).map(function(e) { return '<div>' + e + '</div>'; }).join('');
-        }
-
-        if (!data.running) {
-            clearInterval(_syncPollTimer);
-            _syncPollTimer = null;
-            setTimeout(function() { location.reload(); }, 1500);
-        }
-    } catch (e) {
-        clearInterval(_syncPollTimer);
-        _syncPollTimer = null;
-        showToast('进度查询失败: ' + e.message, 'danger');
-    }
-}
-
-async function stopSync() {
-    try {
-        await fetch('/review/sync-abort', { method: 'POST' });
-        showToast('已发送停止信号', 'warning');
-        document.getElementById('stopSyncBtn').disabled = true;
-    } catch (e) {
-        showToast('发送停止信号失败: ' + e.message, 'danger');
-    }
 }
 
 async function syncWebScenarioTriggers() {
@@ -385,21 +300,7 @@ async function syncWebScenarioTriggers() {
     }
 }
 
-async function importWebScenariosReview(input) {
-    if (!input.files.length) return;
-    if (!confirm('将清空 webscenario_items_review 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
-    var formData = new FormData();
-    formData.append('file', input.files[0]);
-    try {
-        var res = await fetch('/webscenarios-review/import', { method: 'POST', body: formData });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('导入失败: ' + e.message, 'danger');
-    }
-    input.value = '';
-}
+async function importWebScenariosReview(input) { ReviewActions.importReview(input, '/webscenarios-review/import', 'webscenario_items_review'); }
 
 async function submitAddWebScenario() {
     var btn = document.getElementById('submitAddWebScenarioBtn');
@@ -425,37 +326,13 @@ async function submitAddWebScenario() {
     }
 }
 
-async function verifyWebScenariosReview() {
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-    var env = document.getElementById('syncEnvSelectScenarios').value;
-    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
-
-    var btn = document.getElementById('verifyWebScenariosBtn');
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
-    try {
-        var res = await fetch('/webscenarios-review/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
-        });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('核验请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
-    }
-}
-
 // toggleConfirm now handled centrally by toggleConfirmRow() in app.js
-}
 </script>
 <script>
+(function() {
+    ReviewDashboard.fetchStats('webscenario_items_review');
+    TechViewToggle.init('webscenarios', 'techViewToggle');
+})();
 window.BATCH_SYNC_CONFIG = { table: 'webscenario_items_review', action_type: 'webscenario' };
 </script>
 {% include '_batch_sync_modal.html' %}

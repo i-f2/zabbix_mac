@@ -78,6 +78,58 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ========================================================
+    // Sidebar Transition → Table Repaint
+    // When sidebar collapses/expands, available width changes.
+    // Sticky columns need a forced repaint to recalculate positions.
+    // ========================================================
+    function recalcTableLayouts() {
+        var tables = document.querySelectorAll('.data-card .table');
+        if (tables.length === 0) return;
+        // Force browser style recalc on parent to trigger sticky repaint
+        var wrapper = document.querySelector('.app-main');
+        if (wrapper) {
+            wrapper.style.transform = 'translateZ(0)';
+            requestAnimationFrame(function() {
+                wrapper.style.transform = '';
+            });
+        }
+    }
+
+    // Debounced wrapper: coalesces rapid successive calls within 200ms
+    // Exposed as window.recalcTableLayouts for use by TechViewToggle etc.
+    var _recalcDebounceTimer = null;
+    window.recalcTableLayouts = function() {
+        if (_recalcDebounceTimer !== null) {
+            clearTimeout(_recalcDebounceTimer);
+        }
+        _recalcDebounceTimer = setTimeout(function() {
+            _recalcDebounceTimer = null;
+            recalcTableLayouts();
+        }, 200);
+    };
+
+    // Listen for sidebar margin-left animation completion
+    var mainEl = document.querySelector('.app-main');
+    if (mainEl) {
+        mainEl.addEventListener('transitionend', function(e) {
+            if (e.propertyName === 'margin-left') {
+                window.recalcTableLayouts();
+            }
+        });
+    }
+
+    // Override toggleSidebar to add repaint after animation
+    var _origToggleSidebar = toggleSidebar;
+    window.toggleSidebar = function() {
+        _origToggleSidebar();
+        setTimeout(window.recalcTableLayouts, 350);  // 300ms CSS transition + 50ms buffer
+    };
+    if (toggleBtn) {
+        toggleBtn.removeEventListener('click', toggleSidebar);
+        toggleBtn.addEventListener('click', window.toggleSidebar);
+    }
+
+    // ========================================================
     // Active Menu Highlighting
     // ========================================================
     const currentPath = window.location.pathname;
@@ -175,62 +227,19 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ========================================================
-    // Popconfirm — bubble confirmation for unconfirm/sensitive actions
+    // Centralized confirm toggle — AJAX call, then remove button
+    // Templates call: toggleConfirmRow(id, btn, confirmUrl)
     // ========================================================
-    window.popConfirm = function (btn, message, onConfirm) {
-        if (btn._popconfirmActive) return;
-        btn._popconfirmActive = true;
-
-        var popover = new bootstrap.Popover(btn, {
-            html: true,
-            trigger: 'manual',
-            placement: 'top',
-            container: 'body',
-            fallbackPlacements: ['bottom', 'right'],
-            content: '<div class="popconfirm-box">' +
-                '<span class="popconfirm-text">' + message + '</span>' +
-                '<div class="popconfirm-actions mt-2 d-flex gap-2 justify-content-end">' +
-                '<button class="btn btn-sm btn-danger popconfirm-yes">确认</button>' +
-                '<button class="btn btn-sm btn-outline-secondary popconfirm-no">取消</button>' +
-                '</div></div>'
-        });
-        popover.show();
-
-        var handler = function (e) {
-            if (e.target.classList.contains('popconfirm-yes')) {
-                popover.dispose();
-                btn._popconfirmActive = false;
-                document.removeEventListener('click', handler);
-                onConfirm();
-            } else if (e.target.classList.contains('popconfirm-no') || !e.target.closest('.popover')) {
-                popover.dispose();
-                btn._popconfirmActive = false;
-                document.removeEventListener('click', handler);
-            }
-        };
-        setTimeout(function () { document.addEventListener('click', handler); }, 10);
+    window.toggleConfirmRow = function (id, btn, confirmUrl) {
+        _executeToggle(id, btn, confirmUrl);
     };
 
-    // ========================================================
-    // Centralized toggleConfirm — AJAX no-reload + popconfirm guard
-    // Templates call: toggleConfirmRow(id, action, btn, confirmUrl, unconfirmUrl, rowSelector)
-    // ========================================================
-    window.toggleConfirmRow = async function (id, action, btn, confirmUrl, unconfirmUrl) {
-        if (action === 'unconfirm') {
-            popConfirm(btn, '确认取消该监控项的审核状态吗？', function () {
-                _executeToggle(id, action, btn, confirmUrl, unconfirmUrl);
-            });
-            return;
-        }
-        _executeToggle(id, action, btn, confirmUrl, unconfirmUrl);
-    };
-
-    function _executeToggle(id, action, btn, confirmUrl, unconfirmUrl) {
+    function _executeToggle(id, btn, confirmUrl) {
         var origHTML = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:14px;height:14px;"></span>';
 
-        var url = action === 'confirm' ? confirmUrl.replace('__ID__', id) : unconfirmUrl.replace('__ID__', id);
+        var url = confirmUrl.replace('__ID__', id);
         fetch(url, { method: 'POST' })
             .then(function (res) { return res.json(); })
             .then(function (data) {
@@ -240,36 +249,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     btn.innerHTML = origHTML;
                     return;
                 }
-                showToast(action === 'confirm' ? '已确认' : '已取消', 'success');
+                showToast('已确认', 'success');
 
-                // Update confirm status cell in the same row
+                // Update confirm status cell and remove confirm button
                 var row = btn.closest('tr');
                 if (row) {
                     var statusCell = row.querySelector('.col-fw-status.col-sticky-r3, td.col-sticky-r3');
                     if (statusCell) {
-                        statusCell.textContent = action === 'confirm' ? '已确认' : '未确认';
+                        statusCell.textContent = '已确认';
                     }
-
-                    // Swap button in action cell
-                    var actionCell = row.querySelector('.col-sticky-r1');
-                    if (actionCell) {
-                        var editBtn = actionCell.querySelector('a');
-                        var editHTML = editBtn ? editBtn.outerHTML : '';
-
-                        if (action === 'confirm') {
-                            // Now confirmed → show unconfirm button
-                            actionCell.innerHTML = editHTML +
-                                '<button class="btn btn-sm btn-outline-danger" ' +
-                                'onclick="toggleConfirmRow(' + id + ', \'unconfirm\', this, ' +
-                                '\'' + confirmUrl + '\', \'' + unconfirmUrl + '\')">' +
-                                '<i class="bi bi-arrow-return-left"></i> 取消</button>';
-                        } else {
-                            // Now unconfirmed → show confirm button (read change_type from data attr)
-                            var changeType = actionCell.getAttribute('data-change-type') || '';
-                            var confirmBtnHTML = _buildConfirmButton(id, changeType, confirmUrl, unconfirmUrl);
-                            actionCell.innerHTML = editHTML + confirmBtnHTML;
-                        }
-                    }
+                    // Remove the confirm button — now confirmed, no cancel needed
+                    btn.remove();
                 }
             })
             .catch(function (e) {
@@ -277,19 +267,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 btn.disabled = false;
                 btn.innerHTML = origHTML;
             });
-    }
-
-    function _buildConfirmButton(id, changeType, confirmUrl, unconfirmUrl) {
-        var map = {
-            'new':      { cls: 'btn-success',   icon: 'bi-plus-circle',      label: '确认新增' },
-            'update':   { cls: 'btn-warning',   icon: 'bi-arrow-clockwise',  label: '确认变更' },
-            'delete':   { cls: 'btn-danger',    icon: 'bi-x-circle',         label: '确认下线' },
-        };
-        var cfg = map[changeType] || { cls: 'btn-success', icon: 'bi-check-lg', label: '确认' };
-        return '<button class="btn btn-sm ' + cfg.cls + '" ' +
-            'onclick="toggleConfirmRow(' + id + ', \'confirm\', this, ' +
-            '\'' + confirmUrl + '\', \'' + unconfirmUrl + '\')">' +
-            '<i class="bi ' + cfg.icon + '"></i> ' + cfg.label + '</button>';
     }
 
     // ========================================================

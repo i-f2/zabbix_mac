@@ -38,6 +38,10 @@
     <button class="btn btn-outline-info" onclick="document.getElementById('importTriggersFile').click()" title="从 Excel 导入 triggers_review"><i class="bi bi-upload"></i> 导入</button>
     <input type="file" id="importTriggersFile" accept=".xlsx" style="display:none" onchange="importTriggersReview(this)">
 
+    <button id="techViewToggle" class="btn btn-outline-secondary" onclick="TechViewToggle.toggle('triggers')" title="切换业务视图/技术视图">
+        <i class="bi bi-gear"></i> 显示技术细节
+    </button>
+
     <div class="ms-auto">
         <button class="btn btn-outline-secondary" onclick="location.reload()" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
     </div>
@@ -49,6 +53,7 @@
         <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
         <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
         <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
+        <input type="hidden" name="baseline" value="{{ baseline or '' }}">
         <div class="btn-group btn-group-sm sync-tab-group">
             <button type="submit" name="sync_filter" value="pending"
                     class="btn {{ 'btn-primary' if sync_filter == 'pending' else 'btn-outline-primary' }}">
@@ -91,18 +96,20 @@
 {% endblock %}
 
 {% block content %}
+{% include '_dashboard_cards.html' %}
 <div class="data-card">
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
                 <tr>
                     <th class="col-cb"><input type="checkbox" id="selectAllCheckbox" onclick="BatchSync.toggleAll(this)" title="全选/全不选"></th>
-                    <th class="col-sticky col-sticky-l1 col-fw-id">ID</th>
+                    <th style="width:32px;min-width:32px;"></th>
+                    <th class="col-sticky col-sticky-l1 col-fw-id col-tech">ID</th>
                     <th class="col-sticky col-sticky-l2 col-fw-ip">主机 IP</th>
-                    <th>名称</th>
-                    <th>表达式</th>
-                    <th>优先级</th>
-                    <th>模板</th>
+                    <th>告警名称 / 触发条件</th>
+                    <th class="col-tech">表达式</th>
+                    <th>严重等级</th>
+                    <th class="col-tech">模板</th>
                     <th>系统名称</th>
                     <th>模块名称</th>
                     <th>机房</th>
@@ -117,12 +124,17 @@
                 {% for trigger in triggers %}
                 <tr class="{% if trigger.change_type == 'new' %}row-change-new{% elif trigger.change_type == 'update' %}row-change-update{% elif trigger.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ trigger.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td class="col-sticky col-sticky-l1 col-fw-id">{{ trigger.id }}</td>
+                    <td style="text-align:center; cursor:pointer; width:32px;"
+                        onclick="TriggerDrillDown.toggle(this, '{{ trigger.host_ip|e }}', '{{ trigger.template_name|e }}', '{{ trigger.name|e }}')"
+                        title="展开/收起关联触发器">
+                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                    </td>
+                    <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ trigger.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ trigger.host_ip }}</td>
-                    <td>{{ trigger.name }}</td>
-                    <td>{{ trigger.expression }}</td>
-                    <td>{{ trigger.priority }}</td>
-                    <td>{{ trigger.template_name }}</td>
+                    <td><strong>{{ trigger.name }}</strong><br><code class="text-muted small">{{ trigger.expression }}</code></td>
+                    <td class="col-tech"><code class="text-muted small" style="word-break:break-all;">{{ trigger.expression }}</code></td>
+                    <td>{% set p = trigger_priority_info(trigger.priority) %}<span class="badge bg-{{ p[1] }}" style="font-size:11px;">{{ p[0] }}</span></td>
+                    <td class="col-tech">{{ trigger.template_name }}</td>
                     <td>{{ trigger.system or '' }}</td>
                     <td>{{ trigger.subsystem or '' }}</td>
                     <td>{{ trigger.in_room or '' }}</td>
@@ -131,7 +143,7 @@
                         {% if trigger.sync_status == 'synced' %}
                             <span class="status-badge synced"><i class="bi bi-check-circle-fill"></i> 已同步</span>
                         {% elif trigger.sync_status == 'pending_confirm' or not trigger.sync_status %}
-                            <span class="status-badge pending-confirm"><i class="bi bi-exclamation-triangle-fill"></i> 待确认</span>
+                            <span class="status-badge pending-sync"><i class="bi bi-exclamation-triangle-fill"></i> 待同步</span>
                         {% elif trigger.sync_status == 'pending_delete' %}
                             <span class="status-badge pending-delete"><i class="bi bi-trash-fill"></i> 待清理</span>
                         {% else %}
@@ -150,20 +162,17 @@
                     </td>
                     <td class="col-sticky col-sticky-r1 col-fw-action" data-change-type="{{ trigger.change_type or '' }}">
                         <a href="{{ url_for('edit_trigger_review', review_id=trigger.id) }}" class="btn btn-sm btn-outline-primary">修改</a>
-                        {% set confirmUrl = '/trigger-review/confirm/__ID__' %}
-                        {% set unconfirmUrl = '/trigger-review/unconfirm/__ID__' %}
                         {% if not trigger.confirmed %}
+                            {% set confirmUrl = '/trigger-review/confirm/__ID__' %}
                             {% if trigger.change_type == 'new' %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-plus-circle"></i> 确认新增</button>
                             {% elif trigger.change_type == 'update' %}
-                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
+                                <button class="btn btn-sm btn-warning" onclick="toggleConfirmRow({{ trigger.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-arrow-clockwise"></i> 确认变更</button>
                             {% elif trigger.change_type == 'delete' %}
-                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
+                                <button class="btn btn-sm btn-danger" onclick="toggleConfirmRow({{ trigger.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-x-circle"></i> 确认下线</button>
                             {% else %}
-                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, 'confirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
+                                <button class="btn btn-sm btn-success" onclick="toggleConfirmRow({{ trigger.id }}, this, '{{ confirmUrl }}')"><i class="bi bi-check-lg"></i> 确认</button>
                             {% endif %}
-                        {% else %}
-                            <button class="btn btn-sm btn-outline-danger" onclick="toggleConfirmRow({{ trigger.id }}, 'unconfirm', this, '{{ confirmUrl }}', '{{ unconfirmUrl }}')"><i class="bi bi-arrow-return-left"></i> 取消</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -178,7 +187,7 @@
         <div class="empty-desc">当前没有待复核的触发器记录。</div>
     </div>
     {% endif %}
-    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', ''), 'sync_filter': sync_filter}) }}
+    {{ pg(page, per_page, total, total_pages, url_params={'ip': request.args.get('ip', ''), 'system': request.args.get('system', ''), 'subsystem': request.args.get('subsystem', ''), 'sync_filter': sync_filter, 'baseline': baseline or ''}) }}
 </div>
 
 <!-- 新增触发器 Modal -->
@@ -280,6 +289,7 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 <script>
 async function importTriggersReview(input) {
     if (!input.files.length) return;
@@ -321,134 +331,18 @@ async function submitAddTrigger() {
     }
 }
 
-async function initTriggersReview() {
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-    var btn = document.getElementById('initTriggersReviewBtn');
-    if (!btn) return;
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
-    try {
-        var res = await fetch('/triggers-review/initialize', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ system: system, subsystem: subsystem })
-        });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('初始化请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
-    }
-}
+async function initTriggersReview() { ReviewActions.initReview('initTriggersReviewBtn', '/triggers-review/initialize', true); }
 
-var _syncPollTimer = null;
-
-async function syncAllToZabbix() {
-    var envSelect = document.querySelector('[id$="EnvSelect"], #syncEnvSelect');
-    var env = envSelect ? envSelect.value : '';
-    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
-
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-
-    // Show progress modal
-    var modal = new bootstrap.Modal(document.getElementById('syncProgressModal'));
-    modal.show();
-
-    // Reset progress display
-    document.getElementById('syncProgressBar').style.width = '0%';
-    document.getElementById('syncProgressBar').textContent = '0%';
-    document.getElementById('syncProgressText').textContent = '正在启动同步...';
-    document.getElementById('syncErrorList').innerHTML = '';
-
-    // Fire-and-forget the sync request
-    fetch('/review/sync-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
-    });
-
-    // Start polling
-    _syncPollTimer = setInterval(pollSyncProgress, 500);
-}
-
-async function pollSyncProgress() {
-    try {
-        var res = await fetch('/review/sync-progress');
-        var data = await res.json();
-
-        var pct = data.hosts_total > 0 ? Math.round(data.hosts_done / data.hosts_total * 100) : 0;
-        var bar = document.getElementById('syncProgressBar');
-        bar.style.width = pct + '%';
-        bar.textContent = pct + '%';
-
-        document.getElementById('syncProgressText').textContent =
-            data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
-
-        if (data.errors && data.errors.length > 0) {
-            document.getElementById('syncErrorList').innerHTML =
-                data.errors.slice(-3).map(function(e) { return '<div>' + e + '</div>'; }).join('');
-        }
-
-        if (!data.running) {
-            clearInterval(_syncPollTimer);
-            _syncPollTimer = null;
-            setTimeout(function() { location.reload(); }, 1500);
-        }
-    } catch (e) {
-        clearInterval(_syncPollTimer);
-        _syncPollTimer = null;
-        showToast('进度查询失败: ' + e.message, 'danger');
-    }
-}
-
-async function stopSync() {
-    try {
-        await fetch('/review/sync-abort', { method: 'POST' });
-        showToast('已发送停止信号', 'warning');
-        document.getElementById('stopSyncBtn').disabled = true;
-    } catch (e) {
-        showToast('发送停止信号失败: ' + e.message, 'danger');
-    }
-}
-
-async function verifyTriggersReview() {
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-    var env = document.getElementById('syncEnvSelect').value;
-    if (!env) { showToast('请先选择目标环境机房', 'warning'); return; }
-
-    var btn = document.getElementById('verifyTriggersBtn');
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 核验中...';
-    try {
-        var res = await fetch('/triggers-review/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ environment: env, system: system, subsystem: subsystem })
-        });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('核验请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
-    }
-}
+async function syncAllToZabbix() { ReviewActions.syncAll(); }
 
 // toggleConfirm now handled centrally by toggleConfirmRow() in app.js
-}
 </script>
 <script>
 window.BATCH_SYNC_CONFIG = { table: 'triggers_review', action_type: 'trigger' };
+(function() {
+    ReviewDashboard.fetchStats('triggers_review');
+    TechViewToggle.init('triggers', 'techViewToggle');
+})();
 </script>
 {% include '_batch_sync_modal.html' %}
 {% endblock %}
