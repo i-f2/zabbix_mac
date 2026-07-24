@@ -1,8 +1,8 @@
 # Zabbix Monitor as Code (MaC) — 产品需求文档 (PRD)
 
 > **版本**: v1.0.0  
-> **更新日期**: 2026-06-09  
-> **分支**: dev1.0.0  
+> **更新日期**: 2026-07-24  
+> **分支**: dev1.0.0 (tag: v1.0.0)  
 > **作者**: Dingfan
 
 ---
@@ -261,16 +261,21 @@ Zabbix MaC
 
 ### 5.4 测试覆盖
 
-| 测试文件 | 覆盖范围 |
-|----------|----------|
-| `test_app.py` | Flask Web 路由 |
-| `test_zabbix_client.py` | Zabbix API 客户端 |
-| `test_config_loader.py` | 配置加载器 |
-| `test_sync_engine.py` | 同步引擎 |
-| `test_concurrency.py` | 并发同步 |
-| `test_performance.py` | 性能测试 |
-| `test_security.py` | 安全性测试 |
-| `test_environment.py` | 环境配置测试 |
+| 测试文件 | 覆盖范围 | 用例数 |
+|----------|----------|:--:|
+| `test_app.py` | Flask Web 路由 | 18 |
+| `test_zabbix_client.py` | Zabbix API 客户端 | 24 |
+| `test_config_loader.py` | 配置加载器 | — |
+| `test_sync_engine.py` | 同步引擎 | — |
+| `test_concurrency.py` | 并发同步 | — |
+| `test_performance.py` | 性能测试 | — |
+| `test_security.py` | 安全性测试 | — |
+| `test_environment.py` | 环境配置测试 | — |
+| **`test_helpers.py`** | ★ v1.0.0 新增 — 工具函数单元测试 | **28** |
+| **`test_review_routes.py`** | ★ v1.0.0 新增 — 复核路由集成测试 | **51** |
+| **合计** | | **186 passed / 9 skipped** |
+
+测试策略：纯 Mock（无 live DB / 无真实 Zabbix API）。CSRF 绕过：`app.before_request_funcs[None] = []`。
 
 ---
 
@@ -350,11 +355,11 @@ ZABBIX_SSE_HLW_PASS
 
 | 优先级 | 功能 | 说明 |
 |--------|------|------|
-| P0 | 复核表状态核验扩展 | 覆盖 item_prototypes_review 和 trigger_prototypes_review |
-| P1 | Web 界面状态核验触发 | 当前仅 CLI 支持，计划加入 Web UI 按钮 |
+| ~~P0~~ | ~~复核表状态核验扩展~~ | ✅ v1.0.0 已完成 — 统一 `/api/review/verify` 端点覆盖全部 6 类型 |
+| ~~P1~~ | ~~Web 界面状态核验触发~~ | ✅ v1.0.0 已完成 — `BatchSync.verifySelected()` 全页面就绪 |
+| ~~P2~~ | ~~批量操作增强~~ | ✅ v1.0.0 已完成 — 批量同步预览 Diff + 批量确认 |
 | P1 | 用户认证与权限 | 当前无登录机制 |
 | P2 | 操作审计日志 | 记录所有配置变更历史 |
-| P2 | 批量操作增强 | 批量确认、批量同步 |
 | P3 | API 接口开放 | RESTful API 供外部系统集成 |
 | P3 | 仪表盘首页 | 可视化展示各环境配置一致性状态 |
 
@@ -370,3 +375,6 @@ ZABBIX_SSE_HLW_PASS
 | 2026-06-08 | — | 主机资产同步、复核表增强、Excel 导入导出 |
 | 2026-06-09 | v1.0.0 | 部署支持（SQL 导出 + pip 离线包）、Bug 修复、全列表页面分页功能 |
 | 2026-06-10 | v1.0.0 | 配置外置化：抽取 config.yaml + config_loader.py；Dockerfile 容器化；database_update/ 迁移体系；Flask 端口改为 5000；合并 CODE_WIKI.md 文档 |
+| 2026-07-20 | v1.0.0 | 6 页面 UI/UX 业务降维重构：review_common.js 共享库提取、Web 场景/触发器全链路重构、沙箱同步打通、操作列移除取消按钮、同步文案"待确认"→"待同步" |
+| 2026-07-22 | v1.0.0 | 全栈静态审计 + 防御编程：P0/P1 Bug 修复、items_review.html DOM 塌陷修复、TechViewToggle 断裂修复、侧边栏折叠表格重绘 |
+| **2026-07-24** | **v1.0.0** | **生产就绪冲刺完成**：10 P0 + 13 P1 清零、全量共享模块收拢（TriggerDrillDown + ReviewActions）、3 Agent Gap Analysis 闭环、Playwright E2E 自动化验收通过（186 test / 0 JS errors）、P0 后端异常安全加固（11 rollback 补全 / 6 logging.error / 3 NameError 修复）、CSS 内联样式规范化 |

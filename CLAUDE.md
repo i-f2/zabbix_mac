@@ -207,4 +207,4 @@ base.html
 
 ---
 
-*最后更新：2026-07-22 · 基于 `dev1.0.0` 分支封版阶段代码*
+*最后更新：2026-07-24 · 基于 `v1.0.0` tag · 186 test passed · Playwright E2E verified*

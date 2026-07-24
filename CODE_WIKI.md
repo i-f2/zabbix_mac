@@ -1107,5 +1107,116 @@ Claude Code 内置技能，通过说"部署环境上线"或输入 `/deploy-produ
 
 ---
 
-**文档版本**: 3.5
-**最后更新**: 2026-07-20
+## 16. 2026-07-22→24：v1.0.0 生产就绪冲刺 — Phase 0-3 闭环
+
+> **涉及提交**: `f15a895` → `d1cc3f1` → `1225334` (tag: v1.0.0)
+> **核心目标**: P0/P1 Bug 清零、全量共享模块收拢、Gap Analysis 闭环、Playwright E2E 自动化验收
+> **测试**: 186 pytest passed · 9 skipped · Playwright 6/6 pages 0 JS errors
+
+---
+
+### 16.1 Phase 0: 全栈静态审计 & 防御编程
+
+**全量代码审计** (`app.py` ~6700行, `zabbix_mac.py` ~4755行, JS ~800行):
+
+| 维度 | 检查项 | 结果 |
+|------|--------|------|
+| 数据库事务 | 70 commit / 61 rollback / 119 close | 5 verify 路由缺 rollback → P0 |
+| Zabbix API 边界 | 所有 API 调用 ZabbixAPIException+Exception 双层捕获 | _compare_entity() 6 处静默吞错 → P0 |
+| 输入校验 | `request.json` / `request.form` 访问模式 | 3 verify 路由用直接索引 → P0 |
+| 裸 except | app.py:560 | `except: pass` 吞没系统信号 → P0 |
+
+**防御加固**: 补齐 test_helpers.py (28 tests) + test_review_routes.py (51 tests)，APP_SECRET_KEY 注入 conftest.py，修复 3 个预存在测试失败。
+
+---
+
+### 16.2 Phase 1: 前端布局塌陷修复 + review_common.js 模块化
+
+**DOM 布局塌陷** (`items_review.html`): 5 行残留垃圾代码（孤立 `data-card` + 悬空 `</div>` ×5）→ 删除后恢复。
+
+**共享 JS 模块提取** — `review_common.js` 从 294 行扩展到 369 行：
+
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| `ReviewDashboard` | 优先级映射 + KPI 大盘数据 | ✅ 已有 |
+| `TechViewToggle` | 列显隐 + localStorage 持久化 | ✅ 已有 |
+| `ReviewSyncPoller` | 同步进度轮询（修复 stop 不清定时器） | ✅ 已修复 |
+| `RenderHelpers` | severityBadge/syncBadge/confirmBadge | ✅ 已有 |
+| **`TriggerDrillDown`** | ★新增 — trigger 展开/折叠子行（从 items_review 移入，5 页面断裂修复） | ✅ v1.0.0 新增 |
+| **`ReviewActions`** | ★新增 — initReview/importReview/syncAll 通用操作（消除 ~210 行重复） | ✅ v1.0.0 新增 |
+
+**app.js 增强**:
+- `recalcTableLayouts` 添加 200ms 防抖（消除侧边栏切换双重触发）
+- 暴露 `window.recalcTableLayouts` 供 TechViewToggle 调用
+- `ReviewSyncPoller.stop()` 补全 `clearInterval()`（修复定时器泄漏）
+
+**消除重复**: 6 个 `init*Review()` → 1 个 `ReviewActions.initReview()`，5 个 `import*Review()` → 1 个 `ReviewActions.importReview()`，4 个 `syncAllToZabbix()` → 1 个 `ReviewActions.syncAll()`，5 个 `verify*Review()` → **全部删除（死代码）**。
+
+---
+
+### 16.3 Phase 2: Gap Analysis & P0/P1 清零
+
+**3 个并行 Agent 全量审计** 产出 10 P0 + 13 P1 + 3 P2 优化清单。
+
+**P0 修复一览**:
+
+| # | 文件 | 问题 | 修复 |
+|---|------|------|------|
+| 1 | `items_review.html` | initItemsReview + importItemsReview 未委托（23+14行） | → 一行委托 |
+| 2 | `web_triggers_review.html` | importWebTriggersReview 函数缺失 → ReferenceError | 补全函数 + 委托化 |
+| 3 | `items_review.html` + `triggers_review.html` | 重复 DOM ID `#syncProgressModal`（inline + include 双渲染） | 删除 inline 版本 |
+| 4 | `app.py:560` | 裸 `except: pass` | → `except Exception: pass` |
+| 5 | `app.py:5778-5882` | `_compare_entity()` 6 处静默吞错 | 每处 + `logging.error()` |
+| 6 | `app.py:4878,4942,5006` | 3 verify 路由引用未定义变量 `ids` → NameError | 补全 `ids = data.get('ids', [])` |
+| 7 | `app.py:4796-5051` | 5 verify 路由 `commit()` 无 `rollback()` | except 块 + `conn.rollback()` |
+
+**P1 修复**: webscenarios/web_triggers 补全 `syncAllToZabbix()`，6 模板 18 处内联 `style="..."` → CSS 类（`.col-expand`, `.badge-sm`, `.code-break-all`, `.dash-progress`, `.sync-progress`）。
+
+---
+
+### 16.4 Phase 3: Playwright E2E 自动化验收
+
+3 项验收测试全部通过：
+
+| 测试 | 方法 | 结果 |
+|------|------|:--:|
+| 像素级固定列校验 | `.col-sticky-l1`/`l2` `getBoundingClientRect().left` 实测，断言无重叠/缝隙 | ✅ |
+| 响应式拉伸校验 | 侧边栏折叠后 table 宽度 1086→1152px (+66px)，无空白塌陷 | ✅ |
+| 控制台零报错 | 6 页面 HTTP 200, 0 JS Uncaught TypeError / ReferenceError | ✅ |
+
+---
+
+### 16.5 v1.0.0 CSS 类新增
+
+```css
+/* v1.0.0 内联样式替换 */
+.col-expand       { text-align: center; cursor: pointer; width: 32px; }
+.expand-toggle-icon { font-size: 14px; }
+.code-break-all   { word-break: break-all; }
+.badge-sm         { font-size: 11px; }
+.dash-progress    { height: 6px; }
+.sync-progress    { height: 25px; }
+.dash-sync-warn   { display: none; }
+```
+
+### 16.6 v1.0.0 目录结构补充
+
+```
+zabbix_mac/
+├── CLAUDE.md                      # ★ v1.0.0 新增 — 开发架构规范
+├── static/js/review_common.js     # ★ v1.0.0 重构 — 从 206 行扩展到 369 行
+├── templates/
+│   ├── _dashboard_cards.html      # ★ v1.0.0 新增 — 共享 KPI 卡片
+│   ├── _batch_sync_modal.html     # ★ v1.0.0 修改 — 含 syncProgressModal
+│   └── web_triggers_review.html   # ★ v1.0.0 修复 — scripts_extra 完全重建
+├── tests/
+│   ├── test_helpers.py            # ★ v1.0.0 新增 — 28 单元测试
+│   └── test_review_routes.py      # ★ v1.0.0 新增 — 51 路由集成测试
+├── .gitignore                     # ★ v1.0.0 新增 — 排除 Playwright 快照
+└── .playwright-mcp/               # Playwright E2E 快照（gitignored）
+```
+
+---
+
+**文档版本**: 3.6
+**最后更新**: 2026-07-24
