@@ -256,6 +256,18 @@ app.jinja_env.globals['classify_baseline'] = _classify_baseline
 app.jinja_env.globals['baseline_css_class'] = _baseline_css_class
 app.jinja_env.globals['trigger_priority_info'] = _trigger_priority_info
 
+def _safe_sql_value(v):
+    """Convert Python objects to psycopg2-adaptable types.
+    JSONB columns parsed by DictCursor return Python dicts, which
+    psycopg2 can't natively adapt. Convert to JSON string."""
+    if isinstance(v, dict):
+        import json
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, list):
+        import json
+        return json.dumps(v, ensure_ascii=False)
+    return v
+
 def _diff_and_merge(
     cur: psycopg2.extensions.cursor,
     table_name: str,
@@ -333,7 +345,7 @@ def _diff_and_merge(
     if inserts:
         insert_values = []
         for src in inserts:
-            vals = [src.get(c) for c in all_insert_cols]
+            vals = [_safe_sql_value(src.get(c)) for c in all_insert_cols]
             vals += ['pending_confirm', 'new']
             insert_values.append(vals)
         icols = col_list + ", sync_status, change_type"
@@ -349,7 +361,7 @@ def _diff_and_merge(
             set_parts = ", ".join(
                 f"{c} = %s" for c in all_insert_cols
             )
-            vals = [src.get(c) for c in all_insert_cols]
+            vals = [_safe_sql_value(src.get(c)) for c in all_insert_cols]
             cur.execute(f"""
                 UPDATE {table_name}
                 SET {set_parts},
@@ -1850,7 +1862,7 @@ def sync_hosts():
                 WHERE h.id IS NULL
                    OR h.system IS DISTINCT FROM sa.system
                    OR h.subsystem IS DISTINCT FROM sa.subsystem
-                   OR h.template_name IS DISTINCT FROM sa.template_id::varchar
+                   OR h.template_id IS DISTINCT FROM sa.template_id::varchar
                    OR h.in_room IS DISTINCT FROM sa.in_room
             """)
             to_sync = cur.fetchall()
@@ -1858,7 +1870,7 @@ def sync_hosts():
             # 2. 逐条 UPSERT 到 zabbix_mac.hosts
             for row in to_sync:
                 cur.execute("""
-                    INSERT INTO hosts (name, system, subsystem, template_name, description, in_room)
+                    INSERT INTO hosts (name, system, subsystem, template_id, description, in_room)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (name)
                     DO UPDATE SET
@@ -1889,7 +1901,7 @@ def add_host():
     """添加主机"""
     if request.method == 'POST':
         name = request.form['name']
-        template_name = request.form.get('template_name')
+        template_id = request.form.get('template_id')
         description = request.form.get('description')
         system = request.form.get('system')
         subsystem = request.form.get('subsystem')
@@ -1897,9 +1909,9 @@ def add_host():
 
         conn = get_db_connection()
         try:
-            # 插入主机基本信息，直接存储template_name
+            # 插入主机基本信息
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO hosts (name, template_name, description, system, subsystem, in_room) VALUES (%s, %s, %s, %s, %s, %s)", (name, template_name, description, system, subsystem, in_room))
+                cur.execute("INSERT INTO hosts (name, template_id, description, system, subsystem, in_room) VALUES (%s, %s, %s, %s, %s, %s)", (name, template_id, description, system, subsystem, in_room))
             
             conn.commit()
             flash('主机添加成功')
@@ -1931,16 +1943,16 @@ def edit_host(host_id):
     
     if request.method == 'POST':
         name = request.form['name']
-        template_name = request.form.get('template_name')
+        template_id = request.form.get('template_id')
         description = request.form.get('description')
         system = request.form.get('system')
         subsystem = request.form.get('subsystem')
         in_room = request.form.get('in_room') or None
 
         try:
-            # 更新主机基本信息，直接更新template_name
+            # 更新主机基本信息
             with conn.cursor() as cur:
-                cur.execute("UPDATE hosts SET name = %s, template_name = %s, description = %s, system = %s, subsystem = %s, in_room = %s WHERE id = %s", (name, template_name, description, system, subsystem, in_room, host_id))
+                cur.execute("UPDATE hosts SET name = %s, template_id = %s, description = %s, system = %s, subsystem = %s, in_room = %s WHERE id = %s", (name, template_id, description, system, subsystem, in_room, host_id))
             
             conn.commit()
             flash('主机更新成功')
@@ -2050,7 +2062,8 @@ def items_review():
 @_with_sync_lock
 def initialize_items_review():
     """初始化 items_review 表：基于 Diff 算法增量更新
-    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
+    （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）
+    支持未绑定模板的主机：自动使用 DEFAULT_TEMPLATE_NAME 兜底。"""
     data = request.get_json() if request.is_json else {}
     system_filter = data.get('system', '').strip() if data else ''
     subsystem_filter = data.get('subsystem', '').strip() if data else ''
@@ -2058,6 +2071,32 @@ def initialize_items_review():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 0. 统计主机信息（用于反馈跳过/处理数量）
+            host_conditions = ["1=1"]
+            host_params = []
+            if system_filter:
+                host_conditions.append("h.system = %s")
+                host_params.append(system_filter)
+            if subsystem_filter:
+                host_conditions.append("h.subsystem = %s")
+                host_params.append(subsystem_filter)
+            host_where = " AND ".join(host_conditions)
+
+            cur.execute(f"SELECT COUNT(*) as cnt FROM hosts h WHERE {host_where}", host_params)
+            total_hosts = cur.fetchone()['cnt']
+
+            cur.execute(
+                f"SELECT COUNT(*) as cnt FROM hosts h WHERE {host_where} AND (h.template_id IS NULL OR h.template_id = '')",
+                host_params
+            )
+            no_template_hosts = cur.fetchone()['cnt']
+
+            cur.execute(
+                f"SELECT h.name FROM hosts h WHERE {host_where} AND (h.template_id IS NULL OR h.template_id = '') ORDER BY h.name",
+                host_params
+            )
+            skipped_host_names = [r['name'] for r in cur.fetchall()]
+
             # 1. 获取现有记录
             existing_conditions = ["1=1"]
             existing_params = []
@@ -2072,8 +2111,13 @@ def initialize_items_review():
             existing_rows = cur.fetchall()
 
             # 2. 获取上游最新数据
-            where_parts = ["i.template_name = %s", "h.template_name = i.template_name"]
-            query_params = [app.config['DEFAULT_TEMPLATE_NAME']]
+            # 关键修复：COALESCE(NULLIF(h.template_id, ''), %s) 让未绑定模板的主机
+            # 也能用 DEFAULT_TEMPLATE_NAME 匹配 items，避免初始化跳过这类主机
+            default_tmpl = app.config['DEFAULT_TEMPLATE_NAME']
+            where_parts = [
+                "i.template_name = COALESCE(NULLIF(h.template_id, ''), %s)"
+            ]
+            query_params = [default_tmpl]
             if system_filter:
                 where_parts.append("h.system = %s")
                 query_params.append(system_filter)
@@ -2114,12 +2158,31 @@ def initialize_items_review():
                 new_rows, existing_rows, all_insert_cols
             )
         conn.commit()
+
+        # 构建增强响应
+        processed = total_hosts - no_template_hosts
+        msg = (f'items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，'
+               f'标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条')
+        if no_template_hosts > 0:
+            msg += f'（{no_template_hosts} 台主机未绑定模板，已用默认模板 "{default_tmpl}" 兜底）'
+
         return jsonify({
             'success': True,
-            'message': f'items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
+            'message': msg,
+            'data': {
+                'total_hosts': total_hosts,
+                'processed_hosts': processed,
+                'skipped_hosts': no_template_hosts,
+                'skip_reasons': {name: '主机未绑定模板，已用默认模板兜底' for name in skipped_host_names[:10]},
+                'created': result['new'],
+                'updated': result['update'],
+                'deleted': result['delete'],
+                'unchanged': result['unchanged']
+            }
         })
     except Exception as e:
         conn.rollback()
+        app.logger.error(f"items-review/initialize 失败: {e}", exc_info=True)
         return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -3073,7 +3136,7 @@ def initialize_triggers_review():
             existing_rows = cur.fetchall()
 
             # 2. 获取上游最新数据
-            where_parts = ["tr.template_name = %s", "h.template_name = tr.template_name"]
+            where_parts = ["tr.template_name = %s", "h.template_id = tr.template_name"]
             query_params = [app.config['DEFAULT_TEMPLATE_NAME']]
             if system_filter:
                 where_parts.append("h.system = %s")
@@ -4505,7 +4568,7 @@ def initialize_item_prototypes_review():
                 FROM item_prototypes ip
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s AND h.template_name = dr.template_name
+                WHERE dr.template_name = %s AND h.template_id = dr.template_name
                 ORDER BY ip.id, h.name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             new_rows = cur.fetchall()
@@ -4638,7 +4701,7 @@ def initialize_trigger_prototypes_review():
                 FROM trigger_prototypes tp
                 CROSS JOIN hosts h
                 JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s AND h.template_name = dr.template_name
+                WHERE dr.template_name = %s AND h.template_id = dr.template_name
                 ORDER BY tp.id, h.name
             """, (app.config['DEFAULT_TEMPLATE_NAME'],))
             new_rows = cur.fetchall()
@@ -5421,7 +5484,7 @@ def api_search():
 
             # 搜索主机
             cur.execute(
-                "SELECT id, name, template_name, 'host' as type FROM hosts WHERE name ILIKE %s OR template_name ILIKE %s LIMIT 10",
+                "SELECT id, name, template_id, 'host' as type FROM hosts WHERE name ILIKE %s OR template_id ILIKE %s LIMIT 10",
                 (search_term, search_term)
             )
             for row in cur.fetchall():
