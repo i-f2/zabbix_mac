@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest tests/test_environment.py -v -s)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix: web scenario sync — truncate httptest name to 64 chars + strip hostid on update *)",
+      "Bash(git push *)"
     ]
   }
 }

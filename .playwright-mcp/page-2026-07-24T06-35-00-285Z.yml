@@ -1,0 +1,159 @@
+- generic [active] [ref=f4e1]:
+  - navigation [ref=f4e2]:
+    - generic [ref=f4e3]:
+      - button "" [ref=f4e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f4e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f4e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f4e9]
+    - generic [ref=f4e11]:
+      - button "" [ref=f4e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f4e14]:
+    - complementary [ref=f4e15]:
+      - navigation [ref=f4e16]:
+        - link " 系统信息" [ref=f4e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f4e18]: 
+          - generic [ref=f4e19]: 系统信息
+        - link " 资产主机管理" [ref=f4e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f4e21]: 
+          - generic [ref=f4e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f4e23] [cursor=pointer]:
+          - generic [ref=f4e24]: 
+          - generic [ref=f4e25]: 监控复核工作台
+          - generic [ref=f4e26]: 
+        - generic [ref=f4e27]:
+          - link "监控项复核" [ref=f4e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f4e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f4e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f4e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f4e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f4e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f4e40] [cursor=pointer]:
+          - generic [ref=f4e41]: 
+          - generic [ref=f4e42]: 基础模板配置
+          - generic [ref=f4e43]: 
+    - main [ref=f4e44]:
+      - generic [ref=f4e45]:
+        - navigation "breadcrumb" [ref=f4e46]:
+          - list [ref=f4e47]:
+            - listitem [ref=f4e48]: 复核表管理
+            - listitem [ref=f4e49]:
+              - text: /
+              - link "Web触发器复核" [ref=f4e50] [cursor=pointer]:
+                - /url: /web-triggers-review
+        - heading "Web触发器复核表管理" [level=4] [ref=f4e52]
+      - generic [ref=f4e53]:
+        - generic [ref=f4e54]:
+          - button " 初始化" [ref=f4e55] [cursor=pointer]:
+            - generic [ref=f4e56]: 
+            - text: 初始化
+          - generic [ref=f4e57]:
+            - button " 监控同步" [disabled]:
+              - generic: 
+              - text: 监控同步
+            - button " 核验" [disabled]:
+              - generic: 
+              - text: 核验
+            - combobox [ref=f4e58]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - button " 添加Web触发器" [ref=f4e59] [cursor=pointer]:
+            - generic [ref=f4e60]: 
+            - text: 添加Web触发器
+          - link " 导出" [ref=f4e61] [cursor=pointer]:
+            - /url: /web-triggers-review/export
+            - generic [ref=f4e62]: 
+            - text: 导出
+          - button " 导入" [ref=f4e63] [cursor=pointer]:
+            - generic [ref=f4e64]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f4e65] [cursor=pointer]:
+            - generic [ref=f4e66]: 
+            - text: 显示技术细节
+          - button "" [ref=f4e68] [cursor=pointer]
+        - generic [ref=f4e71]:
+          - generic [ref=f4e72]:
+            - button " 待处理" [ref=f4e73] [cursor=pointer]:
+              - generic [ref=f4e74]: 
+              - text: 待处理
+            - button " 全部" [ref=f4e75] [cursor=pointer]:
+              - generic [ref=f4e76]: 
+              - text: 全部
+          - generic [ref=f4e77]: "|"
+        - generic [ref=f4e78]:
+          - textbox "主机" [ref=f4e79]
+          - combobox "系统名称" [ref=f4e80]
+          - combobox "模块名称" [ref=f4e81]
+          - button " 筛选" [ref=f4e82] [cursor=pointer]:
+            - generic [ref=f4e83]: 
+            - text: 筛选
+      - generic [ref=f4e84]:
+        - generic [ref=f4e87]:
+          - generic [ref=f4e88]:
+            - generic [ref=f4e89]: 
+            - text: 复核进度
+          - generic [ref=f4e90]:
+            - generic [ref=f4e91]: "-"
+            - generic [ref=f4e92]: 总数
+            - generic [ref=f4e93]: "|"
+            - generic [ref=f4e94]: "-"
+            - generic [ref=f4e95]: 已确认
+            - generic [ref=f4e96]: "|"
+            - generic [ref=f4e97]: "-"
+            - generic [ref=f4e98]: 待确认
+          - generic [ref=f4e100]: "完成率: -"
+        - generic [ref=f4e103]:
+          - generic [ref=f4e104]:
+            - generic [ref=f4e105]: 
+            - text: 同步状态
+          - generic [ref=f4e106]:
+            - generic [ref=f4e107]: "-"
+            - generic [ref=f4e108]: 已同步
+            - generic [ref=f4e109]: "|"
+            - generic [ref=f4e110]: "-"
+            - generic [ref=f4e111]: 待同步
+          - generic [ref=f4e112]: 
+        - generic [ref=f4e116]:
+          - generic [ref=f4e117]:
+            - generic [ref=f4e118]: 
+            - text: 告警关联
+          - generic [ref=f4e119]:
+            - generic [ref=f4e120]: "-"
+            - generic [ref=f4e121]: 关联触发器
+          - generic [ref=f4e122]: 加载中...
+      - generic [ref=f4e123]:
+        - table [ref=f4e125]:
+          - rowgroup [ref=f4e126]:
+            - row [ref=f4e127]:
+              - columnheader [ref=f4e128]:
+                - checkbox "全选/全不选" [ref=f4e129] [cursor=pointer]
+              - columnheader [ref=f4e130]
+              - columnheader "主机" [ref=f4e131]
+              - columnheader "Web场景名称" [ref=f4e132]
+              - columnheader "触发器名称 / 表达式" [ref=f4e133]
+              - columnheader "严重等级" [ref=f4e134]
+              - columnheader "机房 / Zabbix IP" [ref=f4e135]
+              - columnheader "修改状态" [ref=f4e136]
+              - columnheader "同步状态" [ref=f4e137]
+              - columnheader "确认状态" [ref=f4e138]
+              - columnheader "状态核验" [ref=f4e139]
+              - columnheader "操作" [ref=f4e140]
+          - rowgroup
+        - generic [ref=f4e141]:
+          - generic [ref=f4e142]: 
+          - generic [ref=f4e144]: 暂无复核记录
+          - generic [ref=f4e145]: 当前没有待复核的Web触发器记录。
+  - text:  

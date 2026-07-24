@@ -52,4 +52,4 @@ database_update/*.log
 
 # 其他
 *.bak
-*.tmp
+*.tmp.playwright-mcp/

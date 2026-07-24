@@ -1,0 +1,403 @@
+- generic [active] [ref=f2e1]:
+  - navigation [ref=f2e2]:
+    - generic [ref=f2e3]:
+      - button "" [ref=f2e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f2e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f2e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f2e9]
+    - generic [ref=f2e11]:
+      - button "" [ref=f2e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f2e14]:
+    - complementary [ref=f2e15]:
+      - navigation [ref=f2e16]:
+        - link " 系统信息" [ref=f2e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f2e18]: 
+          - generic [ref=f2e19]: 系统信息
+        - link " 资产主机管理" [ref=f2e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f2e21]: 
+          - generic [ref=f2e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f2e23] [cursor=pointer]:
+          - generic [ref=f2e24]: 
+          - generic [ref=f2e25]: 监控复核工作台
+          - generic [ref=f2e26]: 
+        - generic [ref=f2e27]:
+          - link "监控项复核 114" [ref=f2e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f2e29]: 监控项复核
+            - generic [ref=f2e30]: "114"
+          - link "触发器复核 49" [ref=f2e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f2e32]: 触发器复核
+            - generic [ref=f2e33]: "49"
+          - link "监控项原型复核" [ref=f2e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f2e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f2e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f2e39]: Web场景复核
+            - generic [ref=f2e40]: "7"
+          - link "Web触发器复核" [ref=f2e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f2e43] [cursor=pointer]:
+          - generic [ref=f2e44]: 
+          - generic [ref=f2e45]: 基础模板配置
+          - generic [ref=f2e46]: 
+    - main [ref=f2e47]:
+      - generic [ref=f2e48]:
+        - navigation "breadcrumb" [ref=f2e49]:
+          - list [ref=f2e50]:
+            - listitem [ref=f2e51]: 复核表管理
+            - listitem [ref=f2e52]:
+              - text: /
+              - link "Web场景复核" [ref=f2e53] [cursor=pointer]:
+                - /url: /webscenarios-review
+        - heading "Web场景复核表管理" [level=4] [ref=f2e55]
+      - generic [ref=f2e56]:
+        - generic [ref=f2e57]:
+          - button " 初始化" [ref=f2e58] [cursor=pointer]:
+            - generic [ref=f2e59]: 
+            - text: 初始化
+          - generic [ref=f2e60]:
+            - button " 监控同步" [disabled]:
+              - generic: 
+              - text: 监控同步
+            - button " 核验" [disabled]:
+              - generic: 
+              - text: 核验
+            - combobox [ref=f2e61]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - generic [ref=f2e62]:
+            - button " 同步Web场景触发器" [ref=f2e63] [cursor=pointer]:
+              - generic [ref=f2e64]: 
+              - text: 同步Web场景触发器
+            - combobox [ref=f2e65]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - button " 添加Web场景" [ref=f2e66] [cursor=pointer]:
+            - generic [ref=f2e67]: 
+            - text: 添加Web场景
+          - link " 导出" [ref=f2e68] [cursor=pointer]:
+            - /url: /webscenarios-review/export
+            - generic [ref=f2e69]: 
+            - text: 导出
+          - button " 导入" [ref=f2e70] [cursor=pointer]:
+            - generic [ref=f2e71]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f2e72] [cursor=pointer]:
+            - generic [ref=f2e73]: 
+            - text: 显示技术细节
+          - button "" [ref=f2e75] [cursor=pointer]
+        - generic [ref=f2e78]:
+          - generic [ref=f2e79]:
+            - button " 待处理" [ref=f2e80] [cursor=pointer]:
+              - generic [ref=f2e81]: 
+              - text: 待处理
+            - button " 全部" [ref=f2e82] [cursor=pointer]:
+              - generic [ref=f2e83]: 
+              - text: 全部
+          - generic [ref=f2e84]: "|"
+        - generic [ref=f2e85]:
+          - textbox "主机" [ref=f2e86]
+          - combobox "系统名称" [ref=f2e87]
+          - combobox "模块名称" [ref=f2e88]
+          - button " 筛选" [ref=f2e89] [cursor=pointer]:
+            - generic [ref=f2e90]: 
+            - text: 筛选
+      - generic [ref=f2e91]:
+        - generic [ref=f2e94]:
+          - generic [ref=f2e95]:
+            - generic [ref=f2e96]: 
+            - text: 复核进度
+          - generic [ref=f2e97]:
+            - generic [ref=f2e98]: "8"
+            - generic [ref=f2e99]: 总数
+            - generic [ref=f2e100]: "|"
+            - generic [ref=f2e101]: "1"
+            - generic [ref=f2e102]: 已确认
+            - generic [ref=f2e103]: "|"
+            - generic [ref=f2e104]: "7"
+            - generic [ref=f2e105]: 待确认
+          - generic [ref=f2e107]: "完成率: 12.5%"
+        - generic [ref=f2e110]:
+          - generic [ref=f2e111]:
+            - generic [ref=f2e112]: 
+            - text: 同步状态
+          - generic [ref=f2e113]:
+            - generic [ref=f2e114]: "1"
+            - generic [ref=f2e115]: 已同步
+            - generic [ref=f2e116]: "|"
+            - generic [ref=f2e117]: "7"
+            - generic [ref=f2e118]: 待同步
+          - generic [ref=f2e119]:
+            - generic [ref=f2e120]: 
+            - text: 还有 7 条待同步
+        - generic [ref=f2e123]:
+          - generic [ref=f2e124]:
+            - generic [ref=f2e125]: 
+            - text: 告警关联
+          - generic [ref=f2e126]:
+            - generic [ref=f2e127]: "0"
+            - generic [ref=f2e128]: 关联触发器
+          - generic [ref=f2e129]: 加载中...
+      - generic [ref=f2e130]:
+        - table [ref=f2e132]:
+          - rowgroup [ref=f2e133]:
+            - row [ref=f2e134]:
+              - columnheader [ref=f2e135]:
+                - checkbox "全选/全不选" [ref=f2e136] [cursor=pointer]
+              - columnheader [ref=f2e137]
+              - columnheader "ID" [ref=f2e138]
+              - columnheader "主机" [ref=f2e139]
+              - columnheader "系统名称" [ref=f2e140]
+              - columnheader "模块名称" [ref=f2e141]
+              - columnheader "名称 / 步骤摘要" [ref=f2e142]
+              - columnheader "URL" [ref=f2e143]
+              - columnheader "状态码" [ref=f2e144]
+              - columnheader "机房 / Zabbix IP" [ref=f2e145]
+              - columnheader "修改状态" [ref=f2e146]
+              - columnheader "同步状态" [ref=f2e147]
+              - columnheader "确认状态" [ref=f2e148]
+              - columnheader "状态核验" [ref=f2e149]
+              - columnheader "操作" [ref=f2e150]
+          - rowgroup [ref=f2e151]:
+            - row [ref=f2e152]:
+              - cell [ref=f2e153]:
+                - checkbox [ref=f2e154] [cursor=pointer]
+              - cell "" [ref=f2e155] [cursor=pointer]
+              - cell "1" [ref=f2e157]
+              - cell "Zabbix server" [ref=f2e158]
+              - cell "Another System" [ref=f2e159]
+              - cell "Another Subsystem" [ref=f2e160]
+              - cell [ref=f2e161]:
+                - generic [ref=f2e162]:
+                  - strong [ref=f2e163]: "[Unknown] Web scenario [Another System_Another Subsystem_clb] failed"
+                  - code [ref=f2e164]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.2.1:8080" [ref=f2e165]
+              - cell "200" [ref=f2e166]
+              - cell "本地Docker沙箱" [ref=f2e168]
+              - cell "未修改" [ref=f2e170]
+              - cell " 已同步" [ref=f2e171]:
+                - generic [ref=f2e172]:
+                  - generic [ref=f2e173]: 
+                  - text: 已同步
+              - cell "已确认" [ref=f2e174]
+              - cell "未核验" [ref=f2e175]
+              - cell [ref=f2e177]:
+                - link "修改" [ref=f2e178] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/1
+            - row [ref=f2e179]:
+              - cell [ref=f2e180]:
+                - checkbox [ref=f2e181] [cursor=pointer]
+              - cell "" [ref=f2e182] [cursor=pointer]
+              - cell "2" [ref=f2e184]
+              - cell "Zabbix server" [ref=f2e185]
+              - cell "Another System" [ref=f2e186]
+              - cell "Another Subsystem" [ref=f2e187]
+              - cell [ref=f2e188]:
+                - generic [ref=f2e189]:
+                  - strong [ref=f2e190]: "[Unknown] Web scenario [Another System_Another Subsystem_clb_direct] failed"
+                  - code [ref=f2e191]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.2.3:8080" [ref=f2e192]
+              - cell "200" [ref=f2e193]
+              - cell "本地Docker沙箱" [ref=f2e195]
+              - cell "未修改" [ref=f2e197]
+              - cell " 待同步" [ref=f2e198]:
+                - generic [ref=f2e199]:
+                  - generic [ref=f2e200]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e201]
+              - cell "未核验" [ref=f2e202]
+              - cell [ref=f2e204]:
+                - link "修改" [ref=f2e205] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/2
+                - button " 确认" [ref=f2e206] [cursor=pointer]:
+                  - generic [ref=f2e207]: 
+                  - text: 确认
+            - row [ref=f2e208]:
+              - cell [ref=f2e209]:
+                - checkbox [ref=f2e210] [cursor=pointer]
+              - cell "" [ref=f2e211] [cursor=pointer]
+              - cell "3" [ref=f2e213]
+              - cell "Zabbix server" [ref=f2e214]
+              - cell "Another System" [ref=f2e215]
+              - cell "Another Subsystem" [ref=f2e216]
+              - cell [ref=f2e217]:
+                - generic [ref=f2e218]:
+                  - strong [ref=f2e219]: "[Unknown] Web scenario [Another System_Another Subsystem_nginx] failed"
+                  - code [ref=f2e220]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.2.2:8080" [ref=f2e221]
+              - cell "200" [ref=f2e222]
+              - cell "本地Docker沙箱" [ref=f2e224]
+              - cell "未修改" [ref=f2e226]
+              - cell " 待同步" [ref=f2e227]:
+                - generic [ref=f2e228]:
+                  - generic [ref=f2e229]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e230]
+              - cell "未核验" [ref=f2e231]
+              - cell [ref=f2e233]:
+                - link "修改" [ref=f2e234] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/3
+                - button " 确认" [ref=f2e235] [cursor=pointer]:
+                  - generic [ref=f2e236]: 
+                  - text: 确认
+            - row [ref=f2e237]:
+              - cell [ref=f2e238]:
+                - checkbox [ref=f2e239] [cursor=pointer]
+              - cell "" [ref=f2e240] [cursor=pointer]
+              - cell "4" [ref=f2e242]
+              - cell "Zabbix server" [ref=f2e243]
+              - cell "Another System" [ref=f2e244]
+              - cell "Another Subsystem" [ref=f2e245]
+              - cell [ref=f2e246]:
+                - generic [ref=f2e247]:
+                  - strong [ref=f2e248]: "[Unknown] Web scenario [Another System_Another Subsystem_pod] failed"
+                  - code [ref=f2e249]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.2.4:8080" [ref=f2e250]
+              - cell "200" [ref=f2e251]
+              - cell "本地Docker沙箱" [ref=f2e253]
+              - cell "未修改" [ref=f2e255]
+              - cell " 待同步" [ref=f2e256]:
+                - generic [ref=f2e257]:
+                  - generic [ref=f2e258]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e259]
+              - cell "未核验" [ref=f2e260]
+              - cell [ref=f2e262]:
+                - link "修改" [ref=f2e263] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/4
+                - button " 确认" [ref=f2e264] [cursor=pointer]:
+                  - generic [ref=f2e265]: 
+                  - text: 确认
+            - row [ref=f2e266]:
+              - cell [ref=f2e267]:
+                - checkbox [ref=f2e268] [cursor=pointer]
+              - cell "" [ref=f2e269] [cursor=pointer]
+              - cell "5" [ref=f2e271]
+              - cell "Zabbix server" [ref=f2e272]
+              - cell "Test System" [ref=f2e273]
+              - cell "Test Subsystem" [ref=f2e274]
+              - cell [ref=f2e275]:
+                - generic [ref=f2e276]:
+                  - strong [ref=f2e277]: "[Unknown] Web scenario [Test System_Test Subsystem_clb] failed"
+                  - code [ref=f2e278]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.1.1:8080" [ref=f2e279]
+              - cell "200" [ref=f2e280]
+              - cell "本地Docker沙箱" [ref=f2e282]
+              - cell "未修改" [ref=f2e284]
+              - cell " 待同步" [ref=f2e285]:
+                - generic [ref=f2e286]:
+                  - generic [ref=f2e287]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e288]
+              - cell "未核验" [ref=f2e289]
+              - cell [ref=f2e291]:
+                - link "修改" [ref=f2e292] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/5
+                - button " 确认" [ref=f2e293] [cursor=pointer]:
+                  - generic [ref=f2e294]: 
+                  - text: 确认
+            - row [ref=f2e295]:
+              - cell [ref=f2e296]:
+                - checkbox [ref=f2e297] [cursor=pointer]
+              - cell "" [ref=f2e298] [cursor=pointer]
+              - cell "6" [ref=f2e300]
+              - cell "Zabbix server" [ref=f2e301]
+              - cell "Test System" [ref=f2e302]
+              - cell "Test Subsystem" [ref=f2e303]
+              - cell [ref=f2e304]:
+                - generic [ref=f2e305]:
+                  - strong [ref=f2e306]: "[Unknown] Web scenario [Test System_Test Subsystem_clb_direct] failed"
+                  - code [ref=f2e307]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.1.3:8080" [ref=f2e308]
+              - cell "200" [ref=f2e309]
+              - cell "本地Docker沙箱" [ref=f2e311]
+              - cell "未修改" [ref=f2e313]
+              - cell " 待同步" [ref=f2e314]:
+                - generic [ref=f2e315]:
+                  - generic [ref=f2e316]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e317]
+              - cell "未核验" [ref=f2e318]
+              - cell [ref=f2e320]:
+                - link "修改" [ref=f2e321] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/6
+                - button " 确认" [ref=f2e322] [cursor=pointer]:
+                  - generic [ref=f2e323]: 
+                  - text: 确认
+            - row [ref=f2e324]:
+              - cell [ref=f2e325]:
+                - checkbox [ref=f2e326] [cursor=pointer]
+              - cell "" [ref=f2e327] [cursor=pointer]
+              - cell "7" [ref=f2e329]
+              - cell "Zabbix server" [ref=f2e330]
+              - cell "Test System" [ref=f2e331]
+              - cell "Test Subsystem" [ref=f2e332]
+              - cell [ref=f2e333]:
+                - generic [ref=f2e334]:
+                  - strong [ref=f2e335]: "[Unknown] Web scenario [Test System_Test Subsystem_nginx] failed"
+                  - code [ref=f2e336]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.1.2:8080" [ref=f2e337]
+              - cell "200" [ref=f2e338]
+              - cell "本地Docker沙箱" [ref=f2e340]
+              - cell "未修改" [ref=f2e342]
+              - cell " 待同步" [ref=f2e343]:
+                - generic [ref=f2e344]:
+                  - generic [ref=f2e345]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e346]
+              - cell "未核验" [ref=f2e347]
+              - cell [ref=f2e349]:
+                - link "修改" [ref=f2e350] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/7
+                - button " 确认" [ref=f2e351] [cursor=pointer]:
+                  - generic [ref=f2e352]: 
+                  - text: 确认
+            - row [ref=f2e353]:
+              - cell [ref=f2e354]:
+                - checkbox [ref=f2e355] [cursor=pointer]
+              - cell "" [ref=f2e356] [cursor=pointer]
+              - cell "8" [ref=f2e358]
+              - cell "Zabbix server" [ref=f2e359]
+              - cell "Test System" [ref=f2e360]
+              - cell "Test Subsystem" [ref=f2e361]
+              - cell [ref=f2e362]:
+                - generic [ref=f2e363]:
+                  - strong [ref=f2e364]: "[Unknown] Web scenario [Test System_Test Subsystem_pod] failed"
+                  - code [ref=f2e365]: "步骤: 1个 | 响应码: 200"
+              - cell "192.168.1.4:8080" [ref=f2e366]
+              - cell "200" [ref=f2e367]
+              - cell "本地Docker沙箱" [ref=f2e369]
+              - cell "未修改" [ref=f2e371]
+              - cell " 待同步" [ref=f2e372]:
+                - generic [ref=f2e373]:
+                  - generic [ref=f2e374]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f2e375]
+              - cell "未核验" [ref=f2e376]
+              - cell [ref=f2e378]:
+                - link "修改" [ref=f2e379] [cursor=pointer]:
+                  - /url: /webscenario-review/edit/8
+                - button " 确认" [ref=f2e380] [cursor=pointer]:
+                  - generic [ref=f2e381]: 
+                  - text: 确认
+        - generic [ref=f2e382]:
+          - generic [ref=f2e383]: 共 8 条，显示 1-8
+          - combobox [ref=f2e384] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"
+  - text:  

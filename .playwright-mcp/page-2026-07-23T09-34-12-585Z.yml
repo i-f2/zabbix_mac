@@ -1,0 +1,714 @@
+- generic [active] [ref=f3e1]:
+  - navigation [ref=f3e2]:
+    - generic [ref=f3e3]:
+      - button "" [ref=f3e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f3e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f3e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f3e9]
+    - generic [ref=f3e11]:
+      - button "" [ref=f3e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f3e14]:
+    - complementary [ref=f3e15]:
+      - navigation [ref=f3e16]:
+        - link " 系统信息" [ref=f3e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f3e18]: 
+          - generic [ref=f3e19]: 系统信息
+        - link " 资产主机管理" [ref=f3e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f3e21]: 
+          - generic [ref=f3e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f3e23] [cursor=pointer]:
+          - generic [ref=f3e24]: 
+          - generic [ref=f3e25]: 监控复核工作台
+          - generic [ref=f3e26]: 
+        - generic [ref=f3e27]:
+          - link "监控项复核" [ref=f3e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f3e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f3e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f3e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f3e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f3e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f3e40] [cursor=pointer]:
+          - generic [ref=f3e41]: 
+          - generic [ref=f3e42]: 基础模板配置
+          - generic [ref=f3e43]: 
+    - main [ref=f3e44]:
+      - generic [ref=f3e45]:
+        - navigation "breadcrumb" [ref=f3e46]:
+          - list [ref=f3e47]:
+            - listitem [ref=f3e48]: 复核表管理
+            - listitem [ref=f3e49]:
+              - text: /
+              - link "监控项原型复核" [ref=f3e50] [cursor=pointer]:
+                - /url: /item-prototypes-review
+        - heading "监控项原型复核表管理" [level=4] [ref=f3e52]
+      - generic [ref=f3e53]:
+        - generic [ref=f3e54]:
+          - button " 初始化" [ref=f3e55] [cursor=pointer]:
+            - generic [ref=f3e56]: 
+            - text: 初始化
+          - generic [ref=f3e57]:
+            - button " 监控同步" [disabled]:
+              - generic: 
+              - text: 监控同步
+            - button " 核验" [disabled]:
+              - generic: 
+              - text: 核验
+            - combobox [ref=f3e58]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - link " 导出" [ref=f3e59] [cursor=pointer]:
+            - /url: /item-prototypes-review/export
+            - generic [ref=f3e60]: 
+            - text: 导出
+          - button " 导入" [ref=f3e61] [cursor=pointer]:
+            - generic [ref=f3e62]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f3e63] [cursor=pointer]:
+            - generic [ref=f3e64]: 
+            - text: 显示技术细节
+          - button "" [ref=f3e66] [cursor=pointer]
+        - generic [ref=f3e69]:
+          - generic [ref=f3e70]:
+            - button " 待处理" [ref=f3e71] [cursor=pointer]:
+              - generic [ref=f3e72]: 
+              - text: 待处理
+            - button " 全部" [ref=f3e73] [cursor=pointer]:
+              - generic [ref=f3e74]: 
+              - text: 全部
+          - generic [ref=f3e75]: "|"
+      - generic [ref=f3e76]:
+        - generic [ref=f3e79]:
+          - generic [ref=f3e80]:
+            - generic [ref=f3e81]: 
+            - text: 复核进度
+          - generic [ref=f3e82]:
+            - generic [ref=f3e83]: "-"
+            - generic [ref=f3e84]: 总数
+            - generic [ref=f3e85]: "|"
+            - generic [ref=f3e86]: "-"
+            - generic [ref=f3e87]: 已确认
+            - generic [ref=f3e88]: "|"
+            - generic [ref=f3e89]: "-"
+            - generic [ref=f3e90]: 待确认
+          - generic [ref=f3e92]: "完成率: -"
+        - generic [ref=f3e95]:
+          - generic [ref=f3e96]:
+            - generic [ref=f3e97]: 
+            - text: 同步状态
+          - generic [ref=f3e98]:
+            - generic [ref=f3e99]: "-"
+            - generic [ref=f3e100]: 已同步
+            - generic [ref=f3e101]: "|"
+            - generic [ref=f3e102]: "-"
+            - generic [ref=f3e103]: 待同步
+          - generic: 
+        - generic [ref=f3e106]:
+          - generic [ref=f3e107]:
+            - generic [ref=f3e108]: 
+            - text: 告警关联
+          - generic [ref=f3e109]:
+            - generic [ref=f3e110]: "-"
+            - generic [ref=f3e111]: 关联触发器
+          - generic [ref=f3e112]: 加载中...
+      - generic [ref=f3e113]:
+        - table [ref=f3e115]:
+          - rowgroup [ref=f3e116]:
+            - row [ref=f3e117]:
+              - columnheader [ref=f3e118]:
+                - checkbox "全选/全不选" [ref=f3e119] [cursor=pointer]
+              - columnheader [ref=f3e120]
+              - columnheader "ID" [ref=f3e121]
+              - columnheader "主机 IP" [ref=f3e122]
+              - columnheader "监控项原型 / 键值" [ref=f3e123]
+              - columnheader "LLD 规则" [ref=f3e124]
+              - columnheader "值类型" [ref=f3e125]
+              - columnheader "采集周期" [ref=f3e126]
+              - columnheader "机房" [ref=f3e127]
+              - columnheader "修改状态" [ref=f3e128]
+              - columnheader "同步状态" [ref=f3e129]
+              - columnheader "确认状态" [ref=f3e130]
+              - columnheader "状态核验" [ref=f3e131]
+              - columnheader "操作" [ref=f3e132]
+          - rowgroup [ref=f3e133]:
+            - row [ref=f3e134]:
+              - cell [ref=f3e135]:
+                - checkbox [ref=f3e136] [cursor=pointer]
+              - cell "" [ref=f3e137] [cursor=pointer]
+              - cell "66" [ref=f3e139]
+              - cell "10.24.3.23" [ref=f3e140]
+              - 'cell "{#DEVNAME}: Disk average queue size (avgqu-sz) 必选基线 vfs.dev.queue_size[{#DEVNAME}]" [ref=f3e141]':
+                - generic [ref=f3e142]:
+                  - strong [ref=f3e143]: "{#DEVNAME}: Disk average queue size (avgqu-sz)"
+                  - generic [ref=f3e144]: 必选基线
+                  - code [ref=f3e145]: "vfs.dev.queue_size[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e146]'
+              - cell "Numeric (Float)" [ref=f3e148]
+              - cell "0" [ref=f3e150]
+              - cell [ref=f3e151]
+              - cell "未修改" [ref=f3e152]
+              - cell " 待同步" [ref=f3e153]:
+                - generic [ref=f3e154]:
+                  - generic [ref=f3e155]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e156]
+              - cell "未核验" [ref=f3e157]
+              - cell [ref=f3e159]:
+                - link "修改" [ref=f3e160] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/66
+                - button " 确认" [ref=f3e161] [cursor=pointer]:
+                  - generic [ref=f3e162]: 
+                  - text: 确认
+            - row [ref=f3e163]:
+              - cell [ref=f3e164]:
+                - checkbox [ref=f3e165] [cursor=pointer]
+              - cell "" [ref=f3e166] [cursor=pointer]
+              - cell "67" [ref=f3e168]
+              - cell "10.24.3.12" [ref=f3e169]
+              - 'cell "{#DEVNAME}: Disk average queue size (avgqu-sz) 必选基线 vfs.dev.queue_size[{#DEVNAME}]" [ref=f3e170]':
+                - generic [ref=f3e171]:
+                  - strong [ref=f3e172]: "{#DEVNAME}: Disk average queue size (avgqu-sz)"
+                  - generic [ref=f3e173]: 必选基线
+                  - code [ref=f3e174]: "vfs.dev.queue_size[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e175]'
+              - cell "Numeric (Float)" [ref=f3e177]
+              - cell "0" [ref=f3e179]
+              - cell "深交所证联网" [ref=f3e180]
+              - cell "未修改" [ref=f3e181]
+              - cell " 待同步" [ref=f3e182]:
+                - generic [ref=f3e183]:
+                  - generic [ref=f3e184]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e185]
+              - cell "未核验" [ref=f3e186]
+              - cell [ref=f3e188]:
+                - link "修改" [ref=f3e189] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/67
+                - button " 确认变更" [ref=f3e190] [cursor=pointer]:
+                  - generic [ref=f3e191]: 
+                  - text: 确认变更
+            - row [ref=f3e192]:
+              - cell [ref=f3e193]:
+                - checkbox [ref=f3e194] [cursor=pointer]
+              - cell "" [ref=f3e195] [cursor=pointer]
+              - cell "68" [ref=f3e197]
+              - cell "Zabbix server" [ref=f3e198]
+              - 'cell "{#DEVNAME}: Disk average queue size (avgqu-sz) 必选基线 vfs.dev.queue_size[{#DEVNAME}]" [ref=f3e199]':
+                - generic [ref=f3e200]:
+                  - strong [ref=f3e201]: "{#DEVNAME}: Disk average queue size (avgqu-sz)"
+                  - generic [ref=f3e202]: 必选基线
+                  - code [ref=f3e203]: "vfs.dev.queue_size[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e204]'
+              - cell "Numeric (Float)" [ref=f3e206]
+              - cell "0" [ref=f3e208]
+              - cell [ref=f3e209]
+              - cell "未修改" [ref=f3e210]
+              - cell " 待同步" [ref=f3e211]:
+                - generic [ref=f3e212]:
+                  - generic [ref=f3e213]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f3e214]
+              - cell "未核验" [ref=f3e215]
+              - cell [ref=f3e217]:
+                - link "修改" [ref=f3e218] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/68
+            - row [ref=f3e219]:
+              - cell [ref=f3e220]:
+                - checkbox [ref=f3e221] [cursor=pointer]
+              - cell "" [ref=f3e222] [cursor=pointer]
+              - cell "69" [ref=f3e224]
+              - cell "10.24.3.23" [ref=f3e225]
+              - 'cell "{#DEVNAME}: Disk read request avg waiting time (r_await) 必选基线 vfs.dev.read.await[{#DEVNAME}]" [ref=f3e226]':
+                - generic [ref=f3e227]:
+                  - strong [ref=f3e228]: "{#DEVNAME}: Disk read request avg waiting time (r_await)"
+                  - generic [ref=f3e229]: 必选基线
+                  - code [ref=f3e230]: "vfs.dev.read.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e231]'
+              - cell "Numeric (Float)" [ref=f3e233]
+              - cell "1m" [ref=f3e235]
+              - cell [ref=f3e236]
+              - cell "未修改" [ref=f3e237]
+              - cell " 待同步" [ref=f3e238]:
+                - generic [ref=f3e239]:
+                  - generic [ref=f3e240]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e241]
+              - cell "未核验" [ref=f3e242]
+              - cell [ref=f3e244]:
+                - link "修改" [ref=f3e245] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/69
+                - button " 确认" [ref=f3e246] [cursor=pointer]:
+                  - generic [ref=f3e247]: 
+                  - text: 确认
+            - row [ref=f3e248]:
+              - cell [ref=f3e249]:
+                - checkbox [ref=f3e250] [cursor=pointer]
+              - cell "" [ref=f3e251] [cursor=pointer]
+              - cell "70" [ref=f3e253]
+              - cell "10.24.3.12" [ref=f3e254]
+              - 'cell "{#DEVNAME}: Disk read request avg waiting time (r_await) 必选基线 vfs.dev.read.await[{#DEVNAME}]" [ref=f3e255]':
+                - generic [ref=f3e256]:
+                  - strong [ref=f3e257]: "{#DEVNAME}: Disk read request avg waiting time (r_await)"
+                  - generic [ref=f3e258]: 必选基线
+                  - code [ref=f3e259]: "vfs.dev.read.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e260]'
+              - cell "Numeric (Float)" [ref=f3e262]
+              - cell "1m" [ref=f3e264]
+              - cell "深交所证联网" [ref=f3e265]
+              - cell "未修改" [ref=f3e266]
+              - cell " 待同步" [ref=f3e267]:
+                - generic [ref=f3e268]:
+                  - generic [ref=f3e269]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e270]
+              - cell "未核验" [ref=f3e271]
+              - cell [ref=f3e273]:
+                - link "修改" [ref=f3e274] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/70
+                - button " 确认变更" [ref=f3e275] [cursor=pointer]:
+                  - generic [ref=f3e276]: 
+                  - text: 确认变更
+            - row [ref=f3e277]:
+              - cell [ref=f3e278]:
+                - checkbox [ref=f3e279] [cursor=pointer]
+              - cell "" [ref=f3e280] [cursor=pointer]
+              - cell "71" [ref=f3e282]
+              - cell "Zabbix server" [ref=f3e283]
+              - 'cell "{#DEVNAME}: Disk read request avg waiting time (r_await) 必选基线 vfs.dev.read.await[{#DEVNAME}]" [ref=f3e284]':
+                - generic [ref=f3e285]:
+                  - strong [ref=f3e286]: "{#DEVNAME}: Disk read request avg waiting time (r_await)"
+                  - generic [ref=f3e287]: 必选基线
+                  - code [ref=f3e288]: "vfs.dev.read.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e289]'
+              - cell "Numeric (Float)" [ref=f3e291]
+              - cell "1m" [ref=f3e293]
+              - cell [ref=f3e294]
+              - cell "未修改" [ref=f3e295]
+              - cell " 待同步" [ref=f3e296]:
+                - generic [ref=f3e297]:
+                  - generic [ref=f3e298]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e299]
+              - cell "未核验" [ref=f3e300]
+              - cell [ref=f3e302]:
+                - link "修改" [ref=f3e303] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/71
+                - button " 确认" [ref=f3e304] [cursor=pointer]:
+                  - generic [ref=f3e305]: 
+                  - text: 确认
+            - row [ref=f3e306]:
+              - cell [ref=f3e307]:
+                - checkbox [ref=f3e308] [cursor=pointer]
+              - cell "" [ref=f3e309] [cursor=pointer]
+              - cell "72" [ref=f3e311]
+              - cell "10.24.3.23" [ref=f3e312]
+              - 'cell "{#DEVNAME}: Disk read rate 必选基线 vfs.dev.read.rate[{#DEVNAME}]" [ref=f3e313]':
+                - generic [ref=f3e314]:
+                  - strong [ref=f3e315]: "{#DEVNAME}: Disk read rate"
+                  - generic [ref=f3e316]: 必选基线
+                  - code [ref=f3e317]: "vfs.dev.read.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e318]'
+              - cell "Numeric (Float)" [ref=f3e320]
+              - cell "0" [ref=f3e322]
+              - cell [ref=f3e323]
+              - cell "未修改" [ref=f3e324]
+              - cell " 待同步" [ref=f3e325]:
+                - generic [ref=f3e326]:
+                  - generic [ref=f3e327]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e328]
+              - cell "未核验" [ref=f3e329]
+              - cell [ref=f3e331]:
+                - link "修改" [ref=f3e332] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/72
+                - button " 确认" [ref=f3e333] [cursor=pointer]:
+                  - generic [ref=f3e334]: 
+                  - text: 确认
+            - row [ref=f3e335]:
+              - cell [ref=f3e336]:
+                - checkbox [ref=f3e337] [cursor=pointer]
+              - cell "" [ref=f3e338] [cursor=pointer]
+              - cell "73" [ref=f3e340]
+              - cell "10.24.3.12" [ref=f3e341]
+              - 'cell "{#DEVNAME}: Disk read rate 必选基线 vfs.dev.read.rate[{#DEVNAME}]" [ref=f3e342]':
+                - generic [ref=f3e343]:
+                  - strong [ref=f3e344]: "{#DEVNAME}: Disk read rate"
+                  - generic [ref=f3e345]: 必选基线
+                  - code [ref=f3e346]: "vfs.dev.read.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e347]'
+              - cell "Numeric (Float)" [ref=f3e349]
+              - cell "0" [ref=f3e351]
+              - cell "深交所证联网" [ref=f3e352]
+              - cell "未修改" [ref=f3e353]
+              - cell " 待同步" [ref=f3e354]:
+                - generic [ref=f3e355]:
+                  - generic [ref=f3e356]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e357]
+              - cell "未核验" [ref=f3e358]
+              - cell [ref=f3e360]:
+                - link "修改" [ref=f3e361] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/73
+                - button " 确认变更" [ref=f3e362] [cursor=pointer]:
+                  - generic [ref=f3e363]: 
+                  - text: 确认变更
+            - row [ref=f3e364]:
+              - cell [ref=f3e365]:
+                - checkbox [ref=f3e366] [cursor=pointer]
+              - cell "" [ref=f3e367] [cursor=pointer]
+              - cell "74" [ref=f3e369]
+              - cell "Zabbix server" [ref=f3e370]
+              - 'cell "{#DEVNAME}: Disk read rate 必选基线 vfs.dev.read.rate[{#DEVNAME}]" [ref=f3e371]':
+                - generic [ref=f3e372]:
+                  - strong [ref=f3e373]: "{#DEVNAME}: Disk read rate"
+                  - generic [ref=f3e374]: 必选基线
+                  - code [ref=f3e375]: "vfs.dev.read.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e376]'
+              - cell "Numeric (Float)" [ref=f3e378]
+              - cell "0" [ref=f3e380]
+              - cell [ref=f3e381]
+              - cell "未修改" [ref=f3e382]
+              - cell " 待同步" [ref=f3e383]:
+                - generic [ref=f3e384]:
+                  - generic [ref=f3e385]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e386]
+              - cell "未核验" [ref=f3e387]
+              - cell [ref=f3e389]:
+                - link "修改" [ref=f3e390] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/74
+                - button " 确认" [ref=f3e391] [cursor=pointer]:
+                  - generic [ref=f3e392]: 
+                  - text: 确认
+            - row [ref=f3e393]:
+              - cell [ref=f3e394]:
+                - checkbox [ref=f3e395] [cursor=pointer]
+              - cell "" [ref=f3e396] [cursor=pointer]
+              - cell "75" [ref=f3e398]
+              - cell "10.24.3.23" [ref=f3e399]
+              - 'cell "{#DEVNAME}: Disk read time (rate) 必选基线 vfs.dev.read.time.rate[{#DEVNAME}]" [ref=f3e400]':
+                - generic [ref=f3e401]:
+                  - strong [ref=f3e402]: "{#DEVNAME}: Disk read time (rate)"
+                  - generic [ref=f3e403]: 必选基线
+                  - code [ref=f3e404]: "vfs.dev.read.time.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e405]'
+              - cell "Numeric (Float)" [ref=f3e407]
+              - cell "0" [ref=f3e409]
+              - cell [ref=f3e410]
+              - cell "未修改" [ref=f3e411]
+              - cell " 待同步" [ref=f3e412]:
+                - generic [ref=f3e413]:
+                  - generic [ref=f3e414]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e415]
+              - cell "未核验" [ref=f3e416]
+              - cell [ref=f3e418]:
+                - link "修改" [ref=f3e419] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/75
+                - button " 确认" [ref=f3e420] [cursor=pointer]:
+                  - generic [ref=f3e421]: 
+                  - text: 确认
+            - row [ref=f3e422]:
+              - cell [ref=f3e423]:
+                - checkbox [ref=f3e424] [cursor=pointer]
+              - cell "" [ref=f3e425] [cursor=pointer]
+              - cell "76" [ref=f3e427]
+              - cell "10.24.3.12" [ref=f3e428]
+              - 'cell "{#DEVNAME}: Disk read time (rate) 必选基线 vfs.dev.read.time.rate[{#DEVNAME}]" [ref=f3e429]':
+                - generic [ref=f3e430]:
+                  - strong [ref=f3e431]: "{#DEVNAME}: Disk read time (rate)"
+                  - generic [ref=f3e432]: 必选基线
+                  - code [ref=f3e433]: "vfs.dev.read.time.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e434]'
+              - cell "Numeric (Float)" [ref=f3e436]
+              - cell "0" [ref=f3e438]
+              - cell "深交所证联网" [ref=f3e439]
+              - cell "未修改" [ref=f3e440]
+              - cell " 待同步" [ref=f3e441]:
+                - generic [ref=f3e442]:
+                  - generic [ref=f3e443]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e444]
+              - cell "未核验" [ref=f3e445]
+              - cell [ref=f3e447]:
+                - link "修改" [ref=f3e448] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/76
+                - button " 确认变更" [ref=f3e449] [cursor=pointer]:
+                  - generic [ref=f3e450]: 
+                  - text: 确认变更
+            - row [ref=f3e451]:
+              - cell [ref=f3e452]:
+                - checkbox [ref=f3e453] [cursor=pointer]
+              - cell "" [ref=f3e454] [cursor=pointer]
+              - cell "77" [ref=f3e456]
+              - cell "Zabbix server" [ref=f3e457]
+              - 'cell "{#DEVNAME}: Disk read time (rate) 必选基线 vfs.dev.read.time.rate[{#DEVNAME}]" [ref=f3e458]':
+                - generic [ref=f3e459]:
+                  - strong [ref=f3e460]: "{#DEVNAME}: Disk read time (rate)"
+                  - generic [ref=f3e461]: 必选基线
+                  - code [ref=f3e462]: "vfs.dev.read.time.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e463]'
+              - cell "Numeric (Float)" [ref=f3e465]
+              - cell "0" [ref=f3e467]
+              - cell [ref=f3e468]
+              - cell "未修改" [ref=f3e469]
+              - cell " 待同步" [ref=f3e470]:
+                - generic [ref=f3e471]:
+                  - generic [ref=f3e472]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e473]
+              - cell "未核验" [ref=f3e474]
+              - cell [ref=f3e476]:
+                - link "修改" [ref=f3e477] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/77
+                - button " 确认" [ref=f3e478] [cursor=pointer]:
+                  - generic [ref=f3e479]: 
+                  - text: 确认
+            - row [ref=f3e480]:
+              - cell [ref=f3e481]:
+                - checkbox [ref=f3e482] [cursor=pointer]
+              - cell "" [ref=f3e483] [cursor=pointer]
+              - cell "78" [ref=f3e485]
+              - cell "10.24.3.23" [ref=f3e486]
+              - 'cell "{#DEVNAME}: Disk utilization 必选基线 vfs.dev.util[{#DEVNAME}]" [ref=f3e487]':
+                - generic [ref=f3e488]:
+                  - strong [ref=f3e489]: "{#DEVNAME}: Disk utilization"
+                  - generic [ref=f3e490]: 必选基线
+                  - code [ref=f3e491]: "vfs.dev.util[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e492]'
+              - cell "Numeric (Float)" [ref=f3e494]
+              - cell "0" [ref=f3e496]
+              - cell [ref=f3e497]
+              - cell "未修改" [ref=f3e498]
+              - cell " 待同步" [ref=f3e499]:
+                - generic [ref=f3e500]:
+                  - generic [ref=f3e501]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e502]
+              - cell "未核验" [ref=f3e503]
+              - cell [ref=f3e505]:
+                - link "修改" [ref=f3e506] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/78
+                - button " 确认" [ref=f3e507] [cursor=pointer]:
+                  - generic [ref=f3e508]: 
+                  - text: 确认
+            - row [ref=f3e509]:
+              - cell [ref=f3e510]:
+                - checkbox [ref=f3e511] [cursor=pointer]
+              - cell "" [ref=f3e512] [cursor=pointer]
+              - cell "79" [ref=f3e514]
+              - cell "10.24.3.12" [ref=f3e515]
+              - 'cell "{#DEVNAME}: Disk utilization 必选基线 vfs.dev.util[{#DEVNAME}]" [ref=f3e516]':
+                - generic [ref=f3e517]:
+                  - strong [ref=f3e518]: "{#DEVNAME}: Disk utilization"
+                  - generic [ref=f3e519]: 必选基线
+                  - code [ref=f3e520]: "vfs.dev.util[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e521]'
+              - cell "Numeric (Float)" [ref=f3e523]
+              - cell "0" [ref=f3e525]
+              - cell "深交所证联网" [ref=f3e526]
+              - cell "未修改" [ref=f3e527]
+              - cell " 待同步" [ref=f3e528]:
+                - generic [ref=f3e529]:
+                  - generic [ref=f3e530]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e531]
+              - cell "未核验" [ref=f3e532]
+              - cell [ref=f3e534]:
+                - link "修改" [ref=f3e535] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/79
+                - button " 确认变更" [ref=f3e536] [cursor=pointer]:
+                  - generic [ref=f3e537]: 
+                  - text: 确认变更
+            - row [ref=f3e538]:
+              - cell [ref=f3e539]:
+                - checkbox [ref=f3e540] [cursor=pointer]
+              - cell "" [ref=f3e541] [cursor=pointer]
+              - cell "80" [ref=f3e543]
+              - cell "Zabbix server" [ref=f3e544]
+              - 'cell "{#DEVNAME}: Disk utilization 必选基线 vfs.dev.util[{#DEVNAME}]" [ref=f3e545]':
+                - generic [ref=f3e546]:
+                  - strong [ref=f3e547]: "{#DEVNAME}: Disk utilization"
+                  - generic [ref=f3e548]: 必选基线
+                  - code [ref=f3e549]: "vfs.dev.util[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e550]'
+              - cell "Numeric (Float)" [ref=f3e552]
+              - cell "0" [ref=f3e554]
+              - cell [ref=f3e555]
+              - cell "未修改" [ref=f3e556]
+              - cell " 待同步" [ref=f3e557]:
+                - generic [ref=f3e558]:
+                  - generic [ref=f3e559]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e560]
+              - cell "未核验" [ref=f3e561]
+              - cell [ref=f3e563]:
+                - link "修改" [ref=f3e564] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/80
+                - button " 确认" [ref=f3e565] [cursor=pointer]:
+                  - generic [ref=f3e566]: 
+                  - text: 确认
+            - row [ref=f3e567]:
+              - cell [ref=f3e568]:
+                - checkbox [ref=f3e569] [cursor=pointer]
+              - cell "" [ref=f3e570] [cursor=pointer]
+              - cell "81" [ref=f3e572]
+              - cell "10.24.3.23" [ref=f3e573]
+              - 'cell "{#DEVNAME}: Disk write request avg waiting time (w_await) 必选基线 vfs.dev.write.await[{#DEVNAME}]" [ref=f3e574]':
+                - generic [ref=f3e575]:
+                  - strong [ref=f3e576]: "{#DEVNAME}: Disk write request avg waiting time (w_await)"
+                  - generic [ref=f3e577]: 必选基线
+                  - code [ref=f3e578]: "vfs.dev.write.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e579]'
+              - cell "Numeric (Float)" [ref=f3e581]
+              - cell "1m" [ref=f3e583]
+              - cell [ref=f3e584]
+              - cell "未修改" [ref=f3e585]
+              - cell " 待同步" [ref=f3e586]:
+                - generic [ref=f3e587]:
+                  - generic [ref=f3e588]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e589]
+              - cell "未核验" [ref=f3e590]
+              - cell [ref=f3e592]:
+                - link "修改" [ref=f3e593] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/81
+                - button " 确认" [ref=f3e594] [cursor=pointer]:
+                  - generic [ref=f3e595]: 
+                  - text: 确认
+            - row [ref=f3e596]:
+              - cell [ref=f3e597]:
+                - checkbox [ref=f3e598] [cursor=pointer]
+              - cell "" [ref=f3e599] [cursor=pointer]
+              - cell "82" [ref=f3e601]
+              - cell "10.24.3.12" [ref=f3e602]
+              - 'cell "{#DEVNAME}: Disk write request avg waiting time (w_await) 必选基线 vfs.dev.write.await[{#DEVNAME}]" [ref=f3e603]':
+                - generic [ref=f3e604]:
+                  - strong [ref=f3e605]: "{#DEVNAME}: Disk write request avg waiting time (w_await)"
+                  - generic [ref=f3e606]: 必选基线
+                  - code [ref=f3e607]: "vfs.dev.write.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e608]'
+              - cell "Numeric (Float)" [ref=f3e610]
+              - cell "1m" [ref=f3e612]
+              - cell "深交所证联网" [ref=f3e613]
+              - cell "未修改" [ref=f3e614]
+              - cell " 待同步" [ref=f3e615]:
+                - generic [ref=f3e616]:
+                  - generic [ref=f3e617]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e618]
+              - cell "未核验" [ref=f3e619]
+              - cell [ref=f3e621]:
+                - link "修改" [ref=f3e622] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/82
+                - button " 确认变更" [ref=f3e623] [cursor=pointer]:
+                  - generic [ref=f3e624]: 
+                  - text: 确认变更
+            - row [ref=f3e625]:
+              - cell [ref=f3e626]:
+                - checkbox [ref=f3e627] [cursor=pointer]
+              - cell "" [ref=f3e628] [cursor=pointer]
+              - cell "83" [ref=f3e630]
+              - cell "Zabbix server" [ref=f3e631]
+              - 'cell "{#DEVNAME}: Disk write request avg waiting time (w_await) 必选基线 vfs.dev.write.await[{#DEVNAME}]" [ref=f3e632]':
+                - generic [ref=f3e633]:
+                  - strong [ref=f3e634]: "{#DEVNAME}: Disk write request avg waiting time (w_await)"
+                  - generic [ref=f3e635]: 必选基线
+                  - code [ref=f3e636]: "vfs.dev.write.await[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e637]'
+              - cell "Numeric (Float)" [ref=f3e639]
+              - cell "1m" [ref=f3e641]
+              - cell [ref=f3e642]
+              - cell "未修改" [ref=f3e643]
+              - cell " 待同步" [ref=f3e644]:
+                - generic [ref=f3e645]:
+                  - generic [ref=f3e646]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e647]
+              - cell "未核验" [ref=f3e648]
+              - cell [ref=f3e650]:
+                - link "修改" [ref=f3e651] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/83
+                - button " 确认" [ref=f3e652] [cursor=pointer]:
+                  - generic [ref=f3e653]: 
+                  - text: 确认
+            - row [ref=f3e654]:
+              - cell [ref=f3e655]:
+                - checkbox [ref=f3e656] [cursor=pointer]
+              - cell "" [ref=f3e657] [cursor=pointer]
+              - cell "84" [ref=f3e659]
+              - cell "10.24.3.23" [ref=f3e660]
+              - 'cell "{#DEVNAME}: Disk write rate 必选基线 vfs.dev.write.rate[{#DEVNAME}]" [ref=f3e661]':
+                - generic [ref=f3e662]:
+                  - strong [ref=f3e663]: "{#DEVNAME}: Disk write rate"
+                  - generic [ref=f3e664]: 必选基线
+                  - code [ref=f3e665]: "vfs.dev.write.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e666]'
+              - cell "Numeric (Float)" [ref=f3e668]
+              - cell "0" [ref=f3e670]
+              - cell [ref=f3e671]
+              - cell "未修改" [ref=f3e672]
+              - cell " 待同步" [ref=f3e673]:
+                - generic [ref=f3e674]:
+                  - generic [ref=f3e675]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e676]
+              - cell "未核验" [ref=f3e677]
+              - cell [ref=f3e679]:
+                - link "修改" [ref=f3e680] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/84
+                - button " 确认" [ref=f3e681] [cursor=pointer]:
+                  - generic [ref=f3e682]: 
+                  - text: 确认
+            - row [ref=f3e683]:
+              - cell [ref=f3e684]:
+                - checkbox [ref=f3e685] [cursor=pointer]
+              - cell "" [ref=f3e686] [cursor=pointer]
+              - cell "85" [ref=f3e688]
+              - cell "10.24.3.12" [ref=f3e689]
+              - 'cell "{#DEVNAME}: Disk write rate 必选基线 vfs.dev.write.rate[{#DEVNAME}]" [ref=f3e690]':
+                - generic [ref=f3e691]:
+                  - strong [ref=f3e692]: "{#DEVNAME}: Disk write rate"
+                  - generic [ref=f3e693]: 必选基线
+                  - code [ref=f3e694]: "vfs.dev.write.rate[{#DEVNAME}]"
+              - 'cell "LLD: Block devices discovery" [ref=f3e695]'
+              - cell "Numeric (Float)" [ref=f3e697]
+              - cell "0" [ref=f3e699]
+              - cell "深交所证联网" [ref=f3e700]
+              - cell "未修改" [ref=f3e701]
+              - cell " 待同步" [ref=f3e702]:
+                - generic [ref=f3e703]:
+                  - generic [ref=f3e704]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f3e705]
+              - cell "未核验" [ref=f3e706]
+              - cell [ref=f3e708]:
+                - link "修改" [ref=f3e709] [cursor=pointer]:
+                  - /url: /item-prototype-review/edit/85
+                - button " 确认变更" [ref=f3e710] [cursor=pointer]:
+                  - generic [ref=f3e711]: 
+                  - text: 确认变更
+        - generic [ref=f3e712]:
+          - generic [ref=f3e713]: 共 39 条，显示 1-20
+          - button "" [disabled] [ref=f3e714]
+          - generic [ref=f3e716]: "1"
+          - button "2" [ref=f3e717] [cursor=pointer]
+          - button "" [ref=f3e718] [cursor=pointer]
+          - combobox [ref=f3e720] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"
+  - text:  
