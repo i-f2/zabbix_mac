@@ -318,7 +318,13 @@ window.ReviewActions = {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             showToast(data.message, data.success ? 'success' : 'danger');
-            if (data.success) setTimeout(function() { location.reload(); }, 1500);
+            // Show warning if hosts were skipped (no template)
+            if (data.success && data.data && data.data.skipped_hosts > 0) {
+                setTimeout(function() {
+                    showToast(data.data.skipped_hosts + ' 台主机未绑定模板，已用默认模板兜底初始化', 'warning');
+                }, 500);
+            }
+            if (data.success) setTimeout(function() { location.reload(); }, 2000);
         })
         .catch(function(e) {
             showToast('初始化请求失败: ' + e.message, 'danger');
