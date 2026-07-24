@@ -91,10 +91,10 @@
                 {% for prototype in prototypes %}
                 <tr class="{% if prototype.change_type == 'new' %}row-change-new{% elif prototype.change_type == 'update' %}row-change-update{% elif prototype.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ prototype.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td style="text-align:center; cursor:pointer; width:32px;"
+                    <td class="col-expand"
                         onclick="TriggerDrillDown.toggle(this, '{{ prototype.host_ip|e }}', '', '{{ prototype.key|e }}')"
                         title="展开/收起 LLD 规则详情">
-                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                        <i class="bi bi-plus-square expand-toggle-icon"></i>
                     </td>
                     <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ prototype.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ prototype.host_ip }}</td>
@@ -106,8 +106,8 @@
                             <code class="item-key-sub">{{ prototype.key }}</code>
                         </div>
                     </td>
-                    <td>{% if prototype.dr_name %}<span class="badge bg-light text-dark border">LLD: {{ prototype.dr_name }}</span>{% endif %}</td>
-                    <td class="col-tech"><span class="badge bg-info">{{ translate_value_type(prototype.value_type) }}</span></td>
+                    <td>{% if prototype.dr_name %}<span class="badge badge-sm bg-light text-dark border">LLD: {{ prototype.dr_name }}</span>{% endif %}</td>
+                    <td class="col-tech"><span class="badge badge-sm bg-info">{{ translate_value_type(prototype.value_type) }}</span></td>
                     <td>{{ prototype.delay }}</td>
                     <td>{{ prototype.in_room or '' }}</td>
                     <td class="col-sticky col-sticky-r5 col-fw-status">{{ '已修改' if prototype.modified else '未修改' }}</td>

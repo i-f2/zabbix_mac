@@ -8,6 +8,9 @@ import sys
 import pytest
 from unittest.mock import Mock, patch
 
+# 在 app 模块导入前设置环境变量，避免 RuntimeError
+os.environ.setdefault('APP_SECRET_KEY', 'test-secret-key-for-pytest')
+
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -17,13 +17,20 @@ def app():
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     # 模拟 fetchall 返回空列表，让各个页面正常渲染
+    # fetchall 返回空列表以渲染模板
     mock_cursor.fetchall.return_value = []
+    # fetchone 需返回可比较的整数值（避免 Jinja2 min/total 比较 MagicMock vs int）
+    mock_cursor.fetchone.return_value = MagicMock()
+    mock_cursor.fetchone.return_value.__getitem__.return_value = 0
+    mock_cursor.fetchone.return_value.get.return_value = 0
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
     with patch('app.get_db_connection', return_value=mock_conn):
         from app import app
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
+        # 绕过 CSRF 验证
+        app.before_request_funcs[None] = []
         yield app
 
 

@@ -135,10 +135,10 @@
             {% for ws in webscenarios %}
                 <tr class="{% if ws.change_type == 'new' %}row-change-new{% elif ws.change_type == 'update' %}row-change-update{% elif ws.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ ws.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td style="text-align:center; cursor:pointer; width:32px;"
+                    <td class="col-expand"
                         onclick="TriggerDrillDown.toggle(this, '{{ ws.host|e }}', '', '{{ ws.name|e }}')"
                         title="展开/收起 Web 步骤">
-                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                        <i class="bi bi-plus-square expand-toggle-icon"></i>
                     </td>
                     <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ ws.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ ws.host }}</td>
@@ -152,7 +152,7 @@
                         </div>
                     </td>
                     <td class="col-tech">{{ ws.url }}</td>
-                    <td><span class="badge bg-light text-dark border">{{ ws.status_code }}</span></td>
+                    <td><span class="badge badge-sm bg-light text-dark border">{{ ws.status_code }}</span></td>
                     <td>{% if ws.in_room %}<span class="room-badge">{{ ws.in_room }}</span>{% endif %}</td>
                     <td class="col-sticky col-sticky-r5 col-fw-status">{{ '已修改' if ws.modified else '未修改' }}</td>
                     <td class="col-sticky col-sticky-r4 col-fw-status">
@@ -261,6 +261,8 @@
 <script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 <script>
 async function initWebScenariosReview() { ReviewActions.initReview('initWebScenariosReviewBtn', '/webscenarios-review/initialize', true); }
+
+async function syncAllToZabbix() { ReviewActions.syncAll(); }
 
 
 async function syncWebScenarios() {

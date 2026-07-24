@@ -475,6 +475,18 @@ body.sidebar-collapsed .app-main {
 .data-card .table {
     margin-bottom: 0;
     font-size: 14px;
+    border-collapse: collapse !important;
+}
+/* Standardize cell box model for fixed sticky columns */
+.data-card .table > thead > tr > th,
+.data-card .table > tbody > tr > td {
+    box-sizing: border-box !important;
+}
+/* Expand [+] column: tight padding to fit 32px width */
+.data-card .table th[style*="width:32px"],
+.data-card .table td[style*="width:32px"] {
+    padding: 4px 2px !important;
+    text-align: center !important;
 }
 
 .data-card .table > thead {
@@ -592,39 +604,60 @@ body.sidebar-collapsed .app-main {
    Sticky Table Columns (frozen left/right during horizontal scroll)
    ============================================================ */
 .table .col-sticky {
-    position: sticky;
+    position: sticky !important;
     z-index: 2;
 }
 .table thead .col-sticky {
     z-index: 3;
 }
 
-/* Left frozen columns */
-.col-sticky-l1 { left: 0; }
-.col-sticky-l2 { left: 50px; }
+/* Left frozen columns — positions account for border-collapse:collapse (no spacing) */
+/* col-cb: 36px + expand: 32px = 68px before IP column */
+.col-sticky-l1 { left: 0 !important; }
+.col-sticky-l2 { left: 68px !important; }
+.col-fw-id     { width: 50px !important;  min-width: 50px !important;  max-width: 50px !important; }
+.col-fw-ip     { width: 140px !important; min-width: 140px !important; max-width: 140px !important; }
 
 /* Right frozen columns (stacked from right edge inward) */
-.col-sticky-r1 { right: 0; }       /* 操作 — rightmost */
-.col-sticky-r2 { right: 100px; }   /* 状态核验 */
-.col-sticky-r3 { right: 180px; }   /* 确认状态 */
-.col-sticky-r4 { right: 260px; }   /* 同步状态 (NEW) */
-.col-sticky-r5 { right: 340px; }   /* 修改状态 */
+/* col-fw-action=100px + col-fw-status=80px each */
+.col-sticky-r1 { right: 0 !important; }
+.col-sticky-r2 { right: 100px !important; }
+.col-sticky-r3 { right: 180px !important; }
+.col-sticky-r4 { right: 260px !important; }
+.col-sticky-r5 { right: 340px !important; }
+.col-fw-status { width: 80px !important;  min-width: 80px !important;  max-width: 80px !important; }
+.col-fw-action { width: 100px !important; min-width: 100px !important; max-width: 100px !important; }
 
-/* Fixed widths for frozen columns */
-.col-fw-id     { width: 50px;  min-width: 50px; }
-.col-fw-ip     { width: 140px; min-width: 140px; }
-.col-fw-status { width: 80px;  min-width: 80px; }
-.col-fw-action { width: 100px; min-width: 100px; }
-
-/* Opaque backgrounds prevent scrolling content from showing through */
-.table tbody .col-sticky {
-    background: #fff;
+/* Opaque backgrounds with !important prevent scrolling content from showing through */
+.table tbody .col-sticky,
+.table tbody .col-sticky.col-sticky-l1,
+.table tbody .col-sticky.col-sticky-l2,
+.table tbody .col-sticky.col-sticky-r1,
+.table tbody .col-sticky.col-sticky-r2,
+.table tbody .col-sticky.col-sticky-r3,
+.table tbody .col-sticky.col-sticky-r4,
+.table tbody .col-sticky.col-sticky-r5 {
+    background: #fff !important;
 }
-.table thead .col-sticky {
-    background: #f5f7fa;
+.table thead .col-sticky,
+.table thead .col-sticky.col-sticky-l1,
+.table thead .col-sticky.col-sticky-l2,
+.table thead .col-sticky.col-sticky-r1,
+.table thead .col-sticky.col-sticky-r2,
+.table thead .col-sticky.col-sticky-r3,
+.table thead .col-sticky.col-sticky-r4,
+.table thead .col-sticky.col-sticky-r5 {
+    background: #f5f7fa !important;
 }
-.table.table-striped tbody tr:nth-of-type(odd) .col-sticky {
-    background: #f2f2f2;
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-l1,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-l2,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-r1,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-r2,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-r3,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-r4,
+.table.table-striped tbody tr:nth-of-type(odd) .col-sticky.col-sticky-r5 {
+    background: #f2f2f2 !important;
 }
 
 /* ============================================================
@@ -662,7 +695,7 @@ body.sidebar-collapsed .app-main {
 .status-badge.synced {
     background-color: #28a745;
 }
-.status-badge.pending-confirm {
+.status-badge.pending-sync {
     background-color: #ffc107;
     color: #333;
 }
@@ -907,4 +940,203 @@ td.col-fw-name {
 .popconfirm-actions .btn {
     font-size: 12px;
     padding: 2px 12px;
+}
+
+/* ============================================================
+   UI 重构：Item Name Cell (merged name + key)
+   ============================================================ */
+.item-name-cell strong {
+    font-size: 14px;
+    color: #1a1a2e;
+}
+.item-name-cell .item-key-sub {
+    font-size: 11px;
+    color: #8c8c8c;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    word-break: break-all;
+}
+
+/* Baseline category badges */
+.baseline-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 5px;
+    vertical-align: middle;
+    margin-left: 4px;
+    border-radius: 3px;
+    color: #fff;
+    line-height: 1.4;
+}
+.baseline-badge.bb-mandatory { background-color: #dc3545; }
+.baseline-badge.bb-hardware  { background-color: #fd7e14; }
+.baseline-badge.bb-middleware { background-color: #6f42c1; }
+.baseline-badge.bb-business  { background-color: #6c757d; }
+
+/* ============================================================
+   UI 重构：Adaptive Column Toggle (col-tech)
+   ============================================================ */
+.col-tech {
+    transition: opacity 0.25s ease, max-width 0.25s ease;
+}
+.col-tech[style*="display: none"] {
+    opacity: 0;
+    max-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden;
+    width: 0 !important;
+    min-width: 0 !important;
+}
+
+/* ============================================================
+   UI 重构：Trigger Drill-down Child Row
+   ============================================================ */
+.trigger-child-row td {
+    border-top: none !important;
+    border-bottom: 1px solid #ebeef5 !important;
+}
+.trigger-cards-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 16px 8px 16px;
+}
+.trigger-card-item {
+    background: #fff;
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    padding: 8px 12px;
+    flex: 1 1 300px;
+    min-width: 260px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.trigger-card-item:hover {
+    border-color: #409eff;
+    box-shadow: 0 2px 6px rgba(64,158,255,0.12);
+}
+
+/* ============================================================
+   UI 重构：Dashboard KPI Cards
+   ============================================================ */
+.dashboard-cards {
+    margin-bottom: 16px;
+}
+.dash-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e4e7ed;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: box-shadow 0.2s, border-color 0.2s;
+    height: 100%;
+}
+.dash-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-color: #409eff;
+}
+.dash-card-body {
+    padding: 16px;
+}
+.dash-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8c8c8c;
+    margin-bottom: 10px;
+}
+.dash-card-title i {
+    margin-right: 4px;
+    color: #409eff;
+}
+.dash-card-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.dash-stat {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1;
+}
+.dash-stat-label {
+    font-size: 11px;
+    color: #8c8c8c;
+}
+.dash-sep {
+    color: #dcdfe6;
+    font-size: 14px;
+    margin: 0 2px;
+}
+/* Trigger severity mini-bar */
+.trigger-severity-bars {
+    font-size: 11px;
+}
+.trigger-severity-bars .prog-bar {
+    height: 8px;
+    border-radius: 3px;
+    background: #e9ecef;
+    overflow: hidden;
+}
+
+/* ============================================================
+   UI 重构：LLD Macro Highlighting
+   ============================================================ */
+.lld-macro {
+    display: inline-block;
+    background-color: #f0e6ff;
+    color: #7b2ff5;
+    font-size: 11px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-weight: 500;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ============================================================
+   UI 重构：IP/Room Badge
+   ============================================================ */
+.room-badge {
+    display: inline-block;
+    background-color: #2c3e50;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+/* ============================================================
+   v1.0 Cleanup — inline style replacements
+   ============================================================ */
+
+/* Expand toggle cell */
+.col-expand {
+    text-align: center;
+    cursor: pointer;
+    width: 32px;
+}
+/* Expand toggle icon */
+.expand-toggle-icon {
+    font-size: 14px;
+}
+/* Code block with break-all for long expressions */
+.code-break-all {
+    word-break: break-all;
+}
+/* Small badge variant */
+.badge-sm {
+    font-size: 11px;
+}
+/* Dashboard progress bar */
+.dash-progress {
+    height: 6px;
+}
+/* Sync progress bar */
+.sync-progress {
+    height: 25px;
+}
+/* Dashboard KPI sync warning (initially hidden) */
+.dash-sync-warn {
+    display: none;
 }

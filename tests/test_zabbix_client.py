@@ -104,8 +104,8 @@ class TestZabbixClientItems:
         with patch('zabbix_mac.ZabbixAPI') as mock_api:
             mock_instance = MagicMock()
             mock_instance.item.get.return_value = [
-                {'itemid': '1', 'name': 'item1', 'key_': 'item1'},
-                {'itemid': '2', 'name': 'item2', 'key_': 'item2'}
+                {'itemid': '1', 'name': 'item1', 'key_': 'item1', 'templateid': '0'},
+                {'itemid': '2', 'name': 'item2', 'key_': 'item2', 'templateid': '0'}
             ]
             mock_api.return_value = mock_instance
             client = ZabbixClient("http://test/api", "user", "pass")
@@ -125,15 +125,16 @@ class TestZabbixClientItems:
             assert item_id == '30000'
 
     def test_create_item_failure(self):
-        """创建监控项失败"""
+        """创建监控项失败（重试耗尽后抛出 ZabbixAPIException）"""
+        import pyzabbix
         with patch('zabbix_mac.ZabbixAPI') as mock_api:
             mock_instance = MagicMock()
             mock_instance.item.create.side_effect = Exception("Create failed")
             mock_api.return_value = mock_instance
             client = ZabbixClient("http://test/api", "user", "pass")
             client.api = mock_instance
-            item_id = client.create_item({'name': 'test'})
-            assert item_id is None
+            with pytest.raises(pyzabbix.api.ZabbixAPIException):
+                client.create_item({'name': 'test'})
 
     def test_update_item(self):
         """更新监控项"""

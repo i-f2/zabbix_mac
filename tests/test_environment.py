@@ -149,7 +149,7 @@ class TestEnvironmentCheck:
             'zabbix_mac.py',
             'app.py',
             'CODE_WIKI.md',
-            'docker-compose.yml'
+            'config.yaml',
         ]
 
         missing_files = []

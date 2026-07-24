@@ -91,10 +91,10 @@
                 {% for prototype in prototypes %}
                 <tr class="{% if prototype.change_type == 'new' %}row-change-new{% elif prototype.change_type == 'update' %}row-change-update{% elif prototype.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ prototype.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td style="text-align:center; cursor:pointer; width:32px;"
+                    <td class="col-expand"
                         onclick="TriggerDrillDown.toggle(this, '{{ prototype.host_ip|e }}', '', '{{ prototype.description|e }}')"
                         title="展开/收起 LLD 规则详情">
-                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                        <i class="bi bi-plus-square expand-toggle-icon"></i>
                     </td>
                     <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ prototype.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ prototype.host_ip }}</td>
@@ -105,9 +105,9 @@
                             <code class="item-key-sub">{{ prototype.expression }}</code>
                         </div>
                     </td>
-                    <td class="col-tech"><code class="text-muted small" style="word-break:break-all;">{{ prototype.expression }}</code></td>
-                    <td>{% set p = trigger_priority_info(prototype.priority) %}<span class="badge bg-{{ p[1] }}" style="font-size:11px;">{{ p[0] }}</span></td>
-                    <td>{% if prototype.dr_name %}<span class="badge bg-light text-dark border">LLD: {{ prototype.dr_name }}</span>{% endif %}</td>
+                    <td class="col-tech"><code class="text-muted small" class="code-break-all">{{ prototype.expression }}</code></td>
+                    <td>{% set p = trigger_priority_info(prototype.priority) %}<span class="badge badge-sm bg-{{ p[1] }}">{{ p[0] }}</span></td>
+                    <td>{% if prototype.dr_name %}<span class="badge badge-sm bg-light text-dark border">LLD: {{ prototype.dr_name }}</span>{% endif %}</td>
                     <td>{{ prototype.in_room or '' }}</td>
                     <td class="col-sticky col-sticky-r5 col-fw-status">{{ '已修改' if prototype.modified else '未修改' }}</td>
                     <td class="col-sticky col-sticky-r4 col-fw-status">

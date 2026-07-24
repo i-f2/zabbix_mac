@@ -135,10 +135,10 @@
             {% for item in items %}
                 <tr class="{% if item.change_type == 'new' %}row-change-new{% elif item.change_type == 'update' %}row-change-update{% elif item.change_type == 'delete' %}row-change-delete{% endif %}">
                     <td class="col-cb"><input type="checkbox" class="row-checkbox" value="{{ item.id }}" onchange="BatchSync.onCheckboxChange()"></td>
-                    <td style="text-align:center; cursor:pointer; width:32px;"
+                    <td class="col-expand"
                         onclick="TriggerDrillDown.toggle(this, '{{ item.host_ip|e }}', '{{ item.template_name|e }}', '{{ item.item_key|e }}')"
                         title="展开/收起关联触发器">
-                        <i class="bi bi-plus-square expand-toggle-icon" style="font-size:14px;"></i>
+                        <i class="bi bi-plus-square expand-toggle-icon"></i>
                     </td>
                     <td class="col-sticky col-sticky-l1 col-fw-id col-tech">{{ item.id }}</td>
                     <td class="col-sticky col-sticky-l2 col-fw-ip">{{ item.host_ip }}</td>
@@ -151,10 +151,10 @@
                         </div>
                     </td>
                     <td class="col-tech">
-                        <span class="badge bg-{{ type_badge_color(item.type) }}">{{ translate_item_type(item.type) }}</span>
+                        <span class="badge badge-sm bg-{{ type_badge_color(item.type) }}">{{ translate_item_type(item.type) }}</span>
                     </td>
                     <td class="col-tech">
-                        <span class="badge bg-info">{{ translate_value_type(item.value_type) }}</span>
+                        <span class="badge badge-sm bg-info">{{ translate_value_type(item.value_type) }}</span>
                     </td>
                     <td>{{ item.delay }}</td>
                     <td class="col-tech">{{ item.template_name }}</td>
@@ -346,73 +346,14 @@
     </div>
   </div>
 </div>
-<!-- 同步进度弹窗 -->
-<div class="modal fade" id="syncProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">同步进度</h5>
-      </div>
-      <div class="modal-body">
-        <div class="progress mb-3" style="height: 25px;">
-          <div class="progress-bar progress-bar-striped progress-bar-animated" id="syncProgressBar" style="width: 0%">0%</div>
-        </div>
-        <p id="syncProgressText">准备中...</p>
-        <div id="syncErrorList" class="text-danger small"></div>
-        <div class="mt-3 text-end">
-          <button class="btn btn-danger btn-sm" id="stopSyncBtn" onclick="stopSync()">
-            <i class="bi bi-stop-circle"></i> 停止同步
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts_extra %}
 <script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 <script>
-async function initItemsReview() {
-    var system = document.querySelector('input[name="system"]')?.value || '';
-    var subsystem = document.querySelector('input[name="subsystem"]')?.value || '';
-    var btn = document.getElementById('initItemsReviewBtn');
-    if (!btn) return;
-    var orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 初始化中...';
-    try {
-        var res = await fetch('/items-review/initialize', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ system: system, subsystem: subsystem })
-        });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('初始化请求失败: ' + e.message, 'danger');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
-    }
-}
+async function initItemsReview() { ReviewActions.initReview('initItemsReviewBtn', '/items-review/initialize', true); }
 
-async function importItemsReview(input) {
-    if (!input.files.length) return;
-    if (!confirm('将清空 items_review 表现有数据并从 Excel 导入，确认继续？')) { input.value = ''; return; }
-    var formData = new FormData();
-    formData.append('file', input.files[0]);
-    try {
-        var res = await fetch('/items-review/import', { method: 'POST', body: formData });
-        var data = await res.json();
-        showToast(data.message, data.success ? 'success' : 'danger');
-        if (data.success) setTimeout(function () { location.reload(); }, 1500);
-    } catch (e) {
-        showToast('导入失败: ' + e.message, 'danger');
-    }
-    input.value = '';
-}
+async function importItemsReview(input) { ReviewActions.importReview(input, '/items-review/import', 'items_review'); }
 
 async function submitAddItem() {
     var btn = document.getElementById('submitAddItemBtn');

@@ -1,0 +1,50 @@
+<!-- Executive Summary Dashboard Cards (shared by review pages) -->
+<div class="dashboard-cards row g-3 mb-3" id="dashboardCards">
+    <div class="col-md-4">
+        <div class="dash-card">
+            <div class="dash-card-body">
+                <div class="dash-card-title"><i class="bi bi-clipboard-check"></i> 复核进度</div>
+                <div class="dash-card-stats">
+                    <span class="dash-stat" id="dashTotal">-</span><span class="dash-stat-label">总数</span>
+                    <span class="dash-sep">|</span>
+                    <span class="dash-stat text-success" id="dashConfirmed">-</span><span class="dash-stat-label">已确认</span>
+                    <span class="dash-sep">|</span>
+                    <span class="dash-stat text-warning" id="dashPending">-</span><span class="dash-stat-label">待确认</span>
+                </div>
+                <div class="progress mt-2" class="dash-progress">
+                    <div class="progress-bar bg-success" id="dashProgressBar" style="width:0%;"></div>
+                </div>
+                <div class="text-muted small mt-1" id="dashCompletionText">完成率: -</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="dash-card">
+            <div class="dash-card-body">
+                <div class="dash-card-title"><i class="bi bi-cloud-check"></i> 同步状态</div>
+                <div class="dash-card-stats">
+                    <span class="dash-stat text-success" id="dashSynced">-</span><span class="dash-stat-label">已同步</span>
+                    <span class="dash-sep">|</span>
+                    <span class="dash-stat text-warning" id="dashPendingSync">-</span><span class="dash-stat-label">待同步</span>
+                </div>
+                <div class="text-muted small mt-1">
+                    <i class="bi bi-exclamation-triangle-fill text-warning" id="dashSyncWarn" class="dash-sync-warn"></i>
+                    <span id="dashSyncWarnText"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="dash-card">
+            <div class="dash-card-body">
+                <div class="dash-card-title"><i class="bi bi-exclamation-diamond"></i> 告警关联</div>
+                <div class="dash-card-stats">
+                    <span class="dash-stat" id="dashTriggersTotal">-</span><span class="dash-stat-label">关联触发器</span>
+                </div>
+                <div class="trigger-severity-bars mt-2" id="dashSeverityBars">
+                    <span class="text-muted small">加载中...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

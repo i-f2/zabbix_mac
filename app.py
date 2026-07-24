@@ -26,6 +26,8 @@ import json
 
 from config_loader import load_config, get_db_config, get_zabbix_environments
 
+from typing import Any, List
+
 app = Flask(__name__)
 
 # 请求结束时自动关闭数据库连接（防止连接泄漏）
@@ -188,8 +190,81 @@ def _safe_pagination(page, per_page):
     return page, per_page
 
 
-def _diff_and_merge(cur, table_name, unique_keys, content_columns,
-                    new_rows, existing_rows, all_insert_cols):
+# ---- UI 重构：技术字段翻译映射 ----
+_ITEM_TYPE_MAP = {
+    0: "Zabbix Agent", 1: "SNMPv1 Agent", 2: "Zabbix Trapper",
+    3: "Simple Check", 4: "SNMPv2 Agent", 5: "Zabbix Internal",
+    6: "SNMPv3 Agent", 7: "Zabbix Agent (Active)",
+    8: "Zabbix Aggregate", 9: "Web Item", 10: "External Check",
+    11: "Database Monitor", 12: "IPMI Agent", 13: "SSH Agent",
+    14: "TELNET Agent", 15: "Calculated", 16: "JMX Agent",
+    17: "SNMP Trap", 18: "Dependent Item", 19: "HTTP Agent",
+    20: "Prometheus", 21: "Script Item",
+}
+_VALUE_TYPE_MAP = {0: "Numeric (Float)", 1: "Character", 2: "Log", 3: "Numeric (Unsigned)", 4: "Text"}
+_ITEM_TYPE_COLOR = {0: "primary", 3: "info", 5: "secondary", 7: "primary", 11: "warning", 18: "dark", 19: "success"}
+
+def _translate_item_type(type_val):
+    return _ITEM_TYPE_MAP.get(int(type_val) if type_val is not None else -1, f"Unknown ({type_val})")
+
+def _translate_value_type(valuetype_val):
+    return _VALUE_TYPE_MAP.get(int(valuetype_val) if valuetype_val is not None else -1, f"Unknown ({valuetype_val})")
+
+def _type_badge_color(type_val):
+    return _ITEM_TYPE_COLOR.get(int(type_val) if type_val is not None else -1, "secondary")
+
+# ---- UI 重构：基线分类 ----
+_BASELINE_MANDATORY_PREFIXES = [
+    "system.cpu.", "vm.memory.", "vfs.fs.", "vfs.dev.",
+    "agent.ping", "kernel.", "system.swap.", "system.boottime",
+    "system.hostname", "system.localtime", "system.uname",
+    "system.uptime", "system.hw.",
+]
+_BASELINE_HARDWARE_PREFIXES = ["sensor.", "fan.", "power.", "psu."]
+_BASELINE_MIDDLEWARE_PREFIXES = [
+    "proc.num.", "proc.mem.", "net.tcp.service[", "net.tcp.port",
+    "net.udp.port", "net.tcp.listen", "net.tcp.conn",
+]
+
+def _classify_baseline(item_key):
+    if not item_key:
+        return "业务指标"
+    key_lower = item_key.lower()
+    if any(key_lower.startswith(p) for p in _BASELINE_MANDATORY_PREFIXES):
+        return "必选基线"
+    if any(key_lower.startswith(p) for p in _BASELINE_HARDWARE_PREFIXES):
+        return "硬件外设"
+    if any(key_lower.startswith(p) for p in _BASELINE_MIDDLEWARE_PREFIXES):
+        return "中间件/服务"
+    return "业务指标"
+
+_BASELINE_CSS = {"必选基线": "bb-mandatory", "硬件外设": "bb-hardware", "中间件/服务": "bb-middleware", "业务指标": "bb-business"}
+def _baseline_css_class(item_key):
+    return _BASELINE_CSS.get(_classify_baseline(item_key), "bb-business")
+
+_TRIGGER_PRIORITY_MAP = {0: ("未分类", "secondary"), 1: ("信息", "info"), 2: ("警告", "warning"), 3: ("一般", "warning"), 4: ("严重", "danger"), 5: ("灾难", "danger")}
+def _trigger_priority_info(priority_val):
+    if priority_val is None:
+        return ("未知", "secondary")
+    return _TRIGGER_PRIORITY_MAP.get(int(priority_val), (f"未知({priority_val})", "secondary"))
+
+# 注册 Jinja2 模板全局函数
+app.jinja_env.globals['translate_item_type'] = _translate_item_type
+app.jinja_env.globals['translate_value_type'] = _translate_value_type
+app.jinja_env.globals['type_badge_color'] = _type_badge_color
+app.jinja_env.globals['classify_baseline'] = _classify_baseline
+app.jinja_env.globals['baseline_css_class'] = _baseline_css_class
+app.jinja_env.globals['trigger_priority_info'] = _trigger_priority_info
+
+def _diff_and_merge(
+    cur: psycopg2.extensions.cursor,
+    table_name: str,
+    unique_keys: list,
+    content_columns: list,
+    new_rows: list,
+    existing_rows: list,
+    all_insert_cols: list,
+) -> dict:
     """基于 Diff 算法的复核表增量合并
 
     在单个事务中处理三件事：
@@ -438,6 +513,68 @@ def api_review_pending_counts():
     except Exception as e:
         app.logger.error(f"待办计数查询失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/review/dashboard-stats')
+def api_review_dashboard_stats():
+    """返回复核仪表盘统计数据"""
+    table = request.args.get('table', 'items_review').strip()
+    allowed_tables = {'items_review', 'triggers_review', 'webscenario_items_review'}
+    if table not in allowed_tables:
+        return jsonify({'success': False, 'message': f'不支持的表: {table}'}), 400
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(f"SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN confirmed = true THEN 1 ELSE 0 END), 0) AS confirmed FROM {table}")
+            row = cur.fetchone()
+            total = row['total']
+            confirmed = row['confirmed']
+            pending = total - confirmed
+            cur.execute(f"SELECT sync_status, COUNT(*) AS cnt FROM {table} GROUP BY sync_status")
+            sync_rows = cur.fetchall()
+            synced = pending_sync = pending_delete = 0
+            for r in sync_rows:
+                s = r['sync_status']
+                if s == 'synced': synced = r['cnt']
+                elif s == 'pending_delete': pending_delete = r['cnt']
+                else: pending_sync += r['cnt']
+            triggers_total = 0
+            triggers_by_priority = {}
+            if table == 'items_review':
+                cur.execute("SELECT COUNT(*) AS total FROM triggers_review")
+                triggers_total = cur.fetchone()['total']
+                cur.execute("SELECT priority, COUNT(*) AS cnt FROM triggers_review GROUP BY priority")
+                for r in cur.fetchall():
+                    prio = r['priority'] if r['priority'] is not None else 0
+                    triggers_by_priority[str(prio)] = r['cnt']
+        conn.close()
+        return jsonify({'success': True, 'data': {
+            'total': total, 'confirmed': confirmed, 'pending': pending,
+            'completion_pct': round(confirmed / total * 100, 1) if total > 0 else 0,
+            'synced': synced, 'pending_sync': pending_sync, 'pending_delete': pending_delete,
+            'triggers_total': triggers_total, 'triggers_by_priority': triggers_by_priority,
+        }})
+    except Exception as e:
+        app.logger.error(f"仪表盘统计查询失败: {e}")
+        try: conn.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/review/item-triggers')
+def api_item_triggers():
+    """返回与指定 host_ip + template_name 关联的触发器复核记录"""
+    host_ip = request.args.get('host_ip', '').strip()
+    template_name = request.args.get('template_name', '').strip()
+    if not host_ip or not template_name:
+        return jsonify({'success': False, 'message': '缺少 host_ip 或 template_name 参数'}), 400
+    conn = get_db_connection()
+    with conn.cursor(cursor_factory=DictCursor) as cur:
+        cur.execute("SELECT * FROM triggers_review WHERE host_ip = %s AND template_name = %s ORDER BY id",
+                    (host_ip, template_name))
+        trigger_list = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify({'success': True, 'triggers': trigger_list})
 
 
 @app.route('/api/review/verify', methods=['POST'])
@@ -1839,6 +1976,7 @@ def items_review():
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
+    baseline = request.args.get('baseline', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     page, per_page = _safe_pagination(page, per_page)
@@ -1859,6 +1997,27 @@ def items_review():
             params.append(f'%{subsystem}%')
         if sync_filter == 'pending':
             where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
+
+        if baseline:
+            _baseline_sql_patterns = {
+                '必选基线': ["system.cpu.%%", "vm.memory.%%", "vfs.fs.%%", "vfs.dev.%%", "agent.ping", "kernel.%%", "system.swap.%%", "system.boottime", "system.hostname", "system.localtime", "system.uname", "system.uptime", "system.hw.%%"],
+                '硬件外设': ["sensor.%%", "fan.%%", "power.%%", "psu.%%"],
+                '中间件/服务': ["proc.num.%%", "proc.mem.%%", "net.tcp.service[%%", "net.tcp.port", "net.udp.port", "net.tcp.listen%%", "net.tcp.conn%%"],
+            }
+            if baseline == '业务指标':
+                all_exclude = []
+                for pat_list in _baseline_sql_patterns.values():
+                    all_exclude.extend(pat_list)
+                for pattern in all_exclude:
+                    where_clause += " AND item_key NOT ILIKE %s"
+                    params.append(pattern)
+            elif baseline in _baseline_sql_patterns:
+                like_clauses = []
+                for pattern in _baseline_sql_patterns[baseline]:
+                    like_clauses.append("item_key ILIKE %s")
+                    params.append(pattern)
+                if like_clauses:
+                    where_clause += " AND (" + " OR ".join(like_clauses) + ")"
 
         # 获取 system / subsystem 去重值供 datalist 下拉建议
         cur.execute("SELECT DISTINCT system FROM items_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
@@ -1882,6 +2041,7 @@ def items_review():
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
                            sync_filter=sync_filter,
+                           baseline=baseline,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
 
@@ -1970,6 +2130,7 @@ def initialize_items_review():
 def sync_items_to_zabbix():
     """将已确认的监控项同步至指定环境机房的 Zabbix Server（含孤儿清理）"""
     data = request.get_json()
+    ids = data.get('ids', []) if data else []
     environment = data.get('environment', '').strip() if data else ''
 
     if environment not in ZABBIX_ENVIRONMENTS:
@@ -2157,10 +2318,24 @@ def sync_all_to_zabbix():
     部分失败不会回滚已成功的操作，而是报告错误让用户修复后重新同步。
     get_managed_* 方法失败时会 raise（而非返回[]），避免误判"零实体"导致批量重建。
 
-    TODO: 重构 - 本函数与 /items-review/sync 和 zabbix_mac.py SyncEngine 存在大量重复逻辑。
-    建议将4类实体的同步抽取为 SyncEntity 协议，由统一的同步引擎驱动。
+    TODO(v2): 重构同步引擎 — 消除 3 处重复实现
+    重复现状:
+      a) sync_all_to_zabbix() (本函数) — 4 实体类型, 约 400 行
+      b) sync_items_to_zabbix() 行 2130 — 仅监控项, 约 140 行
+      c) sync_webscenarios_to_zabbix() 行 3568 — 仅 Web 场景, 约 120 行
+      d) zabbix_mac.py SyncEngine — 配置文件驱动, 不同职责
+    重构方案:
+      1. 定义 SyncEntity 协议类, 方法: fetch_existing() / build_data() /
+         compare_fingerprint() / create() / update() / delete()
+      2. 每个实体类型(Item/Trigger/ItemPrototype/TriggerPrototype/WebScenario)
+         实现该协议, 封装表名列名映射 + Zabbix API 调用
+      3. sync_all_to_zabbix() 降级为循环: for entity in entities: entity.sync()
+      4. 合并 sync_items_to_zabbix() 和 sync_webscenarios_to_zabbix()
+    约束: 保持幂等性, get_managed_* 失败时 raise 而非返回 []
+    估算: ~400 行新代码, 需要 live Zabbix 回归测试 2-3 天
     """
     data = request.get_json()
+    ids = data.get('ids', []) if data else []
     environment = data.get('environment', '').strip() if data else ''
 
     if environment not in ZABBIX_ENVIRONMENTS:
@@ -2727,7 +2902,8 @@ def confirm_item_review(review_id):
 
 @app.route('/item-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_item_review(review_id):
-    """取消确认监控项复核表记录"""
+    """取消确认监控项复核表记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /item-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -3018,7 +3194,8 @@ def confirm_trigger_review(review_id):
 
 @app.route('/trigger-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_trigger_review(review_id):
-    """取消确认触发器复核表记录"""
+    """取消确认触发器复核表记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /trigger-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -3612,7 +3789,8 @@ def confirm_webscenario_review(review_id):
 
 @app.route('/webscenario-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_webscenario_review(review_id):
-    """取消确认 Web 场景复核记录"""
+    """取消确认 Web 场景复核记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /webscenario-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -3923,6 +4101,7 @@ def verify_web_triggers_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -3954,6 +4133,8 @@ def confirm_web_trigger_review(review_id):
 
 @app.route('/web-trigger-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_web_trigger_review(review_id):
+    """取消确认Web触发器复核记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /web-trigger-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -4098,9 +4279,9 @@ def item_prototypes_review():
         params = []
         if sync_filter == 'pending':
             where_extra = " WHERE (sync_status != 'synced' OR sync_status IS NULL)"
-        cur.execute(f"SELECT COUNT(*) FROM item_prototypes_review{where_extra}", params)
+        cur.execute(f"SELECT COUNT(*) FROM item_prototypes_review ipr{where_extra}", params)
         total = cur.fetchone()['count']
-        cur.execute(f"SELECT * FROM item_prototypes_review{where_extra} ORDER BY id LIMIT %s OFFSET %s",
+        cur.execute(f"SELECT ipr.*, dr.name AS dr_name, dr.key AS dr_key FROM item_prototypes_review ipr LEFT JOIN discovery_rules dr ON ipr.discovery_rule_id = dr.id{where_extra} ORDER BY ipr.id LIMIT %s OFFSET %s",
                     params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
@@ -4181,7 +4362,8 @@ def confirm_item_prototype_review(review_id):
 
 @app.route('/item-prototype-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_item_prototype_review(review_id):
-    """取消确认监控项原型复核表记录"""
+    """取消确认监控项原型复核表记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /item-prototype-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -4208,10 +4390,13 @@ def trigger_prototypes_review():
         where_extra = ""
         params = []
         if sync_filter == 'pending':
-            where_extra = " WHERE (sync_status != 'synced' OR sync_status IS NULL)"
-        cur.execute(f"SELECT COUNT(*) FROM trigger_prototypes_review{where_extra}", params)
+            where_extra = " WHERE (tpr.sync_status != 'synced' OR tpr.sync_status IS NULL)"
+        cur.execute(f"SELECT COUNT(*) FROM trigger_prototypes_review tpr{where_extra}", params)
         total = cur.fetchone()['count']
-        cur.execute(f"SELECT * FROM trigger_prototypes_review{where_extra} ORDER BY id LIMIT %s OFFSET %s",
+        cur.execute(f"""SELECT tpr.*, dr.name AS dr_name, dr.key AS dr_key
+                        FROM trigger_prototypes_review tpr
+                        LEFT JOIN discovery_rules dr ON tpr.discovery_rule_id = dr.id
+                        {where_extra} ORDER BY tpr.id LIMIT %s OFFSET %s""",
                     params + [per_page, offset])
         prototypes = cur.fetchall()
     conn.close()
@@ -4282,7 +4467,8 @@ def confirm_trigger_prototype_review(review_id):
 
 @app.route('/trigger-prototype-review/unconfirm/<int:review_id>', methods=['POST'])
 def unconfirm_trigger_prototype_review(review_id):
-    """取消确认触发器原型复核表记录"""
+    """取消确认触发器原型复核表记录（已废弃，前端已移除对应按钮）"""
+    logging.warning('DEPRECATED route /trigger-prototype-review/unconfirm called for review_id=%s', review_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -4612,6 +4798,7 @@ def verify_items_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -4620,6 +4807,7 @@ def verify_items_review():
         })
     except Exception as e:
         app.logger.error(f"监控项核验失败: {e}")
+        conn.rollback()
         return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -4676,6 +4864,7 @@ def verify_triggers_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -4684,6 +4873,7 @@ def verify_triggers_review():
         })
     except Exception as e:
         app.logger.error(f"触发器核验失败: {e}")
+        conn.rollback()
         return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -4693,6 +4883,7 @@ def verify_triggers_review():
 def verify_webscenarios_review():
     """核验 webscenario_items_review 状态：从 Zabbix 拉取实际 Web 场景并与复核表比对"""
     data = request.get_json()
+    ids = data.get('ids', []) if data else []
     environment = data.get('environment', '').strip() if data else ''
 
     if environment not in ZABBIX_ENVIRONMENTS:
@@ -4740,6 +4931,7 @@ def verify_webscenarios_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -4748,6 +4940,7 @@ def verify_webscenarios_review():
         })
     except Exception as e:
         app.logger.error(f"Web 场景核验失败: {e}")
+        conn.rollback()
         return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -4757,6 +4950,7 @@ def verify_webscenarios_review():
 def verify_item_prototypes_review():
     """核验 item_prototypes_review 状态：从 Zabbix 拉取实际监控项原型并与复核表比对"""
     data = request.get_json()
+    ids = data.get('ids', []) if data else []
     environment = data.get('environment', '').strip() if data else ''
 
     if environment not in ZABBIX_ENVIRONMENTS:
@@ -4804,6 +4998,7 @@ def verify_item_prototypes_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -4812,6 +5007,7 @@ def verify_item_prototypes_review():
         })
     except Exception as e:
         app.logger.error(f"监控项原型核验失败: {e}")
+        conn.rollback()
         return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -4821,6 +5017,7 @@ def verify_item_prototypes_review():
 def verify_trigger_prototypes_review():
     """核验 trigger_prototypes_review 状态：从 Zabbix 拉取实际触发器原型并与复核表比对"""
     data = request.get_json()
+    ids = data.get('ids', []) if data else []
     environment = data.get('environment', '').strip() if data else ''
 
     if environment not in ZABBIX_ENVIRONMENTS:
@@ -4867,6 +5064,7 @@ def verify_trigger_prototypes_review():
             msg += f'，{len(errors)} 个主机失败'
         conn.commit()
         app.logger.info(f"核验完成: {msg}")
+        conn.rollback()
         return jsonify({
             'success': True,
             'message': msg,
@@ -4875,6 +5073,7 @@ def verify_trigger_prototypes_review():
         })
     except Exception as e:
         app.logger.error(f"触发器原型核验失败: {e}")
+        conn.rollback()
         return jsonify({'success': False, 'message': f'核验失败: {str(e)}'}), 500
     finally:
         conn.close()
@@ -5309,7 +5508,7 @@ def _resolve_table(table: str = '', action_type: str = '') -> str:
     raise ValueError('请提供 table 或 action_type 参数')
 
 
-def _parse_trigger_item_keys(expression: str):
+def _parse_trigger_item_keys(expression: str) -> List[str]:
     """Extract item keys from a Zabbix trigger expression.
 
     Zabbix trigger expressions look like:
@@ -5474,7 +5673,7 @@ def _get_host_col(table: str) -> str:
     return 'host' if table in ('webscenario_items_review', 'web_trigger_review') else 'host_ip'
 
 
-def _normalize_delay(delay) -> str:
+def _normalize_delay(delay: Any) -> str:
     """确保 delay 值为 Zabbix 5.0 合法的非零字符串格式。
 
     Zabbix 5.0 LLD item prototype 拒绝 delay=0 或空值，
@@ -5592,8 +5791,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 'output': ['triggerid', 'description'],
             })
             zabbix_names = {t['description'] for t in zabbix_triggers}
-        except Exception:
-            zabbix_names = set()
+        except Exception as e:
+            app.logger.error(f"compare_entity fetch failed: {e}"); zabbix_names = set()
         for row in rows:
             tname = row['trigger_name']
             if tname in zabbix_names:
@@ -5612,8 +5811,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 'hostids': host_id,
                 'output': ['itemid', 'key_'],
             })
-        except Exception:
-            zabbix_rules = []
+        except Exception as e:
+            app.logger.error(f"compare_entity fetch rules failed: {e}"); zabbix_rules = []
         for row in rows:
             dr_id = int(row.get('discovery_rule_id', 0))
             dr_cfg = dr_configs.get(dr_id, {})
@@ -5636,8 +5835,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
             try:
                 existing_protos = client.get_item_prototypes(rule['itemid'])
                 proto_map = {p['key_']: p for p in existing_protos}
-            except Exception:
-                proto_map = {}
+            except Exception as e:
+                app.logger.error(f"compare_entity itemprototype fetch failed: {e}"); proto_map = {}
             key = row.get('key', '')
             if key not in proto_map:
                 changes.append({'host': row['host_ip'], 'type': 'ItemPrototype', 'key': key,
@@ -5654,8 +5853,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 'hostids': host_id,
                 'output': ['itemid', 'key_'],
             })
-        except Exception:
-            zabbix_rules = []
+        except Exception as e:
+            app.logger.error(f"compare_entity fetch rules failed: {e}"); zabbix_rules = []
         for row in rows:
             dr_id = int(row.get('discovery_rule_id', 0))
             dr_cfg = dr_configs.get(dr_id, {})
@@ -5678,8 +5877,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
             try:
                 existing_tprotos = client.get_trigger_prototypes(rule['itemid'])
                 tproto_map = {t['description']: t for t in existing_tprotos}
-            except Exception:
-                tproto_map = {}
+            except Exception as e:
+                app.logger.error(f"compare_entity triggerprototype fetch failed: {e}"); tproto_map = {}
             desc = row.get('description', '')
             if desc not in tproto_map:
                 changes.append({'host': row['host_ip'], 'type': 'TriggerPrototype', 'key': desc,
@@ -5696,8 +5895,8 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 'output': ['httptestid', 'name', 'url'],
             })
             scenario_map = {s['name']: s for s in existing_scenarios}
-        except Exception:
-            scenario_map = {}
+        except Exception as e:
+            app.logger.error(f"compare_entity webscenario fetch failed: {e}"); scenario_map = {}
         for row in rows:
             name = row.get('name', '')
             url = row.get('url', '')
