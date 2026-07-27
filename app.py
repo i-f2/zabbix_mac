@@ -531,7 +531,7 @@ def api_review_pending_counts():
 def api_review_dashboard_stats():
     """返回复核仪表盘统计数据"""
     table = request.args.get('table', 'items_review').strip()
-    allowed_tables = {'items_review', 'triggers_review', 'webscenario_items_review'}
+    allowed_tables = {'items_review', 'triggers_review', 'webscenario_items_review', 'web_trigger_review', 'item_prototypes_review', 'trigger_prototypes_review'}
     if table not in allowed_tables:
         return jsonify({'success': False, 'message': f'不支持的表: {table}'}), 400
     conn = get_db_connection()
