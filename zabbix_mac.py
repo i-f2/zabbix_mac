@@ -474,14 +474,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in trigger_data:
+            trigger_data["tags"] = []
+        if MANAGED_TAG not in trigger_data["tags"]:
+            trigger_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in trigger_data:
-                    trigger_data["tags"] = []
-                trigger_data["tags"].append(MANAGED_TAG)
-
                 result = self.api.trigger.create(trigger_data)
                 trigger_id = result["triggerids"][0]
                 logger.info(f"成功创建触发器: {trigger_data.get('description')} (ID: {trigger_id})")
@@ -520,14 +521,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in trigger_data:
+            trigger_data["tags"] = []
+        if MANAGED_TAG not in trigger_data["tags"]:
+            trigger_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in trigger_data:
-                    trigger_data["tags"] = []
-                trigger_data["tags"].append(MANAGED_TAG)
-
                 trigger_data["triggerid"] = trigger_id
                 self.api.trigger.update(trigger_data)
                 logger.info(f"成功更新触发器: {trigger_data.get('description')} (ID: {trigger_id})")
@@ -639,14 +641,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 重试耗尽后抛出（BUG-01 修复）
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in rule_data:
+            rule_data["tags"] = []
+        if MANAGED_TAG not in rule_data["tags"]:
+            rule_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in rule_data:
-                    rule_data["tags"] = []
-                rule_data["tags"].append(MANAGED_TAG)
-
                 result = self.api.discoveryrule.create(rule_data)
                 # 检查 result 是否包含 ruleids 键
                 if "ruleids" in result and result["ruleids"]:
@@ -755,13 +758,14 @@ class ZabbixClient:
         Returns:
             是否成功
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in rule_data:
+            rule_data["tags"] = []
+        if MANAGED_TAG not in rule_data["tags"]:
+            rule_data["tags"].append(MANAGED_TAG)
+
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in rule_data:
-                    rule_data["tags"] = []
-                rule_data["tags"].append(MANAGED_TAG)
-                
                 rule_data["ruleid"] = rule_id
                 self.api.discoveryrule.update(rule_data)
                 logger.info(f"成功更新自动发现规则: {rule_data.get('name')} (ID: {rule_id})")
@@ -847,13 +851,14 @@ class ZabbixClient:
         else:
             prototype_data["delay"] = str(delay)
 
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in prototype_data:
+            prototype_data["tags"] = []
+        if MANAGED_TAG not in prototype_data["tags"]:
+            prototype_data["tags"].append(MANAGED_TAG)
+
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in prototype_data:
-                    prototype_data["tags"] = []
-                prototype_data["tags"].append(MANAGED_TAG)
-
                 result = self.api.itemprototype.create(prototype_data)
                 prototype_id = result["itemids"][0]
                 logger.info(f"成功创建监控项原型: {prototype_data.get('name')} (ID: {prototype_id})")
@@ -890,14 +895,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 更新失败时抛出
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in prototype_data:
+            prototype_data["tags"] = []
+        if MANAGED_TAG not in prototype_data["tags"]:
+            prototype_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in prototype_data:
-                    prototype_data["tags"] = []
-                prototype_data["tags"].append(MANAGED_TAG)
-
                 prototype_data["itemid"] = prototype_id
                 self.api.itemprototype.update(prototype_data)
                 logger.info(f"成功更新监控项原型: {prototype_data.get('name')} (ID: {prototype_id})")
@@ -1104,14 +1110,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 更新失败时抛出
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in scenario_data:
+            scenario_data["tags"] = []
+        if MANAGED_TAG not in scenario_data["tags"]:
+            scenario_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in scenario_data:
-                    scenario_data["tags"] = []
-                scenario_data["tags"].append(MANAGED_TAG)
-                
                 scenario_data["httptestid"] = scenario_id
                 # Zabbix 5.0 httptest.update 不接受 hostid
                 if "hostid" in scenario_data:
@@ -1181,15 +1188,17 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 创建失败时抛出
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in prototype_data:
+            prototype_data["tags"] = []
+        if MANAGED_TAG not in prototype_data["tags"]:
+            prototype_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in prototype_data:
-                    prototype_data["tags"] = []
-                prototype_data["tags"].append(MANAGED_TAG)
-                
-                # 直接使用完整的prototype_data创建，包含discoveryruleid
+                # Zabbix 5.0: triggerprototype.create 不接受 discoveryruleid，
+                # 触发器原型通过 expression 中引用的 item prototype 自动关联到 LLD rule
                 result = self.api.triggerprototype.create(prototype_data)
                 
                 prototype_id = result["triggerids"][0]
@@ -1229,14 +1238,15 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 更新失败时抛出
         """
+        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
+        if "tags" not in prototype_data:
+            prototype_data["tags"] = []
+        if MANAGED_TAG not in prototype_data["tags"]:
+            prototype_data["tags"].append(MANAGED_TAG)
+
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # 添加管理标签
-                if "tags" not in prototype_data:
-                    prototype_data["tags"] = []
-                prototype_data["tags"].append(MANAGED_TAG)
-
                 prototype_data["triggerid"] = prototype_id
                 self.api.triggerprototype.update(prototype_data)
                 logger.info(f"成功更新触发器原型: {prototype_data.get('description')} (ID: {prototype_id})")
@@ -4360,10 +4370,12 @@ class StatusVerifier:
             return stats
 
         try:
-            zabbix_triggers = self.zabbix_client.api.trigger.get({
-                'hostids': host_id,
-                'output': ['triggerid', 'description'],
-            })
+            # 必须用关键字参数——pyzabbix 会把单个位置 dict 包成 [dict]，
+            # Zabbix 会忽略 hostids 返回全部触发器
+            zabbix_triggers = self.zabbix_client.api.trigger.get(
+                hostids=host_id,
+                output=['triggerid', 'description'],
+            )
             zabbix_trigger_names = {t['description'] for t in zabbix_triggers}
             logger.info(f"从 Zabbix 获取到 {len(zabbix_triggers)} 个 Web 触发器")
         except ZabbixAPIException as e:

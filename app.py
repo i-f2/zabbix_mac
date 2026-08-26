@@ -1876,7 +1876,7 @@ def sync_hosts():
                     DO UPDATE SET
                         system = EXCLUDED.system,
                         subsystem = EXCLUDED.subsystem,
-                        template_name = EXCLUDED.template_name,
+                        template_id = EXCLUDED.template_id,
                         description = EXCLUDED.description,
                         in_room = EXCLUDED.in_room,
                         updated_at = CURRENT_TIMESTAMP
@@ -2515,6 +2515,8 @@ def sync_all_to_zabbix():
                     else:
                         independent_rows.append(row)
 
+                synced_item_ids = []
+
                 def _sync_item_inline(row, item_data):
                     target_keys.add(row['item_key'])
                     if row['item_key'] in current_map:
@@ -2526,6 +2528,7 @@ def sync_all_to_zabbix():
                         if item_id:
                             current_map[row['item_key']] = {'itemid': item_id, 'key_': row['item_key']}
                             result['items']['created'] += 1
+                    synced_item_ids.append(row['id'])
 
                 # 先处理独立监控项
                 for row in independent_rows:
@@ -2583,6 +2586,20 @@ def sync_all_to_zabbix():
                             result['items']['deleted'] += 1
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[监控项] 删除 {host_ip}/{key}: {e}')
+
+                # 批量更新成功同步的记录的 sync_status
+                if synced_item_ids:
+                    try:
+                        uconn = get_db_connection()
+                        with uconn.cursor() as uc:
+                            uc.executemany(
+                                "UPDATE items_review SET sync_status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                [(sid,) for sid in synced_item_ids])
+                        uconn.commit()
+                        uconn.close()
+                    except Exception:
+                        pass
+
                 _update_progress(host_ip)
             except ZabbixAPIException as e:
                 result['errors'].append(f'[监控项] 主机 {host_ip}: {e}')
@@ -2622,6 +2639,7 @@ def sync_all_to_zabbix():
                         current_map[desc] = t
 
                 target_descs = set()
+                synced_trigger_ids = []
                 for row in rows:
                     try:
                         trigger_data = {
@@ -2641,6 +2659,7 @@ def sync_all_to_zabbix():
                         else:
                             client.create_trigger(trigger_data)
                             result['triggers']['created'] += 1
+                        synced_trigger_ids.append(row['id'])
                     except ZabbixAPIException as e:
                         result['errors'].append(f'[触发器] {host_ip}/{row["name"]}: {e}')
                     except Exception as e:
@@ -2653,6 +2672,20 @@ def sync_all_to_zabbix():
                             result['triggers']['deleted'] += 1
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[触发器] 删除 {host_ip}/{desc}: {e}')
+
+                # 批量更新成功同步的记录的 sync_status
+                if synced_trigger_ids:
+                    try:
+                        uconn = get_db_connection()
+                        with uconn.cursor() as uc:
+                            uc.executemany(
+                                "UPDATE triggers_review SET sync_status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                [(sid,) for sid in synced_trigger_ids])
+                        uconn.commit()
+                        uconn.close()
+                    except Exception:
+                        pass
+
                 _update_progress(host_ip)
             except ZabbixAPIException as e:
                 result['errors'].append(f'[触发器] 主机 {host_ip}: {e}')
@@ -2760,6 +2793,8 @@ def sync_all_to_zabbix():
                             proto_data['status'] = row['status']
                         return proto_data
 
+                    synced_ip_ids = []
+
                     def _sync_proto_row(row, proto_data):
                         target_keys.add(row['key'])
                         if row['key'] in current_map:
@@ -2771,6 +2806,7 @@ def sync_all_to_zabbix():
                             if proto_id:
                                 current_map[row['key']] = {'itemid': proto_id, 'key_': row['key']}
                                 result['item_prototypes']['created'] += 1
+                        synced_ip_ids.append(row['id'])
 
                     # 先处理独立原型
                     for row in ip_independent:
@@ -2807,6 +2843,7 @@ def sync_all_to_zabbix():
 
                 # 同步触发器原型
                 tp_rows = [r for r in confirmed_tp if r['host_ip'] == host_ip and r['dr_key'] == dr_key]
+                synced_tp_ids = []
                 if tp_rows:
                     existing_tprotos = client.get_trigger_prototypes(rule_id)
                     current_map = {t['description']: t for t in existing_tprotos}
@@ -2828,9 +2865,11 @@ def sync_all_to_zabbix():
                                     client.api.triggerprototype.update(tp_data)
                                     result['trigger_prototypes']['updated'] += 1
                             else:
-                                tp_data['discoveryruleid'] = rule_id
+                                # Zabbix 5.0: triggerprototype.create 不接受 discoveryruleid，
+                                # 触发器原型通过 expression 中引用的 item prototype 自动关联到 LLD rule
                                 client.create_trigger_prototype(tp_data)
                                 result['trigger_prototypes']['created'] += 1
+                            synced_tp_ids.append(row['id'])
                         except ZabbixAPIException as e:
                             result['errors'].append(f'[触发器原型] {host_ip}/{row["description"]}: {e}')
 
@@ -2841,6 +2880,24 @@ def sync_all_to_zabbix():
                                 result['trigger_prototypes']['deleted'] += 1
                             except ZabbixAPIException as e:
                                 result['errors'].append(f'[触发器原型] 删除 {host_ip}/{desc}: {e}')
+
+                # 批量更新成功同步的原型记录的 sync_status
+                if synced_ip_ids or synced_tp_ids:
+                    try:
+                        uconn = get_db_connection()
+                        with uconn.cursor() as uc:
+                            if synced_ip_ids:
+                                uc.executemany(
+                                    "UPDATE item_prototypes_review SET sync_status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                    [(sid,) for sid in synced_ip_ids])
+                            if synced_tp_ids:
+                                uc.executemany(
+                                    "UPDATE trigger_prototypes_review SET sync_status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                    [(sid,) for sid in synced_tp_ids])
+                        uconn.commit()
+                        uconn.close()
+                    except Exception:
+                        pass
 
                 _update_progress(host_ip)
             except ZabbixAPIException as e:
@@ -2947,10 +3004,10 @@ def confirm_item_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
             cur.execute("""
                 UPDATE items_review
                 SET confirmed = true,
-                    sync_status = 'synced',
                     change_type = NULL,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
@@ -3246,7 +3303,8 @@ def confirm_trigger_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE triggers_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
+            cur.execute("UPDATE triggers_review SET confirmed = true, change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -3840,7 +3898,8 @@ def confirm_webscenario_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE webscenario_items_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
+            cur.execute("UPDATE webscenario_items_review SET confirmed = true, change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -4184,7 +4243,8 @@ def confirm_web_trigger_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE web_trigger_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
+            cur.execute("UPDATE web_trigger_review SET confirmed = true, change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -4414,7 +4474,8 @@ def confirm_item_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE item_prototypes_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
+            cur.execute("UPDATE item_prototypes_review SET confirmed = true, change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -4519,7 +4580,8 @@ def confirm_trigger_prototype_review(review_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE trigger_prototypes_review SET confirmed = true, sync_status = 'synced', change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
+            # 确认只标记 confirmed=true，sync_status 由 sync_all_to_zabbix 成功后更新
+            cur.execute("UPDATE trigger_prototypes_review SET confirmed = true, change_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (review_id,))
         conn.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -5849,10 +5911,12 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
 
     elif table == 'web_trigger_review':
         try:
-            zabbix_triggers = client.api.trigger.get({
-                'hostids': host_id,
-                'output': ['triggerid', 'description'],
-            })
+            # 必须用关键字参数——pyzabbix 会把单个位置 dict 包成 [dict]，
+            # Zabbix 会忽略 hostids 返回全部触发器
+            zabbix_triggers = client.api.trigger.get(
+                hostids=host_id,
+                output=['triggerid', 'description'],
+            )
             zabbix_names = {t['description'] for t in zabbix_triggers}
         except Exception as e:
             app.logger.error(f"compare_entity fetch failed: {e}"); zabbix_names = set()
@@ -5869,13 +5933,6 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
     elif table == 'item_prototypes_review':
         # 从本地 discovery_rules 获取 dr_key（替代原来不可用的 row.dr_key）
         dr_configs = dr_configs or {}
-        try:
-            zabbix_rules = client.api.discoveryrule.get({
-                'hostids': host_id,
-                'output': ['itemid', 'key_'],
-            })
-        except Exception as e:
-            app.logger.error(f"compare_entity fetch rules failed: {e}"); zabbix_rules = []
         for row in rows:
             dr_id = int(row.get('discovery_rule_id', 0))
             dr_cfg = dr_configs.get(dr_id, {})
@@ -5887,7 +5944,20 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                                 'details': '本地未找到关联的发现规则配置，将新建 LLD 规则后下发'})
                 summary['create_count'] += 1
                 continue
-            rule = next((r for r in zabbix_rules if r['key_'] == dr_key), None)
+            # 用 filter 精确定位主机自身(非模板继承)的 LLD 规则，与 apply 路径 ensure_discovery_rule 保持一致，
+            # 避免误匹配到模板继承规则导致预览比对到错误的规则。
+            # 注意：必须用关键字参数而非位置 dict——pyzabbix 会把单个位置 dict 包成 [dict]，
+            # Zabbix 会忽略 hostids/filter 返回全部规则
+            try:
+                matched = client.api.discoveryrule.get(
+                    hostids=[host_id],
+                    output=['itemid', 'key_'],
+                    filter={'key_': dr_key},
+                )
+                rule = matched[0] if matched else None
+            except Exception as e:
+                app.logger.error(f"compare_entity fetch rules failed: {e}")
+                rule = None
             if not rule:
                 changes.append({'host': row['host_ip'], 'type': 'ItemPrototype',
                                 'key': row.get('key', ''),
@@ -5911,13 +5981,6 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
 
     elif table == 'trigger_prototypes_review':
         dr_configs = dr_configs or {}
-        try:
-            zabbix_rules = client.api.discoveryrule.get({
-                'hostids': host_id,
-                'output': ['itemid', 'key_'],
-            })
-        except Exception as e:
-            app.logger.error(f"compare_entity fetch rules failed: {e}"); zabbix_rules = []
         for row in rows:
             dr_id = int(row.get('discovery_rule_id', 0))
             dr_cfg = dr_configs.get(dr_id, {})
@@ -5929,7 +5992,18 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                                 'details': '本地未找到关联的发现规则配置，将新建 LLD 规则后下发'})
                 summary['create_count'] += 1
                 continue
-            rule = next((r for r in zabbix_rules if r['key_'] == dr_key), None)
+            # 用 filter 精确定位主机自身(非模板继承)的 LLD 规则，与 apply 路径 ensure_discovery_rule 保持一致。
+            # 必须用关键字参数而非位置 dict——pyzabbix 会把单个位置 dict 包成 [dict]，hostids/filter 会被忽略
+            try:
+                matched = client.api.discoveryrule.get(
+                    hostids=[host_id],
+                    output=['itemid', 'key_'],
+                    filter={'key_': dr_key},
+                )
+                rule = matched[0] if matched else None
+            except Exception as e:
+                app.logger.error(f"compare_entity fetch rules failed: {e}")
+                rule = None
             if not rule:
                 changes.append({'host': row['host_ip'], 'type': 'TriggerPrototype',
                                 'key': row.get('description', ''),
@@ -5953,10 +6027,12 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
 
     elif table == 'webscenario_items_review':
         try:
-            existing_scenarios = client.api.httptest.get({
-                'hostids': host_id,
-                'output': ['httptestid', 'name', 'url'],
-            })
+            # 必须用关键字参数——pyzabbix 会把单个位置 dict 包成 [dict]，
+            # Zabbix 会忽略 hostids 返回全部 Web 场景
+            existing_scenarios = client.api.httptest.get(
+                hostids=host_id,
+                output=['httptestid', 'name', 'url'],
+            )
             scenario_map = {s['name']: s for s in existing_scenarios}
         except Exception as e:
             app.logger.error(f"compare_entity webscenario fetch failed: {e}"); scenario_map = {}
@@ -6389,7 +6465,8 @@ def api_sync_apply():
                                         client.api.triggerprototype.update(tp_data)
                                         updated += 1
                                 else:
-                                    tp_data['discoveryruleid'] = rule_id
+                                    # Zabbix 5.0: triggerprototype.create 不接受 discoveryruleid，
+                                    # 触发器原型通过 expression 中引用的 item prototype 自动关联到 LLD rule
                                     client.create_trigger_prototype(tp_data)
                                     created += 1
                             except ZabbixAPIException as e:
@@ -6496,6 +6573,7 @@ def api_sync_execute():
         # ========== ACTUAL SYNC (reuses apply logic per entity type) ==========
         created = updated = deleted = 0
         errors = []
+        synced_ids = []  # 成功创建/更新的记录 ID，用于同步后标记 sync_status='synced'
 
         for host_key, host_rows in hosts.items():
             try:
@@ -6545,6 +6623,7 @@ def api_sync_execute():
                             if item_id:
                                 current_map[key] = {'itemid': item_id, 'key_': key}
                                 created += 1
+                        synced_ids.append(row['id'])
 
                     for row in dependent:
                         if row.get('change_type') == 'delete':
@@ -6570,6 +6649,7 @@ def api_sync_execute():
                             if item_id:
                                 current_map[key] = {'itemid': item_id, 'key_': key}
                                 created += 1
+                        synced_ids.append(row['id'])
 
                 elif table == 'triggers_review':
                     existing_triggers = client.get_managed_triggers(host_id)
@@ -6593,6 +6673,7 @@ def api_sync_execute():
                         else:
                             client.create_trigger(trigger_data)
                             created += 1
+                        synced_ids.append(row['id'])
 
                 elif table == 'web_trigger_review':
                     from zabbix_mac import ZabbixUltimateAutomator
@@ -6609,6 +6690,7 @@ def api_sync_execute():
                                 }]
                             )
                             created += 1
+                            synced_ids.append(row['id'])
                         except Exception as e:
                             errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
 
@@ -6637,6 +6719,7 @@ def api_sync_execute():
                         else:
                             client.create_web_scenario(scenario_data)
                             created += 1
+                        synced_ids.append(row['id'])
 
                 elif table == 'item_prototypes_review':
                     dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
@@ -6700,6 +6783,7 @@ def api_sync_execute():
                                     if result_id:
                                         current_map[key] = {'itemid': result_id, 'key_': key}
                                         created += 1
+                                synced_ids.append(row['id'])
                             except ZabbixAPIException as e:
                                 errors.append(f'{host_key}/{key}: {e}')
                         for key, p in current_map.items():
@@ -6759,9 +6843,11 @@ def api_sync_execute():
                                         client.api.triggerprototype.update(tp_data)
                                         updated += 1
                                 else:
-                                    tp_data['discoveryruleid'] = rule_id
+                                    # Zabbix 5.0: triggerprototype.create 不接受 discoveryruleid，
+                                    # 触发器原型通过 expression 中引用的 item prototype 自动关联到 LLD rule
                                     client.create_trigger_prototype(tp_data)
                                     created += 1
+                                synced_ids.append(row['id'])
                             except ZabbixAPIException as e:
                                 errors.append(f'{host_key}/{desc}: {e}')
                         for desc, t in current_map.items():
@@ -6780,6 +6866,19 @@ def api_sync_execute():
                 errors.append(f'{host_key}: Zabbix API 错误 - {e}')
             except Exception as e:
                 errors.append(f'{host_key}: {e}')
+
+        # 批量更新成功同步的记录的 sync_status（与 sync_all_to_zabbix 保持一致）
+        if synced_ids:
+            try:
+                uconn = get_db_connection()
+                with uconn.cursor() as uc:
+                    uc.executemany(
+                        f"UPDATE {table} SET sync_status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                        [(sid,) for sid in synced_ids])
+                uconn.commit()
+                uconn.close()
+            except Exception as e:
+                app.logger.error(f"同步后更新 sync_status 失败: {e}")
 
         msg = f'同步至{environment}完成：新建 {created}，更新 {updated}，删除 {deleted}'
         if errors:
