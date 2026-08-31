@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -i https://mirrors.cloud.tencent.com/pypi/simple 
 COPY app.py .
 COPY zabbix_mac.py .
 COPY config_loader.py .
+COPY xml_template_parser.py .
 COPY config.yaml.example .
 COPY templates/ ./templates/
 COPY static/ ./static/
