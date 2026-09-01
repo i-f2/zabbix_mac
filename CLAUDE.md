@@ -9,13 +9,16 @@
 
 | 层 | 技术 | 说明 |
 |---|---|---|
-| **Backend** | Python 3.12 + Flask | Jinja2 服务端渲染，~80 routes，`app.py` (~6700行) |
+| **Backend** | Python 3.12 + Flask | Jinja2 服务端渲染，116 routes，`app.py`（~7300 行） |
 | **Database** | PostgreSQL + psycopg2 | DictCursor，原生 SQL（非 ORM），`config_loader.py` |
 | **Frontend** | Bootstrap 5.3 + 原生 JS | **无 DataTables 库，无 jQuery**。纯 HTML `<table>` + CSS sticky 列 |
-| **CSS** | Bootstrap Icons + `static/css/app.css` | 单一主样式表，~1108 行 |
+| **CSS** | Bootstrap Icons + `static/css/app.css` | 单一主样式表（~1140 行） |
 | **JS** | `app.js` + `review_common.js` | 原生 ES5，无构建工具，无模块打包器 |
-| **Integration** | Zabbix 5.0 JSON-RPC API | 通过 `pyzabbix` 库，`zabbix_mac.py` (~4755行) |
-| **Deploy** | Docker (Linux x86), 本地开发 (macOS ARM) | 端口 5050 |
+| **Integration** | Zabbix 5.0 JSON-RPC API | 通过 `pyzabbix` 库，`zabbix_mac.py`（~4800 行） |
+| **Parser** | `xml_template_parser.py` | 模板 XML 导入解析器（标准库 xml，~400 行），供 `/base-template/import` 使用 |
+| **Deploy** | Docker (Linux x86), 本地开发 (macOS ARM) | 开发端口 5050，容器端口 5000 |
+
+> 行数与 routes 数为概数锚点（用于判断"该不该整读文件"），**勿作精确依据**；以 `wc -l` / `grep -c "@app.route"` 实测为准。
 
 ---
 
@@ -36,6 +39,7 @@
 - **同步状态文案**：统一为 `待同步` 与 `已同步`。**禁止出现 `待确认` 文案。**
 - **审计终局性**：确认操作不可撤销。代码中不提供"取消确认"按钮，后端 unconfirm 路由已标记 deprecated。
 - **确认按钮文案**：`change_type` 驱动 → `确认新增` (new) / `确认变更` (update) / `确认下线` (delete)
+- **机房字段**：6 张 review 表均含 `in_room`（机房）列；6 条 list 路由统一支持 `ip/system/subsystem/room`（items 另有 `baseline`）服务端 ILIKE 筛选，机房控件用 datalist（取值 `DISTINCT in_room`）。**新增筛选字段必须 6 路由 + 6 模板联动，Tab 表单 hidden 区同步补齐**
 
 ### 2.3 6 大复核模块协同
 
@@ -50,6 +54,8 @@
 
 **⚠️ 铁律：任何在 `items_review` 上的 UI 调整或公共逻辑变更，必须同步评估并更新至其他 5 个模块。**
 
+**附属域（不属 6 模块联动集）**：**模板 XML 导入** `/base-template/import`（模板 `base_template_import.html` + 解析器 `xml_template_parser.py`）——解析 Zabbix XML 导出文件，幂等 Upsert 至 6 张基础表，用户输入的 `template_id` 值级绑定 `template_name` 列。修改解析/导入逻辑须同步 `tests/test_xml_template_import.py`。
+
 ### 2.4 共享模板片段
 - `templates/_dashboard_cards.html` — KPI 统计大盘（6 个 review 页面共用）
 - `templates/_batch_sync_modal.html` — 批量同步预览弹窗（6 个 review 页面共用）
@@ -59,7 +65,7 @@
 
 ## 3. 前端与表格布局严格铁律
 
-### 3.1 当前 Sticky 固定列布局（`app.css` 行606-661）
+### 3.1 当前 Sticky 固定列布局（`app.css` 中 `.col-sticky` 系列，以类名定位勿用行号）
 
 本项目的固定列采用**硬编码 CSS 偏移量**方案（非 JS 动态计算）：
 
@@ -115,7 +121,7 @@
 
 侧边栏折叠时，`.app-main` 执行 `margin-left: 200px → 0` 的 0.3s CSS transition。Sticky 定位的列不会自动重算位置。
 
-**当前方案**（`app.js` lines 80-117）：
+**当前方案**（`app.js` DOMContentLoaded 内 transitionend 监听段落）：
 1. 监听 `.app-main` 的 `transitionend` 事件（`propertyName === 'margin-left'`）
 2. 通过 `transform: translateZ(0)` + `requestAnimationFrame` 触发浏览器强制重绘
 3. `setTimeout(350ms)` 兜底，处理 transition 未触发情况
@@ -129,6 +135,18 @@
 - 持久化 key：`localStorage` → `review_techView_{pageKey}`。
 - 6 个页面统一使用 `TechViewToggle.toggle('<pageKey>')` + `TechViewToggle.init('<pageKey>', 'techViewToggle')`。
 
+### 3.6 BatchSync 勾选契约（`app.js`）
+
+- 勾选状态持久化于 `sessionStorage`，key 为 `selectedIds_<table>`，目的：**跨分页 reload 保留勾选**。勿因"勾选莫名恢复"而删除该机制——分页场景依赖它。
+- **同步完成必须释放勾选**：两条完成路径都要接 `BatchSync.clearSelection()`——① `applySync()`（差异预览弹窗"确认同步下发"，日常主路径）；② `ReviewSyncPoller.poll()` 的 `!data.running` 分支（全量同步/Web 场景）。**改动同步行为时逐一核对这两条路径，漏一条即复现"同步后勾选不释放"缺陷。**
+- 同步失败分支**不得**释放勾选（用户需保留选择修正后重试）。
+
+### 3.7 侧边栏分组持久化（`app.js` "Sidebar Group Collapse Persistence" 段）
+
+- 分组展开状态持久化于 `localStorage`（key `sidebarGroupOpen_<groupId>`）；当前路由命中子菜单所在分组自动展开。
+- **⚠️ 陷阱：Bootstrap 5.3 的 Collapse 构造器会自动执行一次 `toggle()`**——恢复状态时严禁调用 `bootstrap.Collapse.getOrCreateInstance(el)`（会强制开↔关翻转）。只能直接改 DOM：`groupEl.classList.toggle('show', wantShow)` + 同步触发器的 `aria-expanded`。
+- Flask 生产模式（`debug: false`）不热载模板与 Python 代码——**改模板/app.py 后必须重启 dev 服务器**才能验证；静态 JS/CSS 每请求读盘即时生效。
+
 ---
 
 ## 4. 代码架构与重构原则
@@ -137,9 +155,10 @@
 
 | 文件 | 职责 | 不可放入 |
 |---|---|---|
-| `app.js` | 全局行为（侧边栏、搜索、Toast、CSRF fetch 封装、confirm 按钮） | 页面专属业务逻辑 |
-| `review_common.js` | 复核页面共享模块（ReviewDashboard、TechViewToggle、ReviewSyncPoller、RenderHelpers） | 页面专属逻辑 |
+| `app.js` | 全局行为（侧边栏、搜索、Toast、CSRF fetch 封装、BatchSync 勾选/同步预览、confirm 按钮） | 页面专属业务逻辑 |
+| `review_common.js` | 复核页面共享模块（ReviewDashboard、TechViewToggle、ReviewSyncPoller、RenderHelpers、TriggerDrillDown、ReviewActions） | 页面专属逻辑 |
 | 各模板 `<script>` 块 | 该页面专属逻辑（初始化、特定 CRUD 操作、行展开） | 跨页面共享逻辑 |
+| `xml_template_parser.py` | Zabbix 模板 XML 导出文件的解析（items/triggers/LLD/原型/过滤器 → dict） | SQL 落库逻辑（归 app.py 路由层） |
 
 ### 4.2 重构原则
 
@@ -172,7 +191,7 @@ base.html
 
 | 命令 | 用途 |
 |---|---|
-| `python3 -m pytest tests/ -q` | 全量测试（目标 186+ passed） |
+| `python3 -m pytest tests/ -q` | 全量测试（通过数以实际输出为准，勿在文档硬编码） |
 | `python3 -m pytest tests/ -q --tb=short` | 带简要堆栈 |
 | `python3 -m pytest tests/test_helpers.py -v` | 单元测试 |
 
@@ -190,6 +209,9 @@ base.html
 - ✅ 修改 `items_review.html` 的 DOM 结构 → 同步检查其余 5 个 review 模板
 - ✅ 新增 JS 函数被 ≥2 页面使用 → 必须移入 `review_common.js`
 - ✅ 同步文案 → `待同步` / `已同步`（**禁止** `待确认`）
+- ✅ pyzabbix 一切 `.get()` 调用 → **必须关键字传参**（位置字典会静默吞掉 filter 等参数，真实踩坑）
+- ✅ 改同步/勾选行为 → 核对 `applySync` 与 `ReviewSyncPoller` 两条完成路径（见 3.6）
+- ✅ 改模板/后端代码 → 重启 dev 服务器再验证（`debug: false` 无热载，见 3.7）
 - ❌ 禁止新增"取消确认"/"撤销"按钮或路由
 - ❌ 禁止在 HTML 中写内联 `style="..."`（除 `width`/`min-width` 等布局关键属性）
 - ❌ 禁止引入新的 CSS/JS 框架或库
@@ -200,11 +222,15 @@ base.html
 
 | 变量 | 说明 | 必需 |
 |---|---|---|
-| `APP_SECRET_KEY` | Flask secret_key | ✅ 生产必需 |
-| `DATABASE_URL` | PostgreSQL 连接串（备选） | ❌ |
+| `APP_SECRET_KEY` | Flask secret_key（覆盖 config.yaml `app.secret_key`） | ✅ 生产必需 |
+| `APP_CONFIG` | 配置文件路径（默认 `config.yaml`） | ❌ |
+| `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` | 数据库连接（按 key 覆盖 config.yaml `database.*`） | ❌ |
+| `ZABBIX_<KEY>_URL/_USER/_PASS` | Zabbix 环境凭据（按环境 key 覆盖，如 `ZABBIX_SZSE_ZW_URL`） | ❌ |
 | `TEST_DB_HOST/PORT/NAME/USER/PASSWORD` | 测试数据库 | ❌ |
 | `TEST_ZABBIX_URL/USERNAME/PASSWORD` | 测试 Zabbix API | ❌ |
 
+优先级：环境变量 > config.yaml > 内置默认（统一由 `config_loader.py` 处理，勿在业务代码直接读 os.environ）。
+
 ---
 
-*最后更新：2026-07-24 · 基于 `v1.0.0` tag · 186 test passed · Playwright E2E verified*
+*最后更新：2026-08-31 · 本文档原则段落求稳定、事实段落求新；所有计数/行号均为概数锚点，以代码库实测为准*
