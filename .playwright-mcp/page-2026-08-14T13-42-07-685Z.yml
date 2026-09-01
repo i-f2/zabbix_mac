@@ -1,0 +1,82 @@
+- generic [active] [ref=f7e1]:
+  - navigation [ref=f7e2]:
+    - generic [ref=f7e3]:
+      - button "" [ref=f7e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f7e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f7e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f7e9]
+    - generic [ref=f7e11]:
+      - button "" [ref=f7e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f7e14]:
+    - complementary [ref=f7e15]:
+      - navigation [ref=f7e16]:
+        - link " 系统信息" [ref=f7e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f7e18]: 
+          - generic [ref=f7e19]: 系统信息
+        - link " 资产主机管理" [ref=f7e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f7e21]: 
+          - generic [ref=f7e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f7e23] [cursor=pointer]:
+          - generic [ref=f7e24]: 
+          - generic [ref=f7e25]: 监控复核工作台
+          - generic [ref=f7e26]: 
+        - generic [ref=f7e27]:
+          - link "监控项复核 240" [ref=f7e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f7e29]: 监控项复核
+            - generic [ref=f7e30]: "240"
+          - link "触发器复核 83" [ref=f7e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f7e32]: 触发器复核
+            - generic [ref=f7e33]: "83"
+          - link "监控项原型复核" [ref=f7e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f7e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f7e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f7e39]: Web场景复核
+            - generic [ref=f7e40]: "7"
+          - link "Web触发器复核" [ref=f7e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f7e43] [cursor=pointer]:
+          - generic [ref=f7e44]: 
+          - generic [ref=f7e45]: 基础模板配置
+          - generic [ref=f7e46]: 
+    - main [ref=f7e47]:
+      - generic [ref=f7e48]:
+        - navigation "breadcrumb" [ref=f7e49]:
+          - list [ref=f7e50]:
+            - listitem [ref=f7e51]:
+              - link "主机管理" [ref=f7e52] [cursor=pointer]:
+                - /url: /hosts
+            - listitem [ref=f7e53]: / 添加主机
+        - heading "添加主机" [level=4] [ref=f7e55]
+      - generic [ref=f7e57]:
+        - generic [ref=f7e58]:
+          - generic [ref=f7e59]: 主机名
+          - textbox "主机名" [ref=f7e60]
+        - generic [ref=f7e61]:
+          - generic [ref=f7e62]: 关联模板
+          - textbox "关联模板" [ref=f7e63]: "21001"
+        - generic [ref=f7e64]:
+          - generic [ref=f7e65]: 描述
+          - textbox "描述" [ref=f7e66]
+        - generic [ref=f7e67]:
+          - generic [ref=f7e68]: 系统名称
+          - textbox "系统名称" [ref=f7e69]
+        - generic [ref=f7e70]:
+          - generic [ref=f7e71]: 模块名称
+          - textbox "模块名称" [ref=f7e72]
+        - generic [ref=f7e73]:
+          - generic [ref=f7e74]: 机房
+          - textbox "机房" [ref=f7e75]:
+            - /placeholder: "如: 深交所证联网"
+        - button "添加" [ref=f7e76] [cursor=pointer]
+        - link "取消" [ref=f7e77] [cursor=pointer]:
+          - /url: /hosts

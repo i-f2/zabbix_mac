@@ -36,6 +36,72 @@ MANAGED_TAG = {"tag": "ManagedBy", "value": "PythonScript"}
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAY = 2  # 秒
 
+# Zabbix 发现规则过滤运算符映射（本地字符串 → Zabbix API 数字码）
+#   8 = 匹配正则 (CONDITION_OPERATOR_REGEXP)
+#   9 = 不匹配正则 (CONDITION_OPERATOR_NOT_REGEXP)
+# EQUALS/NOT_EQUAL 等值比较在 Zabbix 5.0 以锚定正则表达（^value$）实现
+FILTER_OPERATOR_MAP = {
+    'MATCHES_REGEX': (8, None),
+    'NOT_MATCHES_REGEX': (9, None),
+    'EQUALS': (8, lambda v: f'^{v}$'),
+    'NOT_EQUAL': (9, lambda v: f'^{v}$'),
+    'CONTAINS': (8, None),
+    'NOT_CONTAINS': (9, None),
+}
+
+
+def build_discovery_rule_filter(evaltype, conditions_rows):
+    """将本地 filter_conditions 行映射为 Zabbix discoveryrule 的 filter 对象。
+
+    Args:
+        evaltype: 计算类型（0=AND/OR，1=AND，2=OR，3=自定义表达式）
+        conditions_rows: 可迭代的 {macro, value, operator} 字典（operator 为字符串）
+
+    Returns:
+        {"evaltype": int, "conditions": [{macro, value, operator(数字码)}, ...]}
+        无条件时 conditions 为空列表（不打包 filter）。
+    """
+    conditions = []
+    for row in conditions_rows:
+        operator_str = row['operator']
+        num, wrap = FILTER_OPERATOR_MAP.get(operator_str, (8, None))
+        if operator_str not in FILTER_OPERATOR_MAP:
+            logger.warning(f"未知的过滤运算符: {operator_str}，默认使用匹配正则")
+        value = wrap(row['value']) if wrap else row['value']
+        conditions.append({
+            "macro": row['macro'],
+            "value": value,
+            "operator": num
+        })
+    return {"evaltype": int(evaltype or 0), "conditions": conditions}
+
+
+def _normalize_rule_filter(filter_obj):
+    """归一化 Zabbix discovery rule 的 filter，用于幂等比较（自愈判断）。
+
+    Zabbix 返回的 filter 会附带 formulaid 等附加字段，operator/evaltype 为字符串；
+    build_discovery_rule_filter 产物的 operator/evaltype 为 int。两者需归一化后
+    才能可靠比较。忽略 formulaid，operator/evaltype 统一转 int，conditions 排序。
+
+    Args:
+        filter_obj: Zabbix 返回的 filter 或 build_discovery_rule_filter 的产物
+
+    Returns:
+        (evaltype, ((macro, value, operator), ...)) 可比较元组；无 filter 时返回 None
+    """
+    if not filter_obj:
+        return None
+    evaltype = int(filter_obj.get('evaltype', 0) or 0)
+    conds = []
+    for c in filter_obj.get('conditions') or []:
+        conds.append((
+            str(c.get('macro', '')),
+            str(c.get('value', '')),
+            int(c.get('operator', 0) or 0),
+        ))
+    conds.sort()
+    return (evaltype, tuple(conds))
+
 
 class ZabbixClient:
     """Zabbix API 客户端封装"""
@@ -701,6 +767,10 @@ class ZabbixClient:
         找到直接返回 rule_id (itemid)；找不到则用 rule_config 调用
         discoveryrule.create 在目标主机上动态补齐。
 
+        自愈：若本地 filter_conditions 定义了过滤条件（_conditions 非空），
+        而已存在规则的 filter 缺失或与本地不一致（旧版本创建规则时未绑定
+        filter 的现场），则用本地配置补写 filter，再返回 rule_id。
+
         Args:
             host_id: Zabbix 主机 ID
             rule_key: LLD 规则的 key_ (如 'vfs.fs.discovery')
@@ -713,15 +783,30 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 规则不存在且无法创建时抛出
         """
-        # 1. 查找已有规则
+        # 1. 查找已有规则（带 filter，用于缺失/不一致自愈判断）
+        # Zabbix 5.0 中 filter 是嵌套对象，必须用 selectFilter 获取；
+        # 放 output 里会被静默忽略（返回无 filter 键），导致自愈每次误判为缺失。
         try:
             existing = self.api.discoveryrule.get(
                 hostids=[host_id],
                 output=['itemid', 'key_'],
+                selectFilter='extend',
                 filter={'key_': rule_key}
             )
             if existing and len(existing) > 0:
                 rule_id = existing[0]['itemid']
+                # 自愈：本地有过滤条件，而已存在规则 filter 缺失/不一致 → 补写
+                if rule_config and rule_config.get('_conditions'):
+                    desired_filter = build_discovery_rule_filter(
+                        rule_config.get('evaltype'),
+                        rule_config.get('_conditions', []))
+                    if desired_filter.get('conditions') and \
+                            _normalize_rule_filter(existing[0].get('filter')) != \
+                            _normalize_rule_filter(desired_filter):
+                        logger.info(
+                            f"LLD 规则 '{rule_key}' 已存在但 filter 缺失/不一致，"
+                            f"自愈补写 (rule_id={rule_id})")
+                        self.update_discovery_rule(rule_id, {'filter': desired_filter})
                 logger.info(f"找到已有 LLD 规则: {rule_key} (rule_id={rule_id})")
                 return rule_id
         except ZabbixAPIException:
@@ -742,6 +827,12 @@ class ZabbixClient:
         }
         if rule_config.get('evaltype') is not None:
             rule_data['evaltype'] = str(rule_config['evaltype'])
+        # 打包 filter 过滤条件（本地 filter_conditions → Zabbix 数字码）
+        dr_filter = build_discovery_rule_filter(
+            rule_config.get('evaltype'),
+            rule_config.get('_conditions', []))
+        if dr_filter.get('conditions'):
+            rule_data['filter'] = dr_filter
         if interface_id:
             rule_data['interfaceid'] = interface_id
 
@@ -766,7 +857,9 @@ class ZabbixClient:
 
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                rule_data["ruleid"] = rule_id
+                # Zabbix 5.0: discoveryrule.update 用 itemid 标识规则。
+                # 误用 ruleid 会报 "No permissions to referred object or it does not exist!"。
+                rule_data["itemid"] = rule_id
                 self.api.discoveryrule.update(rule_data)
                 logger.info(f"成功更新自动发现规则: {rule_data.get('name')} (ID: {rule_id})")
                 return True
@@ -1653,38 +1746,10 @@ class ConfigLoader:
                         
                         cond_rows = cur2.fetchall()
                         logger.info(f"规则 {row['name']} 有 {len(cond_rows)} 个过滤条件")
-                        
-                        # Zabbix API 发现规则过滤条件运算符:
-                        #   8 = 匹配正则 (CONDITION_OPERATOR_REGEXP)
-                        #   9 = 不匹配正则 (CONDITION_OPERATOR_NOT_REGEXP)
-                        # 其他运算符需要转换为正则模式
-                        for cond_row in cond_rows:
-                            operator_str = cond_row['operator']
-                            value = cond_row['value']
 
-                            if operator_str == 'MATCHES_REGEX':
-                                operator_num = 8
-                            elif operator_str == 'NOT_MATCHES_REGEX':
-                                operator_num = 9
-                            elif operator_str == 'EQUALS':
-                                operator_num = 8
-                                value = f'^{value}$'
-                            elif operator_str == 'NOT_EQUAL':
-                                operator_num = 9
-                                value = f'^{value}$'
-                            elif operator_str == 'CONTAINS':
-                                operator_num = 8
-                            elif operator_str == 'NOT_CONTAINS':
-                                operator_num = 9
-                            else:
-                                logger.warning(f"未知的过滤运算符: {operator_str}，默认使用匹配正则")
-                                operator_num = 8
-
-                            rule_config['filter']['conditions'].append({
-                                "macro": cond_row['macro'],
-                                "value": value,
-                                "operator": operator_num
-                            })
+                        # operator 字符串 → Zabbix 数字码（复用共享映射，见 build_discovery_rule_filter）
+                        rule_config['filter'] = build_discovery_rule_filter(
+                            row['evaltype'], cond_rows)
                     
                     # 加载监控项原型（从复核表）
                     with self.connection.cursor(cursor_factory=DictCursor) as cur2:

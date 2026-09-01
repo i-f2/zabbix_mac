@@ -1,0 +1,241 @@
+- generic [active] [ref=f2e1]:
+  - navigation [ref=f2e2]:
+    - generic [ref=f2e3]:
+      - button "" [ref=f2e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f2e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f2e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f2e9]
+    - generic [ref=f2e11]:
+      - button "" [ref=f2e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f2e14]:
+    - complementary [ref=f2e15]:
+      - navigation [ref=f2e16]:
+        - link " 系统信息" [ref=f2e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f2e18]: 
+          - generic [ref=f2e19]: 系统信息
+        - link " 资产主机管理" [ref=f2e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f2e21]: 
+          - generic [ref=f2e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f2e23] [cursor=pointer]:
+          - generic [ref=f2e24]: 
+          - generic [ref=f2e25]: 监控复核工作台
+          - generic [ref=f2e26]: 
+        - generic [ref=f2e27]:
+          - link "监控项复核 240" [ref=f2e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f2e29]: 监控项复核
+            - generic [ref=f2e30]: "240"
+          - link "触发器复核 100" [ref=f2e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f2e32]: 触发器复核
+            - generic [ref=f2e33]: "100"
+          - link "监控项原型复核" [ref=f2e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f2e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f2e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f2e39]: Web场景复核
+            - generic [ref=f2e40]: "7"
+          - link "Web触发器复核" [ref=f2e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f2e43] [cursor=pointer]:
+          - generic [ref=f2e44]: 
+          - generic [ref=f2e45]: 基础模板配置
+          - generic [ref=f2e46]: 
+    - main [ref=f2e47]:
+      - generic [ref=f2e48]:
+        - navigation "breadcrumb" [ref=f2e49]:
+          - list [ref=f2e50]:
+            - listitem [ref=f2e51]:
+              - link "主机管理" [ref=f2e52] [cursor=pointer]:
+                - /url: /hosts
+        - heading "主机管理" [level=4] [ref=f2e54]
+      - generic [ref=f2e56]:
+        - link " 添加主机" [ref=f2e57] [cursor=pointer]:
+          - /url: /host/add
+          - generic [ref=f2e58]: 
+          - text: 添加主机
+        - button " 同步" [ref=f2e59] [cursor=pointer]:
+          - generic [ref=f2e60]: 
+          - text: 同步
+        - button "" [ref=f2e61] [cursor=pointer]
+      - generic [ref=f2e63]:
+        - table [ref=f2e65]:
+          - rowgroup [ref=f2e66]:
+            - row [ref=f2e67]:
+              - columnheader "ID" [ref=f2e68]
+              - columnheader "名称" [ref=f2e69]
+              - columnheader "关联模板" [ref=f2e70]
+              - columnheader "系统名称" [ref=f2e71]
+              - columnheader "模块名称" [ref=f2e72]
+              - columnheader "机房" [ref=f2e73]
+              - columnheader "描述" [ref=f2e74]
+              - columnheader "创建时间" [ref=f2e75]
+              - columnheader "操作" [ref=f2e76]
+          - rowgroup [ref=f2e77]:
+            - row [ref=f2e78]:
+              - cell "1" [ref=f2e79]
+              - cell "Zabbix server" [ref=f2e80]
+              - cell "21001" [ref=f2e81]
+              - cell "上市系统" [ref=f2e82]
+              - cell "上市日常监管模块" [ref=f2e83]
+              - cell "深交所证联网" [ref=f2e84]
+              - cell "Local Zabbix server" [ref=f2e85]
+              - cell "2026-04-21 17:07:03.284849" [ref=f2e86]
+              - cell [ref=f2e87]:
+                - link "编辑" [ref=f2e88] [cursor=pointer]:
+                  - /url: /host/edit/1
+                - link "删除" [ref=f2e89] [cursor=pointer]:
+                  - /url: /host/delete/1
+            - row [ref=f2e90]:
+              - cell "2" [ref=f2e91]
+              - cell "10.24.3.12" [ref=f2e92]
+              - cell "21001" [ref=f2e93]
+              - cell "上市系统" [ref=f2e94]
+              - cell "上市日常监管模块" [ref=f2e95]
+              - cell "深交所证联网" [ref=f2e96]
+              - cell "Test server 1" [ref=f2e97]
+              - cell "2026-04-21 17:07:03.284849" [ref=f2e98]
+              - cell [ref=f2e99]:
+                - link "编辑" [ref=f2e100] [cursor=pointer]:
+                  - /url: /host/edit/2
+                - link "删除" [ref=f2e101] [cursor=pointer]:
+                  - /url: /host/delete/2
+            - row [ref=f2e102]:
+              - cell "3" [ref=f2e103]
+              - cell "10.24.3.23" [ref=f2e104]
+              - cell "21001" [ref=f2e105]
+              - cell "上市系统" [ref=f2e106]
+              - cell "上市日常监管模块" [ref=f2e107]
+              - cell "深交所证联网" [ref=f2e108]
+              - cell [ref=f2e109]
+              - cell "2026-04-24 15:33:45.646743" [ref=f2e110]
+              - cell [ref=f2e111]:
+                - link "编辑" [ref=f2e112] [cursor=pointer]:
+                  - /url: /host/edit/3
+                - link "删除" [ref=f2e113] [cursor=pointer]:
+                  - /url: /host/delete/3
+            - row [ref=f2e114]:
+              - cell "8" [ref=f2e115]
+              - cell "192.168.1.200" [ref=f2e116]
+              - cell "10002" [ref=f2e117]
+              - cell "测试系统" [ref=f2e118]
+              - cell "测试模块" [ref=f2e119]
+              - cell "未设置" [ref=f2e120]
+              - cell "test-server-2" [ref=f2e121]
+              - cell "2026-07-24 15:27:02.429598" [ref=f2e122]
+              - cell [ref=f2e123]:
+                - link "编辑" [ref=f2e124] [cursor=pointer]:
+                  - /url: /host/edit/8
+                - link "删除" [ref=f2e125] [cursor=pointer]:
+                  - /url: /host/delete/8
+            - row [ref=f2e126]:
+              - cell "10" [ref=f2e127]
+              - cell "192.168.1.300" [ref=f2e128]
+              - cell "21001" [ref=f2e129]
+              - cell "上市系统" [ref=f2e130]
+              - cell "上市日常监管模块" [ref=f2e131]
+              - cell "深交所证联网" [ref=f2e132]
+              - cell [ref=f2e133]
+              - cell "2026-07-24 15:28:29.607680" [ref=f2e134]
+              - cell [ref=f2e135]:
+                - link "编辑" [ref=f2e136] [cursor=pointer]:
+                  - /url: /host/edit/10
+                - link "删除" [ref=f2e137] [cursor=pointer]:
+                  - /url: /host/delete/10
+            - row [ref=f2e138]:
+              - cell "11" [ref=f2e139]
+              - cell "192.168.1.400" [ref=f2e140]
+              - cell "21001" [ref=f2e141]
+              - cell "上市系统" [ref=f2e142]
+              - cell "上市日常监管模块" [ref=f2e143]
+              - cell "深交所证联网" [ref=f2e144]
+              - cell [ref=f2e145]
+              - cell "2026-07-24 16:23:09.717999" [ref=f2e146]
+              - cell [ref=f2e147]:
+                - link "编辑" [ref=f2e148] [cursor=pointer]:
+                  - /url: /host/edit/11
+                - link "删除" [ref=f2e149] [cursor=pointer]:
+                  - /url: /host/delete/11
+            - row [ref=f2e150]:
+              - cell "12" [ref=f2e151]
+              - cell "e2e-test-host" [ref=f2e152]
+              - cell "21001" [ref=f2e153]
+              - cell "test" [ref=f2e154]
+              - cell "test" [ref=f2e155]
+              - cell "test-room" [ref=f2e156]
+              - cell "None" [ref=f2e157]
+              - cell "2026-08-06 14:10:02.587511" [ref=f2e158]
+              - cell [ref=f2e159]:
+                - link "编辑" [ref=f2e160] [cursor=pointer]:
+                  - /url: /host/edit/12
+                - link "删除" [ref=f2e161] [cursor=pointer]:
+                  - /url: /host/delete/12
+            - row [ref=f2e162]:
+              - cell "14" [ref=f2e163]
+              - cell "192.168.1.100" [ref=f2e164]
+              - cell "10001" [ref=f2e165]
+              - cell "更新系统" [ref=f2e166]
+              - cell "更新模块" [ref=f2e167]
+              - cell "未设置" [ref=f2e168]
+              - cell "test-server-1" [ref=f2e169]
+              - cell "2026-08-26 12:27:57.104906" [ref=f2e170]
+              - cell [ref=f2e171]:
+                - link "编辑" [ref=f2e172] [cursor=pointer]:
+                  - /url: /host/edit/14
+                - link "删除" [ref=f2e173] [cursor=pointer]:
+                  - /url: /host/delete/14
+            - row [ref=f2e174]:
+              - cell "18" [ref=f2e175]
+              - cell "10.255.255.250" [ref=f2e176]
+              - cell "21001" [ref=f2e177]
+              - cell "演示系统" [ref=f2e178]
+              - cell "演示模块" [ref=f2e179]
+              - cell "演示机房" [ref=f2e180]
+              - cell "演示主机" [ref=f2e181]
+              - cell "2026-08-26 12:29:43.470281" [ref=f2e182]
+              - cell [ref=f2e183]:
+                - link "编辑" [ref=f2e184] [cursor=pointer]:
+                  - /url: /host/edit/18
+                - link "删除" [ref=f2e185] [cursor=pointer]:
+                  - /url: /host/delete/18
+            - row [ref=f2e186]:
+              - cell "19" [ref=f2e187]
+              - cell "10.255.255.250" [ref=f2e188]
+              - cell "91001" [ref=f2e189]
+              - cell "演示系统" [ref=f2e190]
+              - cell "演示模块" [ref=f2e191]
+              - cell "演示机房" [ref=f2e192]
+              - cell "演示主机" [ref=f2e193]
+              - cell "2026-08-26 12:29:43.470281" [ref=f2e194]
+              - cell [ref=f2e195]:
+                - link "编辑" [ref=f2e196] [cursor=pointer]:
+                  - /url: /host/edit/19
+                - link "删除" [ref=f2e197] [cursor=pointer]:
+                  - /url: /host/delete/19
+            - row [ref=f2e198]:
+              - cell "20" [ref=f2e199]
+              - cell "10.255.255.250" [ref=f2e200]
+              - cell "60001" [ref=f2e201]
+              - cell "演示系统" [ref=f2e202]
+              - cell "演示模块" [ref=f2e203]
+              - cell "演示机房" [ref=f2e204]
+              - cell "演示主机" [ref=f2e205]
+              - cell "2026-08-26 12:29:43.470281" [ref=f2e206]
+              - cell [ref=f2e207]:
+                - link "编辑" [ref=f2e208] [cursor=pointer]:
+                  - /url: /host/edit/20
+                - link "删除" [ref=f2e209] [cursor=pointer]:
+                  - /url: /host/delete/20
+        - generic [ref=f2e210]:
+          - generic [ref=f2e211]: 共 11 条，显示 1-11
+          - combobox [ref=f2e212] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"

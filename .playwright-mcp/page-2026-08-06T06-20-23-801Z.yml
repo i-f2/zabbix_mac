@@ -1,0 +1,671 @@
+- generic [active] [ref=f29e1]:
+  - navigation [ref=f29e2]:
+    - generic [ref=f29e3]:
+      - button "" [ref=f29e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f29e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f29e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f29e9]
+    - generic [ref=f29e11]:
+      - button "" [ref=f29e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f29e14]:
+    - complementary:
+      - navigation [ref=f29e16]:
+        - link " 系统信息" [ref=f29e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f29e18]: 
+          - generic [ref=f29e19]: 系统信息
+        - link " 资产主机管理" [ref=f29e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f29e21]: 
+          - generic [ref=f29e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f29e23] [cursor=pointer]:
+          - generic [ref=f29e24]: 
+          - generic [ref=f29e25]: 监控复核工作台
+          - generic [ref=f29e26]: 
+        - generic [ref=f29e27]:
+          - link "监控项复核 240" [ref=f29e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f29e29]: 监控项复核
+            - generic [ref=f29e30]: "240"
+          - link "触发器复核 83" [ref=f29e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f29e32]: 触发器复核
+            - generic [ref=f29e33]: "83"
+          - link "监控项原型复核" [ref=f29e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f29e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f29e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f29e39]: Web场景复核
+            - generic [ref=f29e40]: "7"
+          - link "Web触发器复核" [ref=f29e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f29e43] [cursor=pointer]:
+          - generic [ref=f29e44]: 
+          - generic [ref=f29e45]: 基础模板配置
+          - generic [ref=f29e46]: 
+    - main [ref=f29e47]:
+      - generic [ref=f29e48]:
+        - navigation "breadcrumb" [ref=f29e49]:
+          - list [ref=f29e50]:
+            - listitem [ref=f29e51]: 复核表管理
+            - listitem [ref=f29e52]:
+              - text: /
+              - link "触发器复核" [ref=f29e53] [cursor=pointer]:
+                - /url: /triggers-review
+        - heading "触发器复核表管理" [level=4] [ref=f29e55]
+      - generic [ref=f29e56]:
+        - generic [ref=f29e57]:
+          - button " 初始化" [ref=f29e58] [cursor=pointer]:
+            - generic [ref=f29e59]: 
+            - text: 初始化
+          - button " 新增触发器" [ref=f29e60] [cursor=pointer]:
+            - generic [ref=f29e61]: 
+            - text: 新增触发器
+          - generic [ref=f29e62]:
+            - button " 监控同步 (已选 3 条)" [ref=f29e63] [cursor=pointer]:
+              - generic [ref=f29e64]: 
+              - text: 监控同步 (已选 3 条)
+            - button " 核验 (已选 3 条)" [ref=f29e65] [cursor=pointer]:
+              - generic [ref=f29e66]: 
+              - text: 核验 (已选 3 条)
+            - combobox [ref=f29e67]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - link " 导出" [ref=f29e68] [cursor=pointer]:
+            - /url: /triggers-review/export
+            - generic [ref=f29e69]: 
+            - text: 导出
+          - button " 导入" [ref=f29e70] [cursor=pointer]:
+            - generic [ref=f29e71]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f29e72] [cursor=pointer]:
+            - generic [ref=f29e73]: 
+            - text: 显示技术细节
+          - button "" [ref=f29e75] [cursor=pointer]
+        - generic [ref=f29e78]:
+          - generic [ref=f29e79]:
+            - button " 待处理" [ref=f29e80] [cursor=pointer]:
+              - generic [ref=f29e81]: 
+              - text: 待处理
+            - button " 全部" [ref=f29e82] [cursor=pointer]:
+              - generic [ref=f29e83]: 
+              - text: 全部
+          - generic [ref=f29e84]: "|"
+        - generic [ref=f29e85]:
+          - textbox "主机IP" [ref=f29e86]
+          - combobox "系统名称" [ref=f29e87]
+          - combobox "模块名称" [ref=f29e88]
+          - button " 筛选" [ref=f29e89] [cursor=pointer]:
+            - generic [ref=f29e90]: 
+            - text: 筛选
+      - generic [ref=f29e91]:
+        - generic [ref=f29e94]:
+          - generic [ref=f29e95]:
+            - generic [ref=f29e96]: 
+            - text: 复核进度
+          - generic [ref=f29e97]:
+            - generic [ref=f29e98]: "85"
+            - generic [ref=f29e99]: 总数
+            - generic [ref=f29e100]: "|"
+            - generic [ref=f29e101]: "2"
+            - generic [ref=f29e102]: 已确认
+            - generic [ref=f29e103]: "|"
+            - generic [ref=f29e104]: "83"
+            - generic [ref=f29e105]: 待确认
+          - generic [ref=f29e107]: "完成率: 2.4%"
+        - generic [ref=f29e110]:
+          - generic [ref=f29e111]:
+            - generic [ref=f29e112]: 
+            - text: 同步状态
+          - generic [ref=f29e113]:
+            - generic [ref=f29e114]: "0"
+            - generic [ref=f29e115]: 已同步
+            - generic [ref=f29e116]: "|"
+            - generic [ref=f29e117]: "85"
+            - generic [ref=f29e118]: 待同步
+          - generic [ref=f29e119]:
+            - generic [ref=f29e120]: 
+            - text: 还有 85 条待同步
+        - generic [ref=f29e123]:
+          - generic [ref=f29e124]:
+            - generic [ref=f29e125]: 
+            - text: 告警关联
+          - generic [ref=f29e126]:
+            - generic [ref=f29e127]: "0"
+            - generic [ref=f29e128]: 关联触发器
+          - generic [ref=f29e129]: 加载中...
+      - generic [ref=f29e130]:
+        - table [ref=f29e132]:
+          - rowgroup [ref=f29e133]:
+            - row [ref=f29e134]:
+              - columnheader [ref=f29e135]:
+                - checkbox "全选/全不选" [checked=mixed] [ref=f29e136] [cursor=pointer]
+              - columnheader [ref=f29e137]
+              - columnheader "主机 IP" [ref=f29e138]
+              - columnheader "告警名称 / 触发条件" [ref=f29e139]
+              - columnheader "严重等级" [ref=f29e140]
+              - columnheader "系统名称" [ref=f29e141]
+              - columnheader "模块名称" [ref=f29e142]
+              - columnheader "机房" [ref=f29e143]
+              - columnheader "修改状态" [ref=f29e144]
+              - columnheader "同步状态" [ref=f29e145]
+              - columnheader "确认状态" [ref=f29e146]
+              - columnheader "状态核验" [ref=f29e147]
+              - columnheader "操作" [ref=f29e148]
+          - rowgroup [ref=f29e149]:
+            - row [ref=f29e150]:
+              - cell [ref=f29e151]:
+                - checkbox [checked] [ref=f29e152] [cursor=pointer]
+              - cell "" [ref=f29e153] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e155]
+              - cell [ref=f29e156]:
+                - strong [ref=f29e157]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 100% for 5m)"
+                - code [ref=f29e158]: "{Zabbix server:system.cpu.util.last()}>100"
+              - cell "一般" [ref=f29e159]
+              - cell "上市系统" [ref=f29e161]
+              - cell "上市日常监管模块" [ref=f29e162]
+              - cell "深交所证联网" [ref=f29e163]
+              - cell "未修改" [ref=f29e164]
+              - cell " 待同步" [ref=f29e165]:
+                - generic [ref=f29e166]:
+                  - generic [ref=f29e167]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f29e168]
+              - cell "已核验" [ref=f29e169]
+              - cell [ref=f29e171]:
+                - link "修改" [ref=f29e172] [cursor=pointer]:
+                  - /url: /trigger-review/edit/239
+            - row [ref=f29e173]:
+              - cell [ref=f29e174]:
+                - checkbox [checked] [ref=f29e175] [cursor=pointer]
+              - cell "" [ref=f29e176] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e178]
+              - cell [ref=f29e179]:
+                - strong [ref=f29e180]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 100% for 5m)"
+                - code [ref=f29e181]: "{10.24.3.23:system.cpu.util.last()}>100"
+              - cell "一般" [ref=f29e182]
+              - cell "上市系统" [ref=f29e184]
+              - cell "上市日常监管模块" [ref=f29e185]
+              - cell "深交所证联网" [ref=f29e186]
+              - cell "未修改" [ref=f29e187]
+              - cell " 待同步" [ref=f29e188]:
+                - generic [ref=f29e189]:
+                  - generic [ref=f29e190]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f29e191]
+              - cell "未核验" [ref=f29e192]
+              - cell [ref=f29e194]:
+                - link "修改" [ref=f29e195] [cursor=pointer]:
+                  - /url: /trigger-review/edit/240
+            - row [ref=f29e196]:
+              - cell [ref=f29e197]:
+                - checkbox [checked] [ref=f29e198] [cursor=pointer]
+              - cell "" [ref=f29e199] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e201]
+              - cell [ref=f29e202]:
+                - strong [ref=f29e203]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 100% for 5m)"
+                - code [ref=f29e204]: "{10.24.3.12:system.cpu.util.last()}>100"
+              - cell "一般" [ref=f29e205]
+              - cell "上市系统" [ref=f29e207]
+              - cell "上市日常监管模块" [ref=f29e208]
+              - cell "深交所证联网" [ref=f29e209]
+              - cell "未修改" [ref=f29e210]
+              - cell " 待同步" [ref=f29e211]:
+                - generic [ref=f29e212]:
+                  - generic [ref=f29e213]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e214]
+              - cell "未核验" [ref=f29e215]
+              - cell [ref=f29e217]:
+                - link "修改" [ref=f29e218] [cursor=pointer]:
+                  - /url: /trigger-review/edit/241
+                - button " 确认" [ref=f29e219] [cursor=pointer]:
+                  - generic [ref=f29e220]: 
+                  - text: 确认
+            - row [ref=f29e221]:
+              - cell [ref=f29e222]:
+                - checkbox [ref=f29e223] [cursor=pointer]
+              - cell "" [ref=f29e224] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e226]
+              - cell [ref=f29e227]:
+                - strong [ref=f29e228]: "{HOST.NAME}_{HOST.IP} Configured max number of open filedescriptors is too low (< 256)"
+                - code [ref=f29e229]: "{Zabbix server:kernel.maxfiles.last()}<256"
+              - cell "信息" [ref=f29e230]
+              - cell "上市系统" [ref=f29e232]
+              - cell "上市日常监管模块" [ref=f29e233]
+              - cell "深交所证联网" [ref=f29e234]
+              - cell "未修改" [ref=f29e235]
+              - cell " 待同步" [ref=f29e236]:
+                - generic [ref=f29e237]:
+                  - generic [ref=f29e238]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e239]
+              - cell "已核验" [ref=f29e240]
+              - cell [ref=f29e242]:
+                - link "修改" [ref=f29e243] [cursor=pointer]:
+                  - /url: /trigger-review/edit/242
+                - button " 确认变更" [ref=f29e244] [cursor=pointer]:
+                  - generic [ref=f29e245]: 
+                  - text: 确认变更
+            - row [ref=f29e246]:
+              - cell [ref=f29e247]:
+                - checkbox [ref=f29e248] [cursor=pointer]
+              - cell "" [ref=f29e249] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e251]
+              - cell [ref=f29e252]:
+                - strong [ref=f29e253]: "{HOST.NAME}_{HOST.IP} Configured max number of open filedescriptors is too low (< 256)"
+                - code [ref=f29e254]: "{10.24.3.23:kernel.maxfiles.last()}<256"
+              - cell "信息" [ref=f29e255]
+              - cell "上市系统" [ref=f29e257]
+              - cell "上市日常监管模块" [ref=f29e258]
+              - cell "深交所证联网" [ref=f29e259]
+              - cell "未修改" [ref=f29e260]
+              - cell " 待同步" [ref=f29e261]:
+                - generic [ref=f29e262]:
+                  - generic [ref=f29e263]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e264]
+              - cell "未核验" [ref=f29e265]
+              - cell [ref=f29e267]:
+                - link "修改" [ref=f29e268] [cursor=pointer]:
+                  - /url: /trigger-review/edit/243
+                - button " 确认变更" [ref=f29e269] [cursor=pointer]:
+                  - generic [ref=f29e270]: 
+                  - text: 确认变更
+            - row [ref=f29e271]:
+              - cell [ref=f29e272]:
+                - checkbox [ref=f29e273] [cursor=pointer]
+              - cell "" [ref=f29e274] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e276]
+              - cell [ref=f29e277]:
+                - strong [ref=f29e278]: "{HOST.NAME}_{HOST.IP} Configured max number of open filedescriptors is too low (< 256)"
+                - code [ref=f29e279]: "{10.24.3.12:kernel.maxfiles.last()}<256"
+              - cell "信息" [ref=f29e280]
+              - cell "上市系统" [ref=f29e282]
+              - cell "上市日常监管模块" [ref=f29e283]
+              - cell "深交所证联网" [ref=f29e284]
+              - cell "未修改" [ref=f29e285]
+              - cell " 待同步" [ref=f29e286]:
+                - generic [ref=f29e287]:
+                  - generic [ref=f29e288]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e289]
+              - cell "未核验" [ref=f29e290]
+              - cell [ref=f29e292]:
+                - link "修改" [ref=f29e293] [cursor=pointer]:
+                  - /url: /trigger-review/edit/244
+                - button " 确认" [ref=f29e294] [cursor=pointer]:
+                  - generic [ref=f29e295]: 
+                  - text: 确认
+            - row [ref=f29e296]:
+              - cell [ref=f29e297]:
+                - checkbox [ref=f29e298] [cursor=pointer]
+              - cell "" [ref=f29e299] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e301]
+              - cell [ref=f29e302]:
+                - strong [ref=f29e303]: "{HOST.NAME}_{HOST.IP} System name has changed (new name: {ITEM.VALUE})"
+                - code [ref=f29e304]: "{Zabbix server:system.hostname.diff()}=1 and {Zabbix server:system.hostname.strlen()}>0"
+              - cell "信息" [ref=f29e305]
+              - cell "上市系统" [ref=f29e307]
+              - cell "上市日常监管模块" [ref=f29e308]
+              - cell "深交所证联网" [ref=f29e309]
+              - cell "未修改" [ref=f29e310]
+              - cell " 待同步" [ref=f29e311]:
+                - generic [ref=f29e312]:
+                  - generic [ref=f29e313]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e314]
+              - cell "已核验" [ref=f29e315]
+              - cell [ref=f29e317]:
+                - link "修改" [ref=f29e318] [cursor=pointer]:
+                  - /url: /trigger-review/edit/245
+                - button " 确认变更" [ref=f29e319] [cursor=pointer]:
+                  - generic [ref=f29e320]: 
+                  - text: 确认变更
+            - row [ref=f29e321]:
+              - cell [ref=f29e322]:
+                - checkbox [ref=f29e323] [cursor=pointer]
+              - cell "" [ref=f29e324] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e326]
+              - cell [ref=f29e327]:
+                - strong [ref=f29e328]: "{HOST.NAME}_{HOST.IP} System name has changed (new name: {ITEM.VALUE})"
+                - code [ref=f29e329]: "{10.24.3.23:system.hostname.diff()}=1 and {10.24.3.23:system.hostname.strlen()}>0"
+              - cell "信息" [ref=f29e330]
+              - cell "上市系统" [ref=f29e332]
+              - cell "上市日常监管模块" [ref=f29e333]
+              - cell "深交所证联网" [ref=f29e334]
+              - cell "未修改" [ref=f29e335]
+              - cell " 待同步" [ref=f29e336]:
+                - generic [ref=f29e337]:
+                  - generic [ref=f29e338]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e339]
+              - cell "未核验" [ref=f29e340]
+              - cell [ref=f29e342]:
+                - link "修改" [ref=f29e343] [cursor=pointer]:
+                  - /url: /trigger-review/edit/246
+                - button " 确认变更" [ref=f29e344] [cursor=pointer]:
+                  - generic [ref=f29e345]: 
+                  - text: 确认变更
+            - row [ref=f29e346]:
+              - cell [ref=f29e347]:
+                - checkbox [ref=f29e348] [cursor=pointer]
+              - cell "" [ref=f29e349] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e351]
+              - cell [ref=f29e352]:
+                - strong [ref=f29e353]: "{HOST.NAME}_{HOST.IP} System name has changed (new name: {ITEM.VALUE})"
+                - code [ref=f29e354]: "{10.24.3.12:system.hostname.diff()}=1 and {10.24.3.12:system.hostname.strlen()}>0"
+              - cell "信息" [ref=f29e355]
+              - cell "上市系统" [ref=f29e357]
+              - cell "上市日常监管模块" [ref=f29e358]
+              - cell "深交所证联网" [ref=f29e359]
+              - cell "未修改" [ref=f29e360]
+              - cell " 待同步" [ref=f29e361]:
+                - generic [ref=f29e362]:
+                  - generic [ref=f29e363]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e364]
+              - cell "未核验" [ref=f29e365]
+              - cell [ref=f29e367]:
+                - link "修改" [ref=f29e368] [cursor=pointer]:
+                  - /url: /trigger-review/edit/247
+                - button " 确认" [ref=f29e369] [cursor=pointer]:
+                  - generic [ref=f29e370]: 
+                  - text: 确认
+            - row [ref=f29e371]:
+              - cell [ref=f29e372]:
+                - checkbox [ref=f29e373] [cursor=pointer]
+              - cell "" [ref=f29e374] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e376]
+              - cell [ref=f29e377]:
+                - strong [ref=f29e378]: "{HOST.NAME}_{HOST.IP} CPU负载单核已满载 (per CPU load over 1 for 5m)"
+                - code [ref=f29e379]: "{Zabbix server:system.cpu.load[all,avg1].min(5m)}/{Zabbix server:system.cpu.num.last()}>1 and {Zabbix server:system.cpu.load[all,avg5].last()}>0 and {Zabbix server:system.cpu.load[all,avg15].last()}>0"
+              - cell "未分类" [ref=f29e380]
+              - cell "上市系统" [ref=f29e382]
+              - cell "上市日常监管模块" [ref=f29e383]
+              - cell "深交所证联网" [ref=f29e384]
+              - cell "未修改" [ref=f29e385]
+              - cell " 待同步" [ref=f29e386]:
+                - generic [ref=f29e387]:
+                  - generic [ref=f29e388]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e389]
+              - cell "已核验" [ref=f29e390]
+              - cell [ref=f29e392]:
+                - link "修改" [ref=f29e393] [cursor=pointer]:
+                  - /url: /trigger-review/edit/248
+                - button " 确认变更" [ref=f29e394] [cursor=pointer]:
+                  - generic [ref=f29e395]: 
+                  - text: 确认变更
+            - row [ref=f29e396]:
+              - cell [ref=f29e397]:
+                - checkbox [ref=f29e398] [cursor=pointer]
+              - cell "" [ref=f29e399] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e401]
+              - cell [ref=f29e402]:
+                - strong [ref=f29e403]: "{HOST.NAME}_{HOST.IP} CPU负载单核已满载 (per CPU load over 1 for 5m)"
+                - code [ref=f29e404]: "{10.24.3.23:system.cpu.load[all,avg1].min(5m)}/{10.24.3.23:system.cpu.num.last()}>1 and {10.24.3.23:system.cpu.load[all,avg5].last()}>0 and {10.24.3.23:system.cpu.load[all,avg15].last()}>0"
+              - cell "未分类" [ref=f29e405]
+              - cell "上市系统" [ref=f29e407]
+              - cell "上市日常监管模块" [ref=f29e408]
+              - cell "深交所证联网" [ref=f29e409]
+              - cell "未修改" [ref=f29e410]
+              - cell " 待同步" [ref=f29e411]:
+                - generic [ref=f29e412]:
+                  - generic [ref=f29e413]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e414]
+              - cell "未核验" [ref=f29e415]
+              - cell [ref=f29e417]:
+                - link "修改" [ref=f29e418] [cursor=pointer]:
+                  - /url: /trigger-review/edit/249
+                - button " 确认变更" [ref=f29e419] [cursor=pointer]:
+                  - generic [ref=f29e420]: 
+                  - text: 确认变更
+            - row [ref=f29e421]:
+              - cell [ref=f29e422]:
+                - checkbox [ref=f29e423] [cursor=pointer]
+              - cell "" [ref=f29e424] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e426]
+              - cell [ref=f29e427]:
+                - strong [ref=f29e428]: "{HOST.NAME}_{HOST.IP} CPU负载单核已满载 (per CPU load over 1 for 5m)"
+                - code [ref=f29e429]: "{10.24.3.12:system.cpu.load[all,avg1].min(5m)}/{10.24.3.12:system.cpu.num.last()}>1 and {10.24.3.12:system.cpu.load[all,avg5].last()}>0 and {10.24.3.12:system.cpu.load[all,avg15].last()}>0"
+              - cell "未分类" [ref=f29e430]
+              - cell "上市系统" [ref=f29e432]
+              - cell "上市日常监管模块" [ref=f29e433]
+              - cell "深交所证联网" [ref=f29e434]
+              - cell "未修改" [ref=f29e435]
+              - cell " 待同步" [ref=f29e436]:
+                - generic [ref=f29e437]:
+                  - generic [ref=f29e438]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e439]
+              - cell "未核验" [ref=f29e440]
+              - cell [ref=f29e442]:
+                - link "修改" [ref=f29e443] [cursor=pointer]:
+                  - /url: /trigger-review/edit/250
+                - button " 确认" [ref=f29e444] [cursor=pointer]:
+                  - generic [ref=f29e445]: 
+                  - text: 确认
+            - row [ref=f29e446]:
+              - cell [ref=f29e447]:
+                - checkbox [ref=f29e448] [cursor=pointer]
+              - cell "" [ref=f29e449] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e451]
+              - cell [ref=f29e452]:
+                - strong [ref=f29e453]: "{HOST.NAME}_{HOST.IP} has been restarted (uptime < 10m)"
+                - code [ref=f29e454]: "{Zabbix server:system.uptime.last()}<10m"
+              - cell "警告" [ref=f29e455]
+              - cell "上市系统" [ref=f29e457]
+              - cell "上市日常监管模块" [ref=f29e458]
+              - cell "深交所证联网" [ref=f29e459]
+              - cell "未修改" [ref=f29e460]
+              - cell " 待同步" [ref=f29e461]:
+                - generic [ref=f29e462]:
+                  - generic [ref=f29e463]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e464]
+              - cell "已核验" [ref=f29e465]
+              - cell [ref=f29e467]:
+                - link "修改" [ref=f29e468] [cursor=pointer]:
+                  - /url: /trigger-review/edit/251
+                - button " 确认变更" [ref=f29e469] [cursor=pointer]:
+                  - generic [ref=f29e470]: 
+                  - text: 确认变更
+            - row [ref=f29e471]:
+              - cell [ref=f29e472]:
+                - checkbox [ref=f29e473] [cursor=pointer]
+              - cell "" [ref=f29e474] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e476]
+              - cell [ref=f29e477]:
+                - strong [ref=f29e478]: "{HOST.NAME}_{HOST.IP} has been restarted (uptime < 10m)"
+                - code [ref=f29e479]: "{10.24.3.23:system.uptime.last()}<10m"
+              - cell "警告" [ref=f29e480]
+              - cell "上市系统" [ref=f29e482]
+              - cell "上市日常监管模块" [ref=f29e483]
+              - cell "深交所证联网" [ref=f29e484]
+              - cell "未修改" [ref=f29e485]
+              - cell " 待同步" [ref=f29e486]:
+                - generic [ref=f29e487]:
+                  - generic [ref=f29e488]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e489]
+              - cell "未核验" [ref=f29e490]
+              - cell [ref=f29e492]:
+                - link "修改" [ref=f29e493] [cursor=pointer]:
+                  - /url: /trigger-review/edit/252
+                - button " 确认变更" [ref=f29e494] [cursor=pointer]:
+                  - generic [ref=f29e495]: 
+                  - text: 确认变更
+            - row [ref=f29e496]:
+              - cell [ref=f29e497]:
+                - checkbox [ref=f29e498] [cursor=pointer]
+              - cell "" [ref=f29e499] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e501]
+              - cell [ref=f29e502]:
+                - strong [ref=f29e503]: "{HOST.NAME}_{HOST.IP} has been restarted (uptime < 10m)"
+                - code [ref=f29e504]: "{10.24.3.12:system.uptime.last()}<10m"
+              - cell "警告" [ref=f29e505]
+              - cell "上市系统" [ref=f29e507]
+              - cell "上市日常监管模块" [ref=f29e508]
+              - cell "深交所证联网" [ref=f29e509]
+              - cell "未修改" [ref=f29e510]
+              - cell " 待同步" [ref=f29e511]:
+                - generic [ref=f29e512]:
+                  - generic [ref=f29e513]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e514]
+              - cell "未核验" [ref=f29e515]
+              - cell [ref=f29e517]:
+                - link "修改" [ref=f29e518] [cursor=pointer]:
+                  - /url: /trigger-review/edit/253
+                - button " 确认" [ref=f29e519] [cursor=pointer]:
+                  - generic [ref=f29e520]: 
+                  - text: 确认
+            - row [ref=f29e521]:
+              - cell [ref=f29e522]:
+                - checkbox [ref=f29e523] [cursor=pointer]
+              - cell "" [ref=f29e524] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e526]
+              - cell [ref=f29e527]:
+                - strong [ref=f29e528]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 60% for 5m)"
+                - code [ref=f29e529]: "{Zabbix server:system.cpu.util.min(5m)}>60"
+              - cell "未分类" [ref=f29e530]
+              - cell "上市系统" [ref=f29e532]
+              - cell "上市日常监管模块" [ref=f29e533]
+              - cell "深交所证联网" [ref=f29e534]
+              - cell "未修改" [ref=f29e535]
+              - cell " 待同步" [ref=f29e536]:
+                - generic [ref=f29e537]:
+                  - generic [ref=f29e538]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e539]
+              - cell "已核验" [ref=f29e540]
+              - cell [ref=f29e542]:
+                - link "修改" [ref=f29e543] [cursor=pointer]:
+                  - /url: /trigger-review/edit/254
+                - button " 确认变更" [ref=f29e544] [cursor=pointer]:
+                  - generic [ref=f29e545]: 
+                  - text: 确认变更
+            - row [ref=f29e546]:
+              - cell [ref=f29e547]:
+                - checkbox [ref=f29e548] [cursor=pointer]
+              - cell "" [ref=f29e549] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e551]
+              - cell [ref=f29e552]:
+                - strong [ref=f29e553]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 60% for 5m)"
+                - code [ref=f29e554]: "{10.24.3.23:system.cpu.util.min(5m)}>60"
+              - cell "未分类" [ref=f29e555]
+              - cell "上市系统" [ref=f29e557]
+              - cell "上市日常监管模块" [ref=f29e558]
+              - cell "深交所证联网" [ref=f29e559]
+              - cell "未修改" [ref=f29e560]
+              - cell " 待同步" [ref=f29e561]:
+                - generic [ref=f29e562]:
+                  - generic [ref=f29e563]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e564]
+              - cell "未核验" [ref=f29e565]
+              - cell [ref=f29e567]:
+                - link "修改" [ref=f29e568] [cursor=pointer]:
+                  - /url: /trigger-review/edit/255
+                - button " 确认变更" [ref=f29e569] [cursor=pointer]:
+                  - generic [ref=f29e570]: 
+                  - text: 确认变更
+            - row [ref=f29e571]:
+              - cell [ref=f29e572]:
+                - checkbox [ref=f29e573] [cursor=pointer]
+              - cell "" [ref=f29e574] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f29e576]
+              - cell [ref=f29e577]:
+                - strong [ref=f29e578]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 60% for 5m)"
+                - code [ref=f29e579]: "{10.24.3.12:system.cpu.util.min(5m)}>60"
+              - cell "未分类" [ref=f29e580]
+              - cell "上市系统" [ref=f29e582]
+              - cell "上市日常监管模块" [ref=f29e583]
+              - cell "深交所证联网" [ref=f29e584]
+              - cell "未修改" [ref=f29e585]
+              - cell " 待同步" [ref=f29e586]:
+                - generic [ref=f29e587]:
+                  - generic [ref=f29e588]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e589]
+              - cell "未核验" [ref=f29e590]
+              - cell [ref=f29e592]:
+                - link "修改" [ref=f29e593] [cursor=pointer]:
+                  - /url: /trigger-review/edit/256
+                - button " 确认" [ref=f29e594] [cursor=pointer]:
+                  - generic [ref=f29e595]: 
+                  - text: 确认
+            - row [ref=f29e596]:
+              - cell [ref=f29e597]:
+                - checkbox [ref=f29e598] [cursor=pointer]
+              - cell "" [ref=f29e599] [cursor=pointer]
+              - cell "Zabbix server" [ref=f29e601]
+              - cell [ref=f29e602]:
+                - strong [ref=f29e603]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 80% for 5m)"
+                - code [ref=f29e604]: "{Zabbix server:system.cpu.util.min(5m)}>80"
+              - cell "信息" [ref=f29e605]
+              - cell "上市系统" [ref=f29e607]
+              - cell "上市日常监管模块" [ref=f29e608]
+              - cell "深交所证联网" [ref=f29e609]
+              - cell "未修改" [ref=f29e610]
+              - cell " 待同步" [ref=f29e611]:
+                - generic [ref=f29e612]:
+                  - generic [ref=f29e613]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e614]
+              - cell "已核验" [ref=f29e615]
+              - cell [ref=f29e617]:
+                - link "修改" [ref=f29e618] [cursor=pointer]:
+                  - /url: /trigger-review/edit/257
+                - button " 确认变更" [ref=f29e619] [cursor=pointer]:
+                  - generic [ref=f29e620]: 
+                  - text: 确认变更
+            - row [ref=f29e621]:
+              - cell [ref=f29e622]:
+                - checkbox [ref=f29e623] [cursor=pointer]
+              - cell "" [ref=f29e624] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f29e626]
+              - cell [ref=f29e627]:
+                - strong [ref=f29e628]: "{HOST.NAME}_{HOST.IP} CPU使用率 (over 80% for 5m)"
+                - code [ref=f29e629]: "{10.24.3.23:system.cpu.util.min(5m)}>80"
+              - cell "信息" [ref=f29e630]
+              - cell "上市系统" [ref=f29e632]
+              - cell "上市日常监管模块" [ref=f29e633]
+              - cell "深交所证联网" [ref=f29e634]
+              - cell "未修改" [ref=f29e635]
+              - cell " 待同步" [ref=f29e636]:
+                - generic [ref=f29e637]:
+                  - generic [ref=f29e638]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f29e639]
+              - cell "未核验" [ref=f29e640]
+              - cell [ref=f29e642]:
+                - link "修改" [ref=f29e643] [cursor=pointer]:
+                  - /url: /trigger-review/edit/258
+                - button " 确认变更" [ref=f29e644] [cursor=pointer]:
+                  - generic [ref=f29e645]: 
+                  - text: 确认变更
+        - generic [ref=f29e646]:
+          - generic [ref=f29e647]: 共 85 条，显示 1-20
+          - button "" [disabled] [ref=f29e648]
+          - generic [ref=f29e650]: "1"
+          - button "2" [ref=f29e651] [cursor=pointer]
+          - button "3" [ref=f29e652] [cursor=pointer]
+          - generic [ref=f29e653]: ...
+          - button "5" [ref=f29e654] [cursor=pointer]
+          - button "" [ref=f29e655] [cursor=pointer]
+          - combobox [ref=f29e657] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"
+  - text:  

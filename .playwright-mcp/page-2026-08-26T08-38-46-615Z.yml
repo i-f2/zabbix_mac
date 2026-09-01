@@ -1,0 +1,342 @@
+- generic [active] [ref=f34e1]:
+  - navigation [ref=f34e2]:
+    - generic [ref=f34e3]:
+      - button "" [ref=f34e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f34e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f34e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f34e9]
+    - generic [ref=f34e11]:
+      - button "" [ref=f34e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f34e14]:
+    - complementary [ref=f34e15]:
+      - navigation [ref=f34e16]:
+        - link " 系统信息" [ref=f34e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f34e18]: 
+          - generic [ref=f34e19]: 系统信息
+        - link " 资产主机管理" [ref=f34e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f34e21]: 
+          - generic [ref=f34e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f34e23] [cursor=pointer]:
+          - generic [ref=f34e24]: 
+          - generic [ref=f34e25]: 监控复核工作台
+          - generic [ref=f34e26]: 
+        - generic [ref=f34e27]:
+          - link "监控项复核 240" [ref=f34e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f34e29]: 监控项复核
+            - generic [ref=f34e30]: "240"
+          - link "触发器复核 172" [ref=f34e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f34e32]: 触发器复核
+            - generic [ref=f34e33]: "172"
+          - link "监控项原型复核" [ref=f34e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f34e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f34e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f34e39]: Web场景复核
+            - generic [ref=f34e40]: "7"
+          - link "Web触发器复核" [ref=f34e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f34e43] [cursor=pointer]:
+          - generic [ref=f34e44]: 
+          - generic [ref=f34e45]: 基础模板配置
+          - generic [ref=f34e46]: 
+    - main [ref=f34e47]:
+      - generic [ref=f34e48]:
+        - navigation "breadcrumb" [ref=f34e49]:
+          - list [ref=f34e50]:
+            - listitem [ref=f34e51]: 预定义模版管理
+            - listitem [ref=f34e52]:
+              - text: /
+              - link "监控项管理" [ref=f34e53] [cursor=pointer]:
+                - /url: /items
+        - heading "监控项管理" [level=4] [ref=f34e55]
+      - generic [ref=f34e56]:
+        - generic [ref=f34e57]:
+          - link " 添加监控项" [ref=f34e58] [cursor=pointer]:
+            - /url: /item/add
+            - generic [ref=f34e59]: 
+            - text: 添加监控项
+          - button "" [ref=f34e60] [cursor=pointer]
+          - link " 导出" [ref=f34e62] [cursor=pointer]:
+            - /url: /items/export
+            - generic [ref=f34e63]: 
+            - text: 导出
+          - button " 导入" [ref=f34e64] [cursor=pointer]:
+            - generic [ref=f34e65]: 
+            - text: 导入
+        - generic [ref=f34e66]:
+          - textbox "模板" [ref=f34e67]
+          - button " 筛选" [ref=f34e68] [cursor=pointer]:
+            - generic [ref=f34e69]: 
+            - text: 筛选
+      - generic [ref=f34e70]:
+        - table [ref=f34e72]:
+          - rowgroup [ref=f34e73]:
+            - row [ref=f34e74]:
+              - columnheader "ID" [ref=f34e75]
+              - columnheader "键值" [ref=f34e76]
+              - columnheader "名称" [ref=f34e77]
+              - columnheader "模板" [ref=f34e78]
+              - columnheader "更新间隔" [ref=f34e79]
+              - columnheader "状态" [ref=f34e80]
+              - columnheader "操作" [ref=f34e81]
+          - rowgroup [ref=f34e82]:
+            - row [ref=f34e83]:
+              - cell "1" [ref=f34e84]
+              - cell "agent.hostname" [ref=f34e85]
+              - cell "Host name of Zabbix agent running" [ref=f34e86]
+              - cell "21001" [ref=f34e87]
+              - cell "1h" [ref=f34e88]
+              - cell "启用" [ref=f34e89]
+              - cell [ref=f34e90]:
+                - link "编辑" [ref=f34e91] [cursor=pointer]:
+                  - /url: /item/edit/1
+                - link "删除" [ref=f34e92] [cursor=pointer]:
+                  - /url: /item/delete/1
+            - row [ref=f34e93]:
+              - cell "2" [ref=f34e94]
+              - cell "agent.ping" [ref=f34e95]
+              - cell "Zabbix agent ping" [ref=f34e96]
+              - cell "21001" [ref=f34e97]
+              - cell "1m" [ref=f34e98]
+              - cell "启用" [ref=f34e99]
+              - cell [ref=f34e100]:
+                - link "编辑" [ref=f34e101] [cursor=pointer]:
+                  - /url: /item/edit/2
+                - link "删除" [ref=f34e102] [cursor=pointer]:
+                  - /url: /item/delete/2
+            - row [ref=f34e103]:
+              - cell "3" [ref=f34e104]
+              - cell "agent.version" [ref=f34e105]
+              - cell "Version of Zabbix agent running" [ref=f34e106]
+              - cell "21001" [ref=f34e107]
+              - cell "1h" [ref=f34e108]
+              - cell "启用" [ref=f34e109]
+              - cell [ref=f34e110]:
+                - link "编辑" [ref=f34e111] [cursor=pointer]:
+                  - /url: /item/edit/3
+                - link "删除" [ref=f34e112] [cursor=pointer]:
+                  - /url: /item/delete/3
+            - row [ref=f34e113]:
+              - cell "4" [ref=f34e114]
+              - cell "zabbix[host,agent,available]" [ref=f34e115]
+              - cell "Zabbix agent availability" [ref=f34e116]
+              - cell "21001" [ref=f34e117]
+              - cell "1m" [ref=f34e118]
+              - cell "启用" [ref=f34e119]
+              - cell [ref=f34e120]:
+                - link "编辑" [ref=f34e121] [cursor=pointer]:
+                  - /url: /item/edit/4
+                - link "删除" [ref=f34e122] [cursor=pointer]:
+                  - /url: /item/delete/4
+            - row [ref=f34e123]:
+              - cell "5" [ref=f34e124]
+              - cell "system.cpu.intr" [ref=f34e125]
+              - cell "Interrupts per second" [ref=f34e126]
+              - cell "21001" [ref=f34e127]
+              - cell "1m" [ref=f34e128]
+              - cell "启用" [ref=f34e129]
+              - cell [ref=f34e130]:
+                - link "编辑" [ref=f34e131] [cursor=pointer]:
+                  - /url: /item/edit/5
+                - link "删除" [ref=f34e132] [cursor=pointer]:
+                  - /url: /item/delete/5
+            - row [ref=f34e133]:
+              - cell "6" [ref=f34e134]
+              - cell "system.cpu.load[all,avg1]" [ref=f34e135]
+              - cell "Load average (1m avg)" [ref=f34e136]
+              - cell "21001" [ref=f34e137]
+              - cell "1m" [ref=f34e138]
+              - cell "启用" [ref=f34e139]
+              - cell [ref=f34e140]:
+                - link "编辑" [ref=f34e141] [cursor=pointer]:
+                  - /url: /item/edit/6
+                - link "删除" [ref=f34e142] [cursor=pointer]:
+                  - /url: /item/delete/6
+            - row [ref=f34e143]:
+              - cell "7" [ref=f34e144]
+              - cell "system.cpu.load[all,avg15]" [ref=f34e145]
+              - cell "Load average (15m avg)" [ref=f34e146]
+              - cell "21001" [ref=f34e147]
+              - cell "1m" [ref=f34e148]
+              - cell "启用" [ref=f34e149]
+              - cell [ref=f34e150]:
+                - link "编辑" [ref=f34e151] [cursor=pointer]:
+                  - /url: /item/edit/7
+                - link "删除" [ref=f34e152] [cursor=pointer]:
+                  - /url: /item/delete/7
+            - row [ref=f34e153]:
+              - cell "8" [ref=f34e154]
+              - cell "system.cpu.load[all,avg5]" [ref=f34e155]
+              - cell "Load average (5m avg)" [ref=f34e156]
+              - cell "21001" [ref=f34e157]
+              - cell "1m" [ref=f34e158]
+              - cell "启用" [ref=f34e159]
+              - cell [ref=f34e160]:
+                - link "编辑" [ref=f34e161] [cursor=pointer]:
+                  - /url: /item/edit/8
+                - link "删除" [ref=f34e162] [cursor=pointer]:
+                  - /url: /item/delete/8
+            - row [ref=f34e163]:
+              - cell "9" [ref=f34e164]
+              - cell "system.cpu.num" [ref=f34e165]
+              - cell "Number of CPUs" [ref=f34e166]
+              - cell "21001" [ref=f34e167]
+              - cell "1m" [ref=f34e168]
+              - cell "启用" [ref=f34e169]
+              - cell [ref=f34e170]:
+                - link "编辑" [ref=f34e171] [cursor=pointer]:
+                  - /url: /item/edit/9
+                - link "删除" [ref=f34e172] [cursor=pointer]:
+                  - /url: /item/delete/9
+            - row [ref=f34e173]:
+              - cell "10" [ref=f34e174]
+              - cell "system.cpu.switches" [ref=f34e175]
+              - cell "Context switches per second" [ref=f34e176]
+              - cell "21001" [ref=f34e177]
+              - cell "1m" [ref=f34e178]
+              - cell "启用" [ref=f34e179]
+              - cell [ref=f34e180]:
+                - link "编辑" [ref=f34e181] [cursor=pointer]:
+                  - /url: /item/edit/10
+                - link "删除" [ref=f34e182] [cursor=pointer]:
+                  - /url: /item/delete/10
+            - row [ref=f34e183]:
+              - cell "11" [ref=f34e184]
+              - cell "system.cpu.util[,idle]" [ref=f34e185]
+              - cell "CPU idle time" [ref=f34e186]
+              - cell "21001" [ref=f34e187]
+              - cell "1m" [ref=f34e188]
+              - cell "启用" [ref=f34e189]
+              - cell [ref=f34e190]:
+                - link "编辑" [ref=f34e191] [cursor=pointer]:
+                  - /url: /item/edit/11
+                - link "删除" [ref=f34e192] [cursor=pointer]:
+                  - /url: /item/delete/11
+            - row [ref=f34e193]:
+              - cell "12" [ref=f34e194]
+              - cell "system.cpu.util" [ref=f34e195]
+              - cell "CPU utilization" [ref=f34e196]
+              - cell "21001" [ref=f34e197]
+              - cell "1m" [ref=f34e198]
+              - cell "启用" [ref=f34e199]
+              - cell [ref=f34e200]:
+                - link "编辑" [ref=f34e201] [cursor=pointer]:
+                  - /url: /item/edit/12
+                - link "删除" [ref=f34e202] [cursor=pointer]:
+                  - /url: /item/delete/12
+            - row [ref=f34e203]:
+              - cell "13" [ref=f34e204]
+              - cell "system.cpu.util[,guest_nice]" [ref=f34e205]
+              - cell "CPU guest nice time" [ref=f34e206]
+              - cell "21001" [ref=f34e207]
+              - cell "1m" [ref=f34e208]
+              - cell "启用" [ref=f34e209]
+              - cell [ref=f34e210]:
+                - link "编辑" [ref=f34e211] [cursor=pointer]:
+                  - /url: /item/edit/13
+                - link "删除" [ref=f34e212] [cursor=pointer]:
+                  - /url: /item/delete/13
+            - row [ref=f34e213]:
+              - cell "14" [ref=f34e214]
+              - cell "system.cpu.util[,guest]" [ref=f34e215]
+              - cell "CPU guest time" [ref=f34e216]
+              - cell "21001" [ref=f34e217]
+              - cell "1m" [ref=f34e218]
+              - cell "启用" [ref=f34e219]
+              - cell [ref=f34e220]:
+                - link "编辑" [ref=f34e221] [cursor=pointer]:
+                  - /url: /item/edit/14
+                - link "删除" [ref=f34e222] [cursor=pointer]:
+                  - /url: /item/delete/14
+            - row [ref=f34e223]:
+              - cell "15" [ref=f34e224]
+              - cell "system.cpu.util[,interrupt]" [ref=f34e225]
+              - cell "CPU interrupt time" [ref=f34e226]
+              - cell "21001" [ref=f34e227]
+              - cell "1m" [ref=f34e228]
+              - cell "启用" [ref=f34e229]
+              - cell [ref=f34e230]:
+                - link "编辑" [ref=f34e231] [cursor=pointer]:
+                  - /url: /item/edit/15
+                - link "删除" [ref=f34e232] [cursor=pointer]:
+                  - /url: /item/delete/15
+            - row [ref=f34e233]:
+              - cell "16" [ref=f34e234]
+              - cell "system.cpu.util[,iowait]" [ref=f34e235]
+              - cell "CPU iowait time" [ref=f34e236]
+              - cell "21001" [ref=f34e237]
+              - cell "1m" [ref=f34e238]
+              - cell "启用" [ref=f34e239]
+              - cell [ref=f34e240]:
+                - link "编辑" [ref=f34e241] [cursor=pointer]:
+                  - /url: /item/edit/16
+                - link "删除" [ref=f34e242] [cursor=pointer]:
+                  - /url: /item/delete/16
+            - row [ref=f34e243]:
+              - cell "17" [ref=f34e244]
+              - cell "system.cpu.util[,nice]" [ref=f34e245]
+              - cell "CPU nice time" [ref=f34e246]
+              - cell "21001" [ref=f34e247]
+              - cell "1m" [ref=f34e248]
+              - cell "启用" [ref=f34e249]
+              - cell [ref=f34e250]:
+                - link "编辑" [ref=f34e251] [cursor=pointer]:
+                  - /url: /item/edit/17
+                - link "删除" [ref=f34e252] [cursor=pointer]:
+                  - /url: /item/delete/17
+            - row [ref=f34e253]:
+              - cell "18" [ref=f34e254]
+              - cell "system.cpu.util[,softirq]" [ref=f34e255]
+              - cell "CPU softirq time" [ref=f34e256]
+              - cell "21001" [ref=f34e257]
+              - cell "1m" [ref=f34e258]
+              - cell "启用" [ref=f34e259]
+              - cell [ref=f34e260]:
+                - link "编辑" [ref=f34e261] [cursor=pointer]:
+                  - /url: /item/edit/18
+                - link "删除" [ref=f34e262] [cursor=pointer]:
+                  - /url: /item/delete/18
+            - row [ref=f34e263]:
+              - cell "19" [ref=f34e264]
+              - cell "system.cpu.util[,steal]" [ref=f34e265]
+              - cell "CPU steal time" [ref=f34e266]
+              - cell "21001" [ref=f34e267]
+              - cell "1m" [ref=f34e268]
+              - cell "启用" [ref=f34e269]
+              - cell [ref=f34e270]:
+                - link "编辑" [ref=f34e271] [cursor=pointer]:
+                  - /url: /item/edit/19
+                - link "删除" [ref=f34e272] [cursor=pointer]:
+                  - /url: /item/delete/19
+            - row [ref=f34e273]:
+              - cell "20" [ref=f34e274]
+              - cell "system.cpu.util[,system]" [ref=f34e275]
+              - cell "CPU system time" [ref=f34e276]
+              - cell "21001" [ref=f34e277]
+              - cell "1m" [ref=f34e278]
+              - cell "启用" [ref=f34e279]
+              - cell [ref=f34e280]:
+                - link "编辑" [ref=f34e281] [cursor=pointer]:
+                  - /url: /item/edit/20
+                - link "删除" [ref=f34e282] [cursor=pointer]:
+                  - /url: /item/delete/20
+        - generic [ref=f34e283]:
+          - generic [ref=f34e284]: 共 42 条，显示 1-20
+          - button "" [disabled] [ref=f34e285]
+          - generic [ref=f34e287]: "1"
+          - button "2" [ref=f34e288] [cursor=pointer]
+          - button "3" [ref=f34e289] [cursor=pointer]
+          - button "" [ref=f34e290] [cursor=pointer]
+          - combobox [ref=f34e292] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"

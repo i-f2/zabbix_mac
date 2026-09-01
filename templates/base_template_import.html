@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+
+{% block page_title %}模板 XML 导入{% endblock %}
+
+{% block toolbar %}
+<div class="toolbar-row">
+    <div class="input-group" style="width:220px">
+        <span class="input-group-text" title="模板编码/标识，填写后将强制绑定到本次导入的所有记录">模板ID</span>
+        <input type="text" id="templateIdInput" class="form-control"
+               placeholder="如 21001、91001"
+               title="填写后将强制绑定到本次导入的所有记录（items/triggers/discovery_rules 的 template_name）">
+    </div>
+    <button type="button" class="btn btn-primary"
+            onclick="document.getElementById('templateXmlFile').click()"
+            title="选择 Zabbix 导出的模板 XML 文件">
+        <i class="bi bi-upload"></i> 选择 XML 文件
+    </button>
+    <input type="file" id="templateXmlFile" accept=".xml" style="display:none"
+           onchange="previewTemplateXml(this)">
+    <button type="button" id="executeImportBtn" class="btn btn-success" disabled
+            onclick="executeImport()" title="解析成功后可用">
+        <i class="bi bi-play-fill"></i> 执行导入
+    </button>
+    <button type="button" class="btn btn-outline-secondary" onclick="location.reload()"
+            title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="data-card">
+    <div class="card-body">
+        <h6 class="card-title"><i class="bi bi-file-earmark-xml"></i> 导入说明</h6>
+        <p class="text-muted small mb-0">
+            上传 Zabbix 5.0 模板导出的 <code>&lt;zabbix_export&gt;</code> XML 文件，解析并写入基础模板配置表
+            （模板 / 监控项 / 触发器 / 自动发现规则 / 过滤条件 / 监控项原型 / 触发器原型）。
+            每次导入都将所有记录绑定到输入的 <strong>模板ID</strong>；
+            若该模板ID <strong>已导入过</strong>，将弹窗提示并<strong>拒绝本次导入</strong>，请使用新的模板ID。
+        </p>
+    </div>
+</div>
+
+<!-- 解析预览 -->
+<div id="previewSection" class="data-card" style="display:none">
+    <div class="card-body">
+        <h6 class="card-title"><i class="bi bi-clipboard-data"></i> 解析预览</h6>
+        <div id="totalBadges" class="mb-3"></div>
+        <div class="table-responsive">
+            <table class="table table-hover" id="previewTable">
+                <thead>
+                    <tr>
+                        <th>模板</th>
+                        <th>描述</th>
+                        <th>监控项</th>
+                        <th>触发器</th>
+                        <th>发现规则</th>
+                        <th>过滤条件</th>
+                        <th>监控项原型</th>
+                        <th>触发器原型</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 导入结果 -->
+<div id="resultSection" class="data-card" style="display:none">
+    <div class="card-body">
+        <h6 class="card-title"><i class="bi bi-check2-circle"></i> 导入结果</h6>
+        <div id="resultBody"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+var importedFile = null;
+
+function renderPreview(data) {
+    var tbody = document.querySelector('#previewTable tbody');
+    tbody.innerHTML = '';
+    data.templates.forEach(function (tpl) {
+        var c = tpl.counts;
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><strong>' + escHtml(tpl.name) + '</strong></td>' +
+            '<td class="text-muted small">' + escHtml(tpl.description || '') + '</td>' +
+            '<td>' + c.items + '</td>' +
+            '<td>' + c.triggers + '</td>' +
+            '<td>' + c.discovery_rules + '</td>' +
+            '<td>' + c.filter_conditions + '</td>' +
+            '<td>' + c.item_prototypes + '</td>' +
+            '<td>' + c.trigger_prototypes + '</td>';
+        tbody.appendChild(tr);
+    });
+
+    var tc = data.total_counts;
+    document.getElementById('totalBadges').innerHTML =
+        '<span class="badge bg-primary me-1">模板 ' + tc.templates + '</span>' +
+        '<span class="badge bg-info me-1">监控项 ' + tc.items + '</span>' +
+        '<span class="badge bg-warning text-dark me-1">触发器 ' + tc.triggers + '</span>' +
+        '<span class="badge bg-secondary me-1">发现规则 ' + tc.discovery_rules + '</span>' +
+        '<span class="badge bg-light text-dark me-1">过滤条件 ' + tc.filter_conditions + '</span>' +
+        '<span class="badge bg-success me-1">监控项原型 ' + tc.item_prototypes + '</span>' +
+        '<span class="badge bg-dark me-1">触发器原型 ' + tc.trigger_prototypes + '</span>';
+
+    document.getElementById('previewSection').style.display = '';
+    document.getElementById('resultSection').style.display = 'none';
+    document.getElementById('executeImportBtn').disabled = false;
+}
+
+function renderResults(results) {
+    var r = results;
+    function sum(k) { return r[k].created + r[k].updated + r[k].skipped; }
+    var rows = [
+        ['模板', sum('templates'), r.templates.created, r.templates.updated],
+        ['监控项', sum('items'), r.items.created, r.items.updated],
+        ['触发器', sum('triggers'), r.triggers.created, r.triggers.updated],
+        ['自动发现规则', sum('discovery_rules'), r.discovery_rules.created, r.discovery_rules.updated],
+        ['过滤条件', sum('filter_conditions'), r.filter_conditions.created, 0],
+        ['监控项原型', sum('item_prototypes'), r.item_prototypes.created, r.item_prototypes.updated],
+        ['触发器原型', sum('trigger_prototypes'), r.trigger_prototypes.created, r.trigger_prototypes.updated],
+    ];
+    var html = '<div class="table-responsive"><table class="table table-sm">' +
+        '<thead><tr><th>类别</th><th>总条数</th><th>新增</th><th>更新</th></tr></thead><tbody>';
+    rows.forEach(function (row) {
+        html += '<tr><td>' + row[0] + '</td><td>' + row[1] + '</td>' +
+                '<td class="text-success">+' + row[2] + '</td>' +
+                '<td class="text-warning">~' + row[3] + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('resultBody').innerHTML = html;
+    document.getElementById('resultSection').style.display = '';
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+}
+
+async function previewTemplateXml(input) {
+    if (!input.files.length) return;
+    importedFile = input.files[0];
+    document.getElementById('executeImportBtn').disabled = true;
+    var fd = new FormData();
+    fd.append('file', importedFile);
+    var templateId = (document.getElementById('templateIdInput').value || '').trim();
+    if (templateId) fd.append('template_id', templateId);
+    try {
+        var res = await fetch('/api/base-template/parse-preview', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (!data.success) {
+            showToast(data.message, 'danger');
+            return;
+        }
+        renderPreview(data);
+        if (data.already_imported) {
+            showToast('模板 ' + (data.template_id || data.templates[0].name) +
+                      ' 已导入过，拒绝执行导入。请使用新的模板ID', 'warning');
+            document.getElementById('executeImportBtn').disabled = true;
+        } else {
+            showToast('解析成功：共 ' + data.total_counts.templates + ' 个模板', 'success');
+        }
+    } catch (e) {
+        showToast('解析失败: ' + e.message, 'danger');
+    } finally {
+        input.value = '';
+    }
+}
+
+async function executeImport() {
+    if (!importedFile) {
+        showToast('请先选择 XML 文件并解析', 'warning');
+        return;
+    }
+    if (!confirm('将按 XML 内容幂等写入基础模板配置表（已存在的记录按键更新，不会重复插入），确认执行？')) return;
+    var btn = document.getElementById('executeImportBtn');
+    btn.disabled = true;
+    var fd = new FormData();
+    fd.append('file', importedFile);
+    var templateId = (document.getElementById('templateIdInput').value || '').trim();
+    if (templateId) fd.append('template_id', templateId);
+    try {
+        var res = await fetch('/api/base-template/execute-import', { method: 'POST', body: fd });
+        var data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+        if (data.success) renderResults(data.results);
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

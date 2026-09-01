@@ -1,0 +1,165 @@
+- generic [active] [ref=f15e1]:
+  - navigation [ref=f15e2]:
+    - generic [ref=f15e3]:
+      - button "" [ref=f15e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f15e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f15e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f15e9]
+    - generic [ref=f15e11]:
+      - button "" [ref=f15e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f15e14]:
+    - complementary [ref=f15e15]:
+      - navigation [ref=f15e16]:
+        - link " 系统信息" [ref=f15e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f15e18]: 
+          - generic [ref=f15e19]: 系统信息
+        - link " 资产主机管理" [ref=f15e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f15e21]: 
+          - generic [ref=f15e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f15e23] [cursor=pointer]:
+          - generic [ref=f15e24]: 
+          - generic [ref=f15e25]: 监控复核工作台
+          - generic [ref=f15e26]: 
+        - generic [ref=f15e27]:
+          - link "监控项复核" [ref=f15e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f15e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f15e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f15e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f15e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f15e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f15e40] [cursor=pointer]:
+          - generic [ref=f15e41]: 
+          - generic [ref=f15e42]: 基础模板配置
+          - generic [ref=f15e43]: 
+    - main [ref=f15e44]:
+      - generic [ref=f15e45]:
+        - navigation "breadcrumb" [ref=f15e46]:
+          - list [ref=f15e47]:
+            - listitem [ref=f15e48]:
+              - link "主机管理" [ref=f15e49] [cursor=pointer]:
+                - /url: /hosts
+        - heading "主机管理" [level=4] [ref=f15e51]
+      - generic [ref=f15e53]:
+        - link " 添加主机" [ref=f15e54] [cursor=pointer]:
+          - /url: /host/add
+          - generic [ref=f15e55]: 
+          - text: 添加主机
+        - button " 同步" [ref=f15e56] [cursor=pointer]:
+          - generic [ref=f15e57]: 
+          - text: 同步
+        - button "" [ref=f15e58] [cursor=pointer]
+      - generic [ref=f15e60]:
+        - table [ref=f15e62]:
+          - rowgroup [ref=f15e63]:
+            - row [ref=f15e64]:
+              - columnheader "ID" [ref=f15e65]
+              - columnheader "名称" [ref=f15e66]
+              - columnheader "关联模板" [ref=f15e67]
+              - columnheader "系统名称" [ref=f15e68]
+              - columnheader "模块名称" [ref=f15e69]
+              - columnheader "机房" [ref=f15e70]
+              - columnheader "描述" [ref=f15e71]
+              - columnheader "创建时间" [ref=f15e72]
+              - columnheader "操作" [ref=f15e73]
+          - rowgroup [ref=f15e74]:
+            - row [ref=f15e75]:
+              - cell "1" [ref=f15e76]
+              - cell "Zabbix server" [ref=f15e77]
+              - cell "未设置" [ref=f15e78]
+              - cell "上市系统" [ref=f15e79]
+              - cell "上市日常监管模块" [ref=f15e80]
+              - cell "深交所证联网" [ref=f15e81]
+              - cell "Local Zabbix server" [ref=f15e82]
+              - cell "2026-04-21 17:07:03.284849" [ref=f15e83]
+              - cell [ref=f15e84]:
+                - link "编辑" [ref=f15e85] [cursor=pointer]:
+                  - /url: /host/edit/1
+                - link "删除" [ref=f15e86] [cursor=pointer]:
+                  - /url: /host/delete/1
+            - row [ref=f15e87]:
+              - cell "2" [ref=f15e88]
+              - cell "10.24.3.12" [ref=f15e89]
+              - cell "未设置" [ref=f15e90]
+              - cell "上市系统" [ref=f15e91]
+              - cell "上市日常监管模块" [ref=f15e92]
+              - cell "深交所证联网" [ref=f15e93]
+              - cell "Test server 1" [ref=f15e94]
+              - cell "2026-04-21 17:07:03.284849" [ref=f15e95]
+              - cell [ref=f15e96]:
+                - link "编辑" [ref=f15e97] [cursor=pointer]:
+                  - /url: /host/edit/2
+                - link "删除" [ref=f15e98] [cursor=pointer]:
+                  - /url: /host/delete/2
+            - row [ref=f15e99]:
+              - cell "3" [ref=f15e100]
+              - cell "10.24.3.23" [ref=f15e101]
+              - cell "未设置" [ref=f15e102]
+              - cell "上市系统" [ref=f15e103]
+              - cell "上市日常监管模块" [ref=f15e104]
+              - cell "深交所证联网" [ref=f15e105]
+              - cell [ref=f15e106]
+              - cell "2026-04-24 15:33:45.646743" [ref=f15e107]
+              - cell [ref=f15e108]:
+                - link "编辑" [ref=f15e109] [cursor=pointer]:
+                  - /url: /host/edit/3
+                - link "删除" [ref=f15e110] [cursor=pointer]:
+                  - /url: /host/delete/3
+            - row [ref=f15e111]:
+              - cell "8" [ref=f15e112]
+              - cell "192.168.1.200" [ref=f15e113]
+              - cell "未设置" [ref=f15e114]
+              - cell "测试系统" [ref=f15e115]
+              - cell "测试模块" [ref=f15e116]
+              - cell "深交所证联网" [ref=f15e117]
+              - cell "test-server-2" [ref=f15e118]
+              - cell "2026-07-24 15:27:02.429598" [ref=f15e119]
+              - cell [ref=f15e120]:
+                - link "编辑" [ref=f15e121] [cursor=pointer]:
+                  - /url: /host/edit/8
+                - link "删除" [ref=f15e122] [cursor=pointer]:
+                  - /url: /host/delete/8
+            - row [ref=f15e123]:
+              - cell "9" [ref=f15e124]
+              - cell "192.168.1.100" [ref=f15e125]
+              - cell "未设置" [ref=f15e126]
+              - cell "更新系统" [ref=f15e127]
+              - cell "更新模块" [ref=f15e128]
+              - cell "深交所证联网" [ref=f15e129]
+              - cell "test-server-1" [ref=f15e130]
+              - cell "2026-07-24 15:27:02.429598" [ref=f15e131]
+              - cell [ref=f15e132]:
+                - link "编辑" [ref=f15e133] [cursor=pointer]:
+                  - /url: /host/edit/9
+                - link "删除" [ref=f15e134] [cursor=pointer]:
+                  - /url: /host/delete/9
+            - row [ref=f15e135]:
+              - cell "10" [ref=f15e136]
+              - cell "192.168.1.300" [ref=f15e137]
+              - cell "未设置" [ref=f15e138]
+              - cell "上市系统" [ref=f15e139]
+              - cell "上市日常监管模块" [ref=f15e140]
+              - cell "深交所证联网" [ref=f15e141]
+              - cell [ref=f15e142]
+              - cell "2026-07-24 15:28:29.607680" [ref=f15e143]
+              - cell [ref=f15e144]:
+                - link "编辑" [ref=f15e145] [cursor=pointer]:
+                  - /url: /host/edit/10
+                - link "删除" [ref=f15e146] [cursor=pointer]:
+                  - /url: /host/delete/10
+        - generic [ref=f15e147]:
+          - generic [ref=f15e148]: 共 6 条，显示 1-6
+          - combobox [ref=f15e149] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"

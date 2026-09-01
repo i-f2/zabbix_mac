@@ -1,0 +1,91 @@
+- generic [active] [ref=f36e1]:
+  - navigation [ref=f36e2]:
+    - generic [ref=f36e3]:
+      - button "" [ref=f36e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f36e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f36e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f36e9]
+    - generic [ref=f36e11]:
+      - button "" [ref=f36e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f36e14]:
+    - complementary [ref=f36e15]:
+      - navigation [ref=f36e16]:
+        - link " 系统信息" [ref=f36e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f36e18]: 
+          - generic [ref=f36e19]: 系统信息
+        - link " 资产主机管理" [ref=f36e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f36e21]: 
+          - generic [ref=f36e22]: 资产主机管理
+        - button " 监控复核工作台 " [ref=f36e23] [cursor=pointer]:
+          - generic [ref=f36e24]: 
+          - generic [ref=f36e25]: 监控复核工作台
+          - generic [ref=f36e26]: 
+        - generic [ref=f36e27]:
+          - link "监控项复核" [ref=f36e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f36e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f36e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f36e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f36e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f36e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [expanded] [ref=f36e40] [cursor=pointer]:
+          - generic [ref=f36e41]: 
+          - generic [ref=f36e42]: 基础模板配置
+          - generic [ref=f36e43]: 
+        - generic:
+          - link "监控项管理" [ref=f36e44] [cursor=pointer]:
+            - /url: /items
+          - link "触发器管理" [ref=f36e46] [cursor=pointer]:
+            - /url: /triggers
+          - link "监控项原型管理" [ref=f36e48] [cursor=pointer]:
+            - /url: /item-prototypes
+          - link "触发器原型管理" [ref=f36e50] [cursor=pointer]:
+            - /url: /trigger-prototypes
+          - link "Web场景管理" [ref=f36e52] [cursor=pointer]:
+            - /url: /webscenarios
+          - link "自动发现规则列表" [ref=f36e54] [cursor=pointer]:
+            - /url: /discovery-rules
+          - link "自动发现过滤规则管理" [ref=f36e56] [cursor=pointer]:
+            - /url: /filter-conditions
+          - link "模板 XML 导入" [ref=f36e58] [cursor=pointer]:
+            - /url: /base-template/import
+    - main [ref=f36e60]:
+      - generic [ref=f36e61]:
+        - navigation "breadcrumb":
+          - list
+        - heading "模板 XML 导入" [level=4] [ref=f36e63]
+      - generic [ref=f36e65]:
+        - generic [ref=f36e66]:
+          - generic "模板编码/标识，填写后将强制绑定到本次导入的所有记录" [ref=f36e67]: 模板ID
+          - textbox "填写后将强制绑定到本次导入的所有记录（items/triggers/discovery_rules 的 template_name）" [ref=f36e68]:
+            - /placeholder: 如 21001、91001
+        - button " 选择 XML 文件" [ref=f36e69] [cursor=pointer]:
+          - generic [ref=f36e70]: 
+          - text: 选择 XML 文件
+        - button " 执行导入" [disabled]:
+          - generic: 
+          - text: 执行导入
+        - button "" [ref=f36e71] [cursor=pointer]
+      - generic [ref=f36e74]:
+        - heading "导入说明" [level=6] [ref=f36e75]
+        - paragraph [ref=f36e76]:
+          - text: 上传 Zabbix 5.0 模板导出的
+          - code [ref=f36e77]: <zabbix_export>
+          - text: XML 文件，解析并写入基础模板配置表 （模板 / 监控项 / 触发器 / 自动发现规则 / 过滤条件 / 监控项原型 / 触发器原型）。 每次导入都将所有记录绑定到输入的
+          - strong [ref=f36e78]: 模板ID
+          - text: ； 若该模板ID
+          - strong [ref=f36e79]: 已导入过
+          - text: ，将弹窗提示并
+          - strong [ref=f36e80]: 拒绝本次导入
+          - text: ，请使用新的模板ID。
+      - text:  

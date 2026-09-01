@@ -1,0 +1,76 @@
+- generic [active] [ref=f8e1]:
+  - navigation [ref=f8e2]:
+    - generic [ref=f8e3]:
+      - button "" [ref=f8e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f8e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f8e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f8e9]
+    - generic [ref=f8e11]:
+      - button "" [ref=f8e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f8e14]:
+    - complementary [ref=f8e15]:
+      - navigation [ref=f8e16]:
+        - link " 系统信息" [ref=f8e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f8e18]: 
+          - generic [ref=f8e19]: 系统信息
+        - link " 资产主机管理" [ref=f8e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f8e21]: 
+          - generic [ref=f8e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f8e23] [cursor=pointer]:
+          - generic [ref=f8e24]: 
+          - generic [ref=f8e25]: 监控复核工作台
+          - generic [ref=f8e26]: 
+        - generic [ref=f8e27]:
+          - link "监控项复核 240" [ref=f8e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f8e29]: 监控项复核
+            - generic [ref=f8e30]: "240"
+          - link "触发器复核 100" [ref=f8e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f8e32]: 触发器复核
+            - generic [ref=f8e33]: "100"
+          - link "监控项原型复核" [ref=f8e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f8e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f8e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f8e39]: Web场景复核
+            - generic [ref=f8e40]: "7"
+          - link "Web触发器复核" [ref=f8e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f8e43] [cursor=pointer]:
+          - generic [ref=f8e44]: 
+          - generic [ref=f8e45]: 基础模板配置
+          - generic [ref=f8e46]: 
+    - main [ref=f8e47]:
+      - generic [ref=f8e48]:
+        - navigation "breadcrumb":
+          - list
+        - heading "模板 XML 导入" [level=4] [ref=f8e50]
+      - generic [ref=f8e52]:
+        - generic [ref=f8e53]:
+          - generic "模板编码/标识，填写后将强制绑定到本次导入的所有记录" [ref=f8e54]: 模板ID
+          - textbox "填写后将强制绑定到本次导入的所有记录（items/triggers/discovery_rules 的 template_name）" [ref=f8e55]:
+            - /placeholder: 如 21001、91001
+        - button " 选择 XML 文件" [ref=f8e56] [cursor=pointer]:
+          - generic [ref=f8e57]: 
+          - text: 选择 XML 文件
+        - button " 执行导入" [disabled]:
+          - generic: 
+          - text: 执行导入
+        - button "" [ref=f8e58] [cursor=pointer]
+      - generic [ref=f8e61]:
+        - heading "导入说明" [level=6] [ref=f8e62]
+        - paragraph [ref=f8e63]:
+          - text: 上传 Zabbix 5.0 模板导出的
+          - code [ref=f8e64]: <zabbix_export>
+          - text: XML 文件，解析并写入基础模板配置表 （模板 / 监控项 / 触发器 / 自动发现规则 / 过滤条件 / 监控项原型 / 触发器原型）。
+          - strong [ref=f8e65]: 幂等导入
+          - text: ：已存在的记录按「模板 + 键」匹配更新，不会重复插入；重复执行结果一致。
+      - text:  

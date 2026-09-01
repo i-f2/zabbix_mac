@@ -27,8 +27,15 @@
         options = options || {};
         if (['POST', 'PUT', 'DELETE', 'PATCH'].indexOf((options.method || 'GET').toUpperCase()) !== -1) {
             options.headers = options.headers || {};
-            if (!options.headers['X-CSRF-Token'] && !(options.body instanceof FormData)) {
-                options.headers['X-CSRF-Token'] = _csrfToken;
+            if (!options.headers['X-CSRF-Token']) {
+                if (options.body instanceof FormData) {
+                    // multipart/form-data 无法带自定义 header，改为追加表单字段
+                    if (!options.body.has('_csrf_token')) {
+                        options.body.append('_csrf_token', _csrfToken);
+                    }
+                } else {
+                    options.headers['X-CSRF-Token'] = _csrfToken;
+                }
             }
         }
         return _originalFetch.call(this, url, options);
@@ -214,6 +221,12 @@
                        class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
                        data-route="filter-conditions|filter-condition|edit_filter_condition">
                         <span>自动发现过滤规则管理</span>
+                    </a>
+
+                    <a href="{{ url_for('base_template_import') }}"
+                       class="sidebar-menu-item sidebar-sub-item sidebar-sub-muted"
+                       data-route="base-template/import|base_template_import">
+                        <span>模板 XML 导入</span>
                     </a>
                 </div>
 

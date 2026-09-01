@@ -54,6 +54,7 @@
         <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
         <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
         <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
+        <input type="hidden" name="room" value="{{ request.args.get('room', '') }}">
         <input type="hidden" name="baseline" value="{{ baseline or '' }}">
         <div class="btn-group btn-group-sm sync-tab-group">
             <button type="submit" name="sync_filter" value="pending"
@@ -87,6 +88,12 @@
            list="subsystemList" autocomplete="off" value="{{ request.args.get('subsystem', '') }}">
     <datalist id="subsystemList">
         {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <input type="text" name="room" class="form-control" placeholder="机房"
+           list="roomList" autocomplete="off" value="{{ request.args.get('room', '') }}">
+    <datalist id="roomList">
+        {% for r in distinct_in_rooms %}<option value="{{ r }}">{% endfor %}
     </datalist>
 
     <select name="baseline" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">

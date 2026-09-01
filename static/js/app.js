@@ -171,6 +171,59 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ========================================================
+    // Sidebar Group Collapse Persistence — 分组展开状态跨页面持久化
+    // 分组一旦开启即保持展开，只有再次点击分组标题（关闭按钮）才折叠；
+    // 当前路由命中的子菜单所在分组强制展开，保证直达子页面时菜单可见。
+    // ========================================================
+    (function () {
+        var GROUP_IDS = ['sidebarCollapseReview', 'sidebarCollapseTemplate'];
+        function groupKey(id) { return 'sidebarGroupOpen_' + id; }
+
+        GROUP_IDS.forEach(function (id) {
+            var groupEl = document.getElementById(id);
+            if (!groupEl) return;
+
+            // 切换开始时即持久化最终意图，避免动画未结束就跳转导致状态丢失
+            groupEl.addEventListener('show.bs.collapse', function () {
+                localStorage.setItem(groupKey(id), '1');
+            });
+            groupEl.addEventListener('hide.bs.collapse', function () {
+                localStorage.setItem(groupKey(id), '0');
+            });
+
+            // 目标显隐：显式开/关优先（开启后保持展开、点关闭后保持折叠）；
+            // 无显式偏好且当前页命中该分组子菜单时自动展开（直达子页面菜单可见）；
+            // 无显式偏好且不在该分组 → 保持服务端渲染默认，不干预。
+            var hasActive = groupEl.querySelector('.sidebar-menu-item.active') !== null;
+            var saved = localStorage.getItem(groupKey(id));
+            var isShown = groupEl.classList.contains('show');
+
+            var wantShow;
+            if (saved === '1') {
+                wantShow = true;
+            } else if (saved === '0') {
+                wantShow = false;
+            } else if (hasActive) {
+                wantShow = true;
+            } else {
+                return;
+            }
+
+            // 目标状态与服务端渲染一致 → 直接跳过。
+            // 注意：此处不能调用 bootstrap.Collapse.getOrCreateInstance(groupEl) 来建实例，
+            // Bootstrap 5.3 的 Collapse 构造器会自动执行一次 toggle()，会把折叠组强制展开/展开组强制折叠。
+            if (wantShow === isShown) return;
+
+            // 状态不一致：直接修正 DOM（不创建 Collapse 实例），并同步 toggle 的 aria-expanded（驱动箭头旋转）。
+            groupEl.classList.toggle('show', wantShow);
+            document.querySelectorAll('[data-bs-toggle="collapse"][href="#' + id + '"], [data-bs-toggle="collapse"][data-bs-target="#' + id + '"]')
+                .forEach(function (toggleEl) {
+                    toggleEl.setAttribute('aria-expanded', wantShow ? 'true' : 'false');
+                });
+        });
+    })();
+
+    // ========================================================
     // Sidebar Pending Badges — 异步获取未确认复核数量
     // ========================================================
     fetch('/api/review/pending-counts')
@@ -407,6 +460,16 @@ window.BatchSync = {
         BatchSync._updateUI(selected.size);
     },
 
+    // 清空全部已勾选项：取消页面勾选 + 覆写 sessionStorage 选择集 + 复位按钮/全选框。
+    // 同步结束后由 ReviewSyncPoller 调用，避免 reload 后 _restoreCheckboxes 恢复勾选。
+    clearSelection: function() {
+        document.querySelectorAll('.row-checkbox:checked').forEach(function(cb) {
+            cb.checked = false;
+        });
+        BatchSync._saveSelectedSet(new Set());
+        BatchSync._updateUI(0);
+    },
+
     getSelectedIds: function() {
         return Array.from(BatchSync._getSelectedSet()).map(function(id) { return parseInt(id); });
     },
@@ -615,6 +678,8 @@ window.BatchSync = {
             var modal = bootstrap.Modal.getInstance(modalEl);
             modal.hide();
             showToast(data.message, 'success');
+            // 同步下发成功：释放已勾选项，避免 reload 后勾选被 sessionStorage 恢复
+            BatchSync.clearSelection();
             setTimeout(function() { location.reload(); }, 1500);
         } catch (e) {
             showToast('同步请求失败: ' + e.message, 'danger');

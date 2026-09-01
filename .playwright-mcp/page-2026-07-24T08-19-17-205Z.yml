@@ -1,0 +1,151 @@
+- generic [active] [ref=f17e1]:
+  - navigation [ref=f17e2]:
+    - generic [ref=f17e3]:
+      - button "" [ref=f17e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f17e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f17e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f17e9]
+    - generic [ref=f17e11]:
+      - button "" [ref=f17e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f17e14]:
+    - complementary [ref=f17e15]:
+      - navigation [ref=f17e16]:
+        - link " 系统信息" [ref=f17e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f17e18]: 
+          - generic [ref=f17e19]: 系统信息
+        - link " 资产主机管理" [ref=f17e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f17e21]: 
+          - generic [ref=f17e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f17e23] [cursor=pointer]:
+          - generic [ref=f17e24]: 
+          - generic [ref=f17e25]: 监控复核工作台
+          - generic [ref=f17e26]: 
+        - generic [ref=f17e27]:
+          - link "监控项复核" [ref=f17e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f17e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f17e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f17e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f17e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f17e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f17e40] [cursor=pointer]:
+          - generic [ref=f17e41]: 
+          - generic [ref=f17e42]: 基础模板配置
+          - generic [ref=f17e43]: 
+    - main [ref=f17e44]:
+      - generic [ref=f17e45]:
+        - navigation "breadcrumb" [ref=f17e46]:
+          - list [ref=f17e47]:
+            - listitem [ref=f17e48]:
+              - link "主机管理" [ref=f17e49] [cursor=pointer]:
+                - /url: /hosts
+        - heading "主机管理" [level=4] [ref=f17e51]
+      - generic [ref=f17e53]:
+        - link " 添加主机" [ref=f17e54] [cursor=pointer]:
+          - /url: /host/add
+          - generic [ref=f17e55]: 
+          - text: 添加主机
+        - button " 同步" [ref=f17e56] [cursor=pointer]:
+          - generic [ref=f17e57]: 
+          - text: 同步
+        - button "" [ref=f17e58] [cursor=pointer]
+      - generic [ref=f17e60]:
+        - table [ref=f17e62]:
+          - rowgroup [ref=f17e63]:
+            - row [ref=f17e64]:
+              - columnheader "ID" [ref=f17e65]
+              - columnheader "名称" [ref=f17e66]
+              - columnheader "关联模板" [ref=f17e67]
+              - columnheader "系统名称" [ref=f17e68]
+              - columnheader "模块名称" [ref=f17e69]
+              - columnheader "机房" [ref=f17e70]
+              - columnheader "描述" [ref=f17e71]
+              - columnheader "创建时间" [ref=f17e72]
+              - columnheader "操作" [ref=f17e73]
+          - rowgroup [ref=f17e74]:
+            - row [ref=f17e75]:
+              - cell "1" [ref=f17e76]
+              - cell "Zabbix server" [ref=f17e77]
+              - cell "21001" [ref=f17e78]
+              - cell "上市系统" [ref=f17e79]
+              - cell "上市日常监管模块" [ref=f17e80]
+              - cell "深交所证联网" [ref=f17e81]
+              - cell "Local Zabbix server" [ref=f17e82]
+              - cell "2026-04-21 17:07:03.284849" [ref=f17e83]
+              - cell [ref=f17e84]:
+                - link "编辑" [ref=f17e85] [cursor=pointer]:
+                  - /url: /host/edit/1
+                - link "删除" [ref=f17e86] [cursor=pointer]:
+                  - /url: /host/delete/1
+            - row [ref=f17e87]:
+              - cell "2" [ref=f17e88]
+              - cell "10.24.3.12" [ref=f17e89]
+              - cell "21001" [ref=f17e90]
+              - cell "上市系统" [ref=f17e91]
+              - cell "上市日常监管模块" [ref=f17e92]
+              - cell "深交所证联网" [ref=f17e93]
+              - cell "Test server 1" [ref=f17e94]
+              - cell "2026-04-21 17:07:03.284849" [ref=f17e95]
+              - cell [ref=f17e96]:
+                - link "编辑" [ref=f17e97] [cursor=pointer]:
+                  - /url: /host/edit/2
+                - link "删除" [ref=f17e98] [cursor=pointer]:
+                  - /url: /host/delete/2
+            - row [ref=f17e99]:
+              - cell "3" [ref=f17e100]
+              - cell "10.24.3.23" [ref=f17e101]
+              - cell "21001" [ref=f17e102]
+              - cell "上市系统" [ref=f17e103]
+              - cell "上市日常监管模块" [ref=f17e104]
+              - cell "深交所证联网" [ref=f17e105]
+              - cell [ref=f17e106]
+              - cell "2026-04-24 15:33:45.646743" [ref=f17e107]
+              - cell [ref=f17e108]:
+                - link "编辑" [ref=f17e109] [cursor=pointer]:
+                  - /url: /host/edit/3
+                - link "删除" [ref=f17e110] [cursor=pointer]:
+                  - /url: /host/delete/3
+            - row [ref=f17e111]:
+              - cell "8" [ref=f17e112]
+              - cell "192.168.1.200" [ref=f17e113]
+              - cell "10002" [ref=f17e114]
+              - cell "测试系统" [ref=f17e115]
+              - cell "测试模块" [ref=f17e116]
+              - cell "深交所证联网" [ref=f17e117]
+              - cell "test-server-2" [ref=f17e118]
+              - cell "2026-07-24 15:27:02.429598" [ref=f17e119]
+              - cell [ref=f17e120]:
+                - link "编辑" [ref=f17e121] [cursor=pointer]:
+                  - /url: /host/edit/8
+                - link "删除" [ref=f17e122] [cursor=pointer]:
+                  - /url: /host/delete/8
+            - row [ref=f17e123]:
+              - cell "10" [ref=f17e124]
+              - cell "192.168.1.300" [ref=f17e125]
+              - cell "21001" [ref=f17e126]
+              - cell "上市系统" [ref=f17e127]
+              - cell "上市日常监管模块" [ref=f17e128]
+              - cell "深交所证联网" [ref=f17e129]
+              - cell [ref=f17e130]
+              - cell "2026-07-24 15:28:29.607680" [ref=f17e131]
+              - cell [ref=f17e132]:
+                - link "编辑" [ref=f17e133] [cursor=pointer]:
+                  - /url: /host/edit/10
+                - link "删除" [ref=f17e134] [cursor=pointer]:
+                  - /url: /host/delete/10
+        - generic [ref=f17e135]:
+          - generic [ref=f17e136]: 共 5 条，显示 1-5
+          - combobox [ref=f17e137] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"

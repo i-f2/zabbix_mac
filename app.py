@@ -25,6 +25,7 @@ import pandas as pd
 import json
 
 from config_loader import load_config, get_db_config, get_zabbix_environments
+from xml_template_parser import parse_template_xml
 
 from typing import Any, List
 
@@ -1841,58 +1842,161 @@ def hosts():
                            total=total, total_pages=total_pages)
 
 
+def _parse_template_ids(raw):
+    """解析 sub_assets.template_id：逗号切分 + trim + 过滤空串 + 去重（保留顺序）。
+
+    例：'21001, 91001,60001' → ['21001', '91001', '60001']；'' / ' , ,' → []
+    """
+    return list(dict.fromkeys(
+        t.strip() for t in str(raw or '').split(',') if t.strip()
+    ))
+
+
+def _load_dr_filters(cur, dr_ids):
+    """查询 filter_conditions 并返回 {discovery_rule_id: [cond rows]}。
+
+    供 ensure_discovery_rule 打包 LLD filter 使用（operator 为字符串，转换在
+    zabbix_mac.build_discovery_rule_filter 内完成）。
+    """
+    dr_ids = list(dict.fromkeys(int(i) for i in dr_ids)) if dr_ids else []
+    if not dr_ids:
+        return {}
+    cur.execute(
+        "SELECT discovery_rule_id, macro, value, operator FROM filter_conditions "
+        f"WHERE discovery_rule_id IN ({','.join(['%s'] * len(dr_ids))})",
+        dr_ids)
+    by_id = {}
+    for row in cur.fetchall():
+        by_id.setdefault(row['discovery_rule_id'], []).append(row)
+    return by_id
+
+
+def _load_dr_configs_with_filters(cur, dr_ids):
+    """加载 discovery_rules 配置并附加 filter_conditions。
+
+    返回 {dr_id: {id, name, key, delay, evaltype, status, _conditions}}。
+    兼容原有 dr_configs 用法，仅新增 `_conditions` 字段。
+    """
+    dr_ids = list(dict.fromkeys(int(i) for i in dr_ids)) if dr_ids else []
+    if not dr_ids:
+        return {}
+    dr_ph = ','.join(['%s'] * len(dr_ids))
+    cur.execute(
+        f"SELECT id, name, key, delay, evaltype, status "
+        f"FROM discovery_rules WHERE id IN ({dr_ph})",
+        dr_ids)
+    # 必须转成普通 dict——DictRow 是 list 子类，无法新增 '_conditions' 键（KeyError）
+    dr_configs = {r['id']: dict(r.items()) for r in cur.fetchall()}
+    for rid, conds in _load_dr_filters(cur, dr_configs.keys()).items():
+        dr_configs[rid]['_conditions'] = conds
+    return dr_configs
+
+
 @app.route('/host/sync', methods=['POST'])
 def sync_hosts():
     """从 ops.sub_assets 同步主机资产到 zabbix_mac.hosts
 
-    增量发现：通过 LEFT JOIN 对比源表与目标表，找出新增或变更的记录。
-    幂等性：使用 ON CONFLICT (name) DO UPDATE 保证重复执行不产生重复数据。
+    多模板拆分：sub_assets.template_id 可能为逗号分隔的多模板（如 '21001,91001,60001'），
+    按逗号拆分为多条 hosts 记录（每条绑定一个模板，唯一键 (name, template_id)）。
+    幂等性：以 (name, template_id) 为组合键 UPSERT，重复执行不产生重复数据。
+    清理：仅删除「源资产中存在、但模板集合已不再包含」的旧绑定；
+          不在源资产中的手动主机不受影响。
     事务控制：整批操作在一个事务中，失败即 rollback。
     """
     conn = get_db_connection()
-    synced_count = 0
+    stats = {
+        'processed_sub_assets': 0,
+        'created_hosts_count': 0,
+        'updated_hosts_count': 0,
+        'skipped_count': 0,
+        'deleted_count': 0,
+    }
 
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 增量发现：LEFT JOIN 对比，找出新增或变更的记录
+            # 1. 读取源资产（全量）与现有 hosts 绑定（全量）
             cur.execute("""
-                SELECT sa.system, sa.subsystem, sa.hostname, sa.ip, sa.template_id, sa.in_room
-                FROM ops.sub_assets sa
-                LEFT JOIN hosts h ON sa.ip = h.name
-                WHERE h.id IS NULL
-                   OR h.system IS DISTINCT FROM sa.system
-                   OR h.subsystem IS DISTINCT FROM sa.subsystem
-                   OR h.template_id IS DISTINCT FROM sa.template_id::varchar
-                   OR h.in_room IS DISTINCT FROM sa.in_room
+                SELECT system, subsystem, hostname, ip, template_id, in_room
+                FROM ops.sub_assets
+                ORDER BY ip
             """)
-            to_sync = cur.fetchall()
+            sub_assets = cur.fetchall()
 
-            # 2. 逐条 UPSERT 到 zabbix_mac.hosts
-            for row in to_sync:
-                cur.execute("""
-                    INSERT INTO hosts (name, system, subsystem, template_id, description, in_room)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (name)
-                    DO UPDATE SET
-                        system = EXCLUDED.system,
-                        subsystem = EXCLUDED.subsystem,
-                        template_id = EXCLUDED.template_id,
-                        description = EXCLUDED.description,
-                        in_room = EXCLUDED.in_room,
-                        updated_at = CURRENT_TIMESTAMP
-                """, (row['ip'], row['system'], row['subsystem'],
-                      row['template_id'], row['hostname'], row['in_room']))
-                synced_count += 1
+            cur.execute("""
+                SELECT id, name, template_id, system, subsystem, in_room, description
+                FROM hosts
+            """)
+            existing = cur.fetchall()
+
+            # 构建索引： (name, template_id) → row ； name → [row]
+            existing_by_key = {}
+            existing_by_name = {}
+            for row in existing:
+                existing_by_key[(row['name'], row['template_id'])] = row
+                existing_by_name.setdefault(row['name'], []).append(row)
+
+            # 2. 逐条解析 + UPSERT
+            source_names = set()    # 源资产中的主机名集合（用于清理）
+            wanted_pairs = set()    # 源资产要求的 (name, template_id) 集合
+            for sa in sub_assets:
+                name = sa['ip']
+                source_names.add(name)
+                stats['processed_sub_assets'] += 1
+
+                template_ids = _parse_template_ids(sa['template_id'])
+                if not template_ids:
+                    stats['skipped_count'] += 1
+                    app.logger.warning(f"主机 {name} 无有效 template_id，跳过同步")
+                    continue
+
+                for tpl in template_ids:
+                    wanted_pairs.add((name, tpl))
+                    key = (name, tpl)
+                    if key in existing_by_key:
+                        row = existing_by_key[key]
+                        if (row['system'], row['subsystem'], row['in_room'], row['description']) != \
+                           (sa['system'], sa['subsystem'], sa['in_room'], sa['hostname']):
+                            cur.execute("""
+                                UPDATE hosts
+                                SET system=%s, subsystem=%s, in_room=%s,
+                                    description=%s, updated_at=CURRENT_TIMESTAMP
+                                WHERE id=%s
+                            """, (sa['system'], sa['subsystem'], sa['in_room'],
+                                  sa['hostname'], row['id']))
+                            stats['updated_hosts_count'] += 1
+                    else:
+                        cur.execute("""
+                            INSERT INTO hosts (name, system, subsystem, template_id, description, in_room)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (name, template_id) DO NOTHING
+                        """, (name, sa['system'], sa['subsystem'], tpl,
+                              sa['hostname'], sa['in_room']))
+                        stats['created_hosts_count'] += 1
+
+            # 3. 清理：源 IP 存在、但模板集合已不再包含的旧绑定（手动主机不受影响）
+            for name in source_names:
+                for row in existing_by_name.get(name, []):
+                    if (row['name'], row['template_id']) not in wanted_pairs:
+                        cur.execute("DELETE FROM hosts WHERE id = %s", (row['id'],))
+                        stats['deleted_count'] += 1
 
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'同步成功：成功同步 {synced_count} 台主机',
-            'synced_count': synced_count
+            'code': 200,
+            'message': (f'资产同步完成：处理 {stats["processed_sub_assets"]} 台资产，'
+                        f'新增 {stats["created_hosts_count"]}，更新 {stats["updated_hosts_count"]}，'
+                        f'清理 {stats["deleted_count"]}，跳过 {stats["skipped_count"]}'),
+            'data': stats,
         })
     except Exception as e:
         conn.rollback()
-        return jsonify({'success': False, 'message': f'同步失败: {str(e)}'}), 500
+        return jsonify({
+            'success': False,
+            'code': 500,
+            'message': f'同步失败: {str(e)}',
+            'data': stats,
+        }), 500
     finally:
         conn.close()
 
@@ -1987,6 +2091,7 @@ def items_review():
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     baseline = request.args.get('baseline', '').strip()
     page = request.args.get('page', 1, type=int)
@@ -2007,6 +2112,9 @@ def items_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if room:
+            where_clause += " AND in_room ILIKE %s"
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
             where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
@@ -2036,6 +2144,8 @@ def items_review():
         distinct_systems = [r['system'] for r in cur.fetchall()]
         cur.execute("SELECT DISTINCT subsystem FROM items_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM items_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
 
         # COUNT
         cur.execute(f"SELECT COUNT(*) FROM items_review{where_clause}", params)
@@ -2052,6 +2162,7 @@ def items_review():
     return render_template('items_review.html', items=items,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            baseline=baseline,
                            page=page, per_page=per_page,
@@ -2695,9 +2806,14 @@ def sync_all_to_zabbix():
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 加载 discovery_rules 完整配置（供 LLD 自动补齐使用）
+            # 加载 discovery_rules 完整配置（供 LLD 自动补齐使用），附 filter_conditions
             cur.execute("SELECT id, name, key, delay, evaltype, status FROM discovery_rules")
-            dr_map = {row['key']: row for row in cur.fetchall()}
+            dr_rows = cur.fetchall()
+            # 转成普通 dict——DictRow 是 list 子类，无法新增 '_conditions' 键（KeyError）
+            dr_map = {row['key']: dict(row.items()) for row in dr_rows}
+            dr_by_id = {r['id']: dict(r.items()) for r in dr_rows}
+            for rid, conds in _load_dr_filters(cur, dr_by_id.keys()).items():
+                dr_by_id[rid]['_conditions'] = conds
 
             ip_filter_clause, ip_filter_params = _build_where(
                 {k: v for k, v in [('ipr.system', system_filter), ('ipr.subsystem', subsystem_filter)] if v}
@@ -3119,6 +3235,7 @@ def triggers_review():
     ip = request.args.get('ip', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -3138,6 +3255,9 @@ def triggers_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if room:
+            where_clause += " AND in_room ILIKE %s"
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
             where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
@@ -3146,6 +3266,8 @@ def triggers_review():
         distinct_systems = [r['system'] for r in cur.fetchall()]
         cur.execute("SELECT DISTINCT subsystem FROM triggers_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM triggers_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
 
         # COUNT
         cur.execute(f"SELECT COUNT(*) FROM triggers_review{where_clause}", params)
@@ -3162,6 +3284,7 @@ def triggers_review():
     return render_template('triggers_review.html', triggers=triggers,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
@@ -3553,6 +3676,7 @@ def webscenarios_review():
     host = request.args.get('host', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -3572,6 +3696,9 @@ def webscenarios_review():
         if subsystem:
             where_clause += " AND subsystem ILIKE %s"
             params.append(f'%{subsystem}%')
+        if room:
+            where_clause += " AND in_room ILIKE %s"
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
             where_clause += " AND (sync_status != 'synced' OR sync_status IS NULL)"
 
@@ -3579,6 +3706,8 @@ def webscenarios_review():
         distinct_systems = [r['system'] for r in cur.fetchall()]
         cur.execute("SELECT DISTINCT subsystem FROM webscenario_items_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM webscenario_items_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
 
         cur.execute(f"SELECT COUNT(*) FROM webscenario_items_review{where_clause}", params)
         total = cur.fetchone()['count']
@@ -3593,6 +3722,7 @@ def webscenarios_review():
     return render_template('webscenarios_review.html', webscenarios=webscenarios,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
@@ -4036,6 +4166,7 @@ def web_triggers_review():
     host = request.args.get('host', '').strip()
     system = request.args.get('system', '').strip()
     subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -4055,6 +4186,9 @@ def web_triggers_review():
         if subsystem:
             where_parts.append("subsystem ILIKE %s")
             params.append(f'%{subsystem}%')
+        if room:
+            where_parts.append("in_room ILIKE %s")
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
             where_parts.append("(sync_status != 'synced' OR sync_status IS NULL)")
         where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
@@ -4069,6 +4203,8 @@ def web_triggers_review():
         distinct_systems = [r['system'] for r in cur.fetchall()]
         cur.execute("SELECT DISTINCT subsystem FROM web_trigger_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
         distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM web_trigger_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
 
     conn.close()
 
@@ -4076,6 +4212,7 @@ def web_triggers_review():
     return render_template('web_triggers_review.html', triggers=triggers,
                            distinct_systems=distinct_systems,
                            distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
@@ -4389,7 +4526,11 @@ def import_web_triggers_review():
 
 @app.route('/item-prototypes-review')
 def item_prototypes_review():
-    """监控项原型复核表管理"""
+    """监控项原型复核表管理 — 支持 ip/system/subsystem/room 过滤 + 分页"""
+    ip = request.args.get('ip', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -4398,10 +4539,32 @@ def item_prototypes_review():
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        where_extra = ""
+        where_parts = []
         params = []
+        if ip:
+            where_parts.append("ipr.host_ip ILIKE %s")
+            params.append(f'%{ip}%')
+        if system:
+            where_parts.append("ipr.system ILIKE %s")
+            params.append(f'%{system}%')
+        if subsystem:
+            where_parts.append("ipr.subsystem ILIKE %s")
+            params.append(f'%{subsystem}%')
+        if room:
+            where_parts.append("ipr.in_room ILIKE %s")
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
-            where_extra = " WHERE (sync_status != 'synced' OR sync_status IS NULL)"
+            where_parts.append("(ipr.sync_status != 'synced' OR ipr.sync_status IS NULL)")
+        where_extra = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        # datalist 数据
+        cur.execute("SELECT DISTINCT system FROM item_prototypes_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM item_prototypes_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM item_prototypes_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
+
         cur.execute(f"SELECT COUNT(*) FROM item_prototypes_review ipr{where_extra}", params)
         total = cur.fetchone()['count']
         cur.execute(f"SELECT ipr.*, dr.name AS dr_name, dr.key AS dr_key FROM item_prototypes_review ipr LEFT JOIN discovery_rules dr ON ipr.discovery_rule_id = dr.id{where_extra} ORDER BY ipr.id LIMIT %s OFFSET %s",
@@ -4411,6 +4574,9 @@ def item_prototypes_review():
 
     total_pages = (total + per_page - 1) // per_page
     return render_template('item_prototypes_review.html', prototypes=prototypes,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
@@ -4502,7 +4668,11 @@ def unconfirm_item_prototype_review(review_id):
 
 @app.route('/trigger-prototypes-review')
 def trigger_prototypes_review():
-    """触发器原型复核表管理"""
+    """触发器原型复核表管理 — 支持 ip/system/subsystem/room 过滤 + 分页"""
+    ip = request.args.get('ip', '').strip()
+    system = request.args.get('system', '').strip()
+    subsystem = request.args.get('subsystem', '').strip()
+    room = request.args.get('room', '').strip()
     sync_filter = request.args.get('sync_filter', 'all').strip()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
@@ -4511,10 +4681,32 @@ def trigger_prototypes_review():
 
     conn = get_db_connection()
     with conn.cursor(cursor_factory=DictCursor) as cur:
-        where_extra = ""
+        where_parts = []
         params = []
+        if ip:
+            where_parts.append("tpr.host_ip ILIKE %s")
+            params.append(f'%{ip}%')
+        if system:
+            where_parts.append("tpr.system ILIKE %s")
+            params.append(f'%{system}%')
+        if subsystem:
+            where_parts.append("tpr.subsystem ILIKE %s")
+            params.append(f'%{subsystem}%')
+        if room:
+            where_parts.append("tpr.in_room ILIKE %s")
+            params.append(f'%{room}%')
         if sync_filter == 'pending':
-            where_extra = " WHERE (tpr.sync_status != 'synced' OR tpr.sync_status IS NULL)"
+            where_parts.append("(tpr.sync_status != 'synced' OR tpr.sync_status IS NULL)")
+        where_extra = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        # datalist 数据
+        cur.execute("SELECT DISTINCT system FROM trigger_prototypes_review WHERE system IS NOT NULL AND system != '' ORDER BY system")
+        distinct_systems = [r['system'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT subsystem FROM trigger_prototypes_review WHERE subsystem IS NOT NULL AND subsystem != '' ORDER BY subsystem")
+        distinct_subsystems = [r['subsystem'] for r in cur.fetchall()]
+        cur.execute("SELECT DISTINCT in_room FROM trigger_prototypes_review WHERE in_room IS NOT NULL AND in_room != '' ORDER BY in_room")
+        distinct_in_rooms = [r['in_room'] for r in cur.fetchall()]
+
         cur.execute(f"SELECT COUNT(*) FROM trigger_prototypes_review tpr{where_extra}", params)
         total = cur.fetchone()['count']
         cur.execute(f"""SELECT tpr.*, dr.name AS dr_name, dr.key AS dr_key
@@ -4527,6 +4719,9 @@ def trigger_prototypes_review():
 
     total_pages = (total + per_page - 1) // per_page
     return render_template('trigger_prototypes_review.html', prototypes=prototypes,
+                           distinct_systems=distinct_systems,
+                           distinct_subsystems=distinct_subsystems,
+                           distinct_in_rooms=distinct_in_rooms,
                            sync_filter=sync_filter,
                            page=page, per_page=per_page,
                            total=total, total_pages=total_pages)
@@ -5498,6 +5693,231 @@ def edit_filter_condition(cond_id):
 
 
 # ============================================================
+# 基础模板配置 — 模板 XML 导入
+# ============================================================
+
+def _values_equal(a, b):
+    """字段值比较：标量直接比较；JSON 结构（如 items.preprocessing）按解析后比较。
+    数据库侧可能是 psycopg2 已解析的 list/dict，也可能是 jsonb 文本字符串
+    （单引号形式，如 [{'type': '21'}]，json.loads 无法解析），导入侧可能是
+    json.dumps 字符串 —— 统一用 ast.literal_eval 归一化后比较。"""
+    def _norm(x):
+        if isinstance(x, str) and x[:1] in '[{':
+            try:
+                return ast.literal_eval(x)
+            except Exception:
+                return x
+        return x
+    return _norm(a) == _norm(b)
+
+
+def _upsert(cur, table, natural_keys, data, adopt_key=None, schema='zabbix_mac'):
+    """幂等 upsert，返回 (status, row_id)；status ∈ {'created','updated','skipped'}。
+
+    - 按 natural_keys 查重：存在且字段有差异 → UPDATE（updated），字段一致 → skipped。
+    - 未命中时若 adopt_key 提供且该键值已被其他行占用（跨模板同 item_key 冲突，
+      如 items.item_key 为全局唯一键）→ 跳过该行（skipped），避免静默改绑其他模板的
+      数据，也避免唯一键冲突中断整个事务。
+    - 否则 INSERT 并返回新 id。
+    """
+    where = ' AND '.join(f'{k} = %s' for k in natural_keys)
+
+    def _find():
+        cur.execute(f'SELECT * FROM {schema}.{table} WHERE {where}',
+                    [data[k] for k in natural_keys])
+        return cur.fetchone()
+
+    existing = _find()
+    if existing:
+        changes = {k: v for k, v in data.items()
+                   if k not in natural_keys and not _values_equal(existing[k], v)}
+        if changes:
+            sets = ', '.join(f'{k} = %s' for k in changes)
+            cur.execute(f'UPDATE {schema}.{table} SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE id = %s',
+                        list(changes.values()) + [existing['id']])
+            return 'updated', existing['id']
+        return 'skipped', existing['id']
+
+    if adopt_key:
+        cur.execute(f'SELECT id FROM {schema}.{table} WHERE {adopt_key} = %s', (data[adopt_key],))
+        clash = cur.fetchone()
+        if clash:
+            # item_key 已被其他模板占用 → 跳过（不静默改绑，避免覆盖既有配置）
+            return 'skipped', clash['id']
+
+    cols = ', '.join(data.keys())
+    ph = ', '.join(['%s'] * len(data))
+    cur.execute(f'INSERT INTO {schema}.{table} ({cols}) VALUES ({ph}) RETURNING id',
+                list(data.values()))
+    return 'created', cur.fetchone()['id']
+
+
+@app.route('/base-template/import')
+def base_template_import():
+    """基础模板 XML 导入页面"""
+    return render_template('base_template_import.html')
+
+
+def _template_id_exists(cur, template_id):
+    """检查 template_id 是否已导入过：templates 注册表或任一父表已有记录即视为已导入。"""
+    cur.execute('SELECT 1 FROM zabbix_mac.templates WHERE name = %s LIMIT 1', (template_id,))
+    if cur.fetchone():
+        return True
+    for table in ('items', 'triggers', 'discovery_rules'):
+        cur.execute(f'SELECT 1 FROM zabbix_mac.{table} WHERE template_name = %s LIMIT 1',
+                    (template_id,))
+        if cur.fetchone():
+            return True
+    return False
+
+
+@app.route('/api/base-template/parse-preview', methods=['POST'])
+def base_template_parse_preview():
+    """解析模板 XML，返回各模板及各组件计数（不写库）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    template_id = request.form.get('template_id', '').strip() or None
+    try:
+        templates = parse_template_xml(file.read(), template_id=template_id)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"模板 XML 解析失败: {e}")
+        return jsonify({'success': False, 'message': f'解析失败: {e}'}), 500
+
+    def _counts(tpl):
+        return {
+            'items': len(tpl['items']),
+            'triggers': len(tpl['triggers']),
+            'discovery_rules': len(tpl['discovery_rules']),
+            'filter_conditions': sum(len(dr['conditions']) for dr in tpl['discovery_rules']),
+            'item_prototypes': sum(len(dr['item_prototypes']) for dr in tpl['discovery_rules']),
+            'trigger_prototypes': sum(len(dr['trigger_prototypes']) for dr in tpl['discovery_rules']),
+        }
+
+    summary = [{
+        'template_id': t['template_id'],
+        'name': t['name'],
+        'description': t['description'] or '',
+        'counts': _counts(t),
+    } for t in templates]
+    total = {
+        'templates': len(summary),
+        'items': sum(s['counts']['items'] for s in summary),
+        'triggers': sum(s['counts']['triggers'] for s in summary),
+        'discovery_rules': sum(s['counts']['discovery_rules'] for s in summary),
+        'filter_conditions': sum(s['counts']['filter_conditions'] for s in summary),
+        'item_prototypes': sum(s['counts']['item_prototypes'] for s in summary),
+        'trigger_prototypes': sum(s['counts']['trigger_prototypes'] for s in summary),
+    }
+    # 提示：该模板ID是否已导入过（拒绝提示用，不阻断预览）
+    already_imported = False
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            already_imported = any(_template_id_exists(cur, t['name']) for t in templates)
+    finally:
+        conn.close()
+
+    return jsonify({'success': True, 'template_id': template_id or '',
+                    'already_imported': already_imported,
+                    'templates': summary, 'total_counts': total})
+
+
+@app.route('/api/base-template/execute-import', methods=['POST'])
+def base_template_execute_import():
+    """解析模板 XML 并幂等写入 6 张配置表（单事务）"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '文件名为空'}), 400
+    template_id = request.form.get('template_id', '').strip() or None
+    try:
+        templates = parse_template_xml(file.read(), template_id=template_id)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"模板 XML 解析失败: {e}")
+        return jsonify({'success': False, 'message': f'解析失败: {e}'}), 500
+
+    results = {k: {'created': 0, 'updated': 0, 'skipped': 0} for k in
+               ['templates', 'items', 'triggers', 'discovery_rules',
+                'filter_conditions', 'item_prototypes', 'trigger_prototypes']}
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # 新规：模板ID已导入过 → 弹窗提示并拒绝本次导入（不做部分跳过/幂等覆盖）
+            for tpl in templates:
+                if _template_id_exists(cur, tpl['name']):
+                    return jsonify({'success': False,
+                                    'message': f'模板 {tpl["name"]} 已导入过，拒绝本次导入：'
+                                               f'请使用新的模板ID，或先删除该模板的既有记录'}), 409
+
+            for tpl in templates:
+                st, _ = _upsert(cur, 'templates', ['name'],
+                                {'name': tpl['name'], 'description': tpl['description'] or ''})
+                results['templates'][st] += 1
+
+                for item in tpl['items']:
+                    st, _ = _upsert(cur, 'items', ['template_name', 'item_key'], item, adopt_key='item_key')
+                    results['items'][st] += 1
+
+                for trig in tpl['triggers']:
+                    st, _ = _upsert(cur, 'triggers', ['template_name', 'expression', 'name'], trig)
+                    results['triggers'][st] += 1
+
+                for dr in tpl['discovery_rules']:
+                    st, dr_id = _upsert(cur, 'discovery_rules', ['template_name', 'key'], dr['rule'])
+                    results['discovery_rules'][st] += 1
+                    # 过滤条件：整组替换，保持与 XML 一致且幂等
+                    cur.execute('DELETE FROM zabbix_mac.filter_conditions WHERE discovery_rule_id = %s',
+                                (dr_id,))
+                    for cond in dr['conditions']:
+                        cur.execute(
+                            'INSERT INTO zabbix_mac.filter_conditions '
+                            '(discovery_rule_id, macro, value, operator) VALUES (%s, %s, %s, %s)',
+                            (dr_id, cond['macro'], cond['value'], cond['operator']))
+                        results['filter_conditions']['created'] += 1
+                    # 监控项原型
+                    for ip in dr['item_prototypes']:
+                        data = dict(ip)
+                        data['discovery_rule_id'] = dr_id
+                        st, _ = _upsert(cur, 'item_prototypes', ['discovery_rule_id', 'key'], data)
+                        results['item_prototypes'][st] += 1
+                    # 触发器原型
+                    for tp in dr['trigger_prototypes']:
+                        data = dict(tp)
+                        data['discovery_rule_id'] = dr_id
+                        st, _ = _upsert(cur, 'trigger_prototypes',
+                                        ['discovery_rule_id', 'expression', 'description'], data)
+                        results['trigger_prototypes'][st] += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        app.logger.error(f"模板 XML 导入失败: {e}")
+        return jsonify({'success': False, 'message': f'导入失败: {e}'}), 500
+    finally:
+        conn.close()
+
+    def _sum(k):
+        r = results[k]
+        return r['created'] + r['updated'] + r['skipped']
+
+    msg = (f'导入完成：模板 {_sum("templates")} 个（新增 {results["templates"]["created"]}），'
+           f'监控项 {_sum("items")} 条（新增 {results["items"]["created"]} 更新 {results["items"]["updated"]}），'
+           f'触发器 {_sum("triggers")} 条（新增 {results["triggers"]["created"]} 更新 {results["triggers"]["updated"]}），'
+           f'自动发现规则 {_sum("discovery_rules")} 条（新增 {results["discovery_rules"]["created"]} 更新 {results["discovery_rules"]["updated"]}），'
+           f'过滤条件 {_sum("filter_conditions")} 条，'
+           f'监控项原型 {_sum("item_prototypes")} 条（新增 {results["item_prototypes"]["created"]}），'
+           f'触发器原型 {_sum("trigger_prototypes")} 条（新增 {results["trigger_prototypes"]["created"]}）')
+    return jsonify({'success': True, 'message': msg, 'results': results})
+
+
+# ============================================================
 # 全局搜索
 # ============================================================
 
@@ -6105,11 +6525,7 @@ def api_sync_preview():
                            if r.get('discovery_rule_id')})
             if dr_ids:
                 with conn.cursor(cursor_factory=DictCursor) as cur2:
-                    cur2.execute(
-                        f"SELECT id, name, key, delay, evaltype, status "
-                        f"FROM discovery_rules WHERE id IN ({','.join(['%s']*len(dr_ids))})",
-                        dr_ids)
-                    dr_configs = {r['id']: r for r in cur2.fetchall()}
+                    dr_configs = _load_dr_configs_with_filters(cur2, dr_ids)
 
         host_col = _get_host_col(table)
         hosts = {}
@@ -6329,7 +6745,7 @@ def api_sync_apply():
                             f"SELECT id, name, key, delay, evaltype, status "
                             f"FROM discovery_rules WHERE id IN ({dr_placeholders})",
                             dr_ids)
-                        dr_configs = {r['id']: r for r in cur2.fetchall()}
+                        dr_configs = _load_dr_configs_with_filters(cur2, dr_ids)
                         cur2.close()
                     else:
                         dr_configs = {}
@@ -6417,7 +6833,7 @@ def api_sync_apply():
                             f"SELECT id, name, key, delay, evaltype, status "
                             f"FROM discovery_rules WHERE id IN ({dr_placeholders})",
                             dr_ids)
-                        dr_configs = {r['id']: r for r in cur2.fetchall()}
+                        dr_configs = _load_dr_configs_with_filters(cur2, dr_ids)
                         cur2.close()
                     else:
                         dr_configs = {}
@@ -6726,11 +7142,9 @@ def api_sync_execute():
                                    if r.get('discovery_rule_id')})
                     if dr_ids:
                         with conn.cursor(cursor_factory=DictCursor) as cur2:
-                            cur2.execute(
-                                f"SELECT id, name, key, delay, evaltype, status "
-                                f"FROM discovery_rules WHERE id IN "
-                                f"({','.join(['%s']*len(dr_ids))})", dr_ids)
-                            dr_cfgs = {r['id']: r for r in cur2.fetchall()}
+                            # 必须带 filter_conditions（_conditions）——否则 ensure_discovery_rule
+                            # 创建 LLD 规则时 filter 为空，无法绑定过滤条件
+                            dr_cfgs = _load_dr_configs_with_filters(cur2, dr_ids)
                     else:
                         dr_cfgs = {}
 
@@ -6799,11 +7213,9 @@ def api_sync_execute():
                                    if r.get('discovery_rule_id')})
                     if dr_ids:
                         with conn.cursor(cursor_factory=DictCursor) as cur2:
-                            cur2.execute(
-                                f"SELECT id, name, key, delay, evaltype, status "
-                                f"FROM discovery_rules WHERE id IN "
-                                f"({','.join(['%s']*len(dr_ids))})", dr_ids)
-                            dr_cfgs = {r['id']: r for r in cur2.fetchall()}
+                            # 必须带 filter_conditions（_conditions）——否则 ensure_discovery_rule
+                            # 创建 LLD 规则时 filter 为空，无法绑定过滤条件
+                            dr_cfgs = _load_dr_configs_with_filters(cur2, dr_ids)
                     else:
                         dr_cfgs = {}
                     for dr_id, dr_rows_iter in itertools.groupby(

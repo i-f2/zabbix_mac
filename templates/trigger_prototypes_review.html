@@ -47,6 +47,7 @@
     <input type="hidden" name="ip" value="{{ request.args.get('ip', '') }}">
     <input type="hidden" name="system" value="{{ request.args.get('system', '') }}">
     <input type="hidden" name="subsystem" value="{{ request.args.get('subsystem', '') }}">
+    <input type="hidden" name="room" value="{{ request.args.get('room', '') }}">
     <div class="btn-group btn-group-sm sync-tab-group">
         <button type="submit" name="sync_filter" value="pending"
                 class="btn {{ 'btn-primary' if sync_filter == 'pending' else 'btn-outline-primary' }}">
@@ -62,6 +63,35 @@
         {% if sync_filter == 'pending' %}仅显示待同步记录{% endif %}
     </span>
 </form></div>
+
+<!-- 筛选器行 -->
+<form class="toolbar-row" method="GET" action="{{ url_for('trigger_prototypes_review') }}">
+    <input type="hidden" name="sync_filter" value="{{ sync_filter }}">
+    <input type="text" name="ip" class="form-control" placeholder="主机IP" value="{{ request.args.get('ip', '') }}">
+
+    <input type="text" name="system" class="form-control" placeholder="系统名称"
+           list="systemList" autocomplete="off" value="{{ request.args.get('system', '') }}">
+    <datalist id="systemList">
+        {% for s in distinct_systems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <input type="text" name="subsystem" class="form-control" placeholder="模块名称"
+           list="subsystemList" autocomplete="off" value="{{ request.args.get('subsystem', '') }}">
+    <datalist id="subsystemList">
+        {% for s in distinct_subsystems %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+
+    <input type="text" name="room" class="form-control" placeholder="机房"
+           list="roomList" autocomplete="off" value="{{ request.args.get('room', '') }}">
+    <datalist id="roomList">
+        {% for r in distinct_in_rooms %}<option value="{{ r }}">{% endfor %}
+    </datalist>
+
+    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-funnel"></i> 筛选</button>
+    {% if request.args %}
+    <a href="{{ url_for('trigger_prototypes_review') }}" class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> 清除</a>
+    {% endif %}
+</form>
 {% endblock %}
 
 {% block content %}

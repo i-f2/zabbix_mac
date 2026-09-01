@@ -1,0 +1,132 @@
+- generic [ref=f8e1]:
+  - navigation [ref=f8e2]:
+    - generic [ref=f8e3]:
+      - button "" [ref=f8e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f8e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f8e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f8e9]
+    - generic [ref=f8e11]:
+      - button "" [ref=f8e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f8e14]:
+    - complementary [ref=f8e15]:
+      - navigation [ref=f8e16]:
+        - link " 系统信息" [ref=f8e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f8e18]: 
+          - generic [ref=f8e19]: 系统信息
+        - link " 资产主机管理" [ref=f8e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f8e21]: 
+          - generic [ref=f8e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f8e23] [cursor=pointer]:
+          - generic [ref=f8e24]: 
+          - generic [ref=f8e25]: 监控复核工作台
+          - generic [ref=f8e26]: 
+        - generic [ref=f8e27]:
+          - link "监控项复核 240" [ref=f8e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f8e29]: 监控项复核
+            - generic [ref=f8e30]: "240"
+          - link "触发器复核 100" [ref=f8e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f8e32]: 触发器复核
+            - generic [ref=f8e33]: "100"
+          - link "监控项原型复核" [ref=f8e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f8e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f8e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f8e39]: Web场景复核
+            - generic [ref=f8e40]: "7"
+          - link "Web触发器复核" [ref=f8e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [expanded] [ref=f8e43] [cursor=pointer]:
+          - generic [ref=f8e44]: 
+          - generic [ref=f8e45]: 基础模板配置
+          - generic [ref=f8e46]: 
+        - generic [ref=f8e66]:
+          - link "监控项管理" [ref=f8e67] [cursor=pointer]:
+            - /url: /items
+          - link "触发器管理" [ref=f8e69] [cursor=pointer]:
+            - /url: /triggers
+          - link "监控项原型管理" [ref=f8e71] [cursor=pointer]:
+            - /url: /item-prototypes
+          - link "触发器原型管理" [ref=f8e73] [cursor=pointer]:
+            - /url: /trigger-prototypes
+          - link "Web场景管理" [ref=f8e75] [cursor=pointer]:
+            - /url: /webscenarios
+          - link "自动发现规则列表" [ref=f8e77] [cursor=pointer]:
+            - /url: /discovery-rules
+          - link "自动发现过滤规则管理" [ref=f8e79] [cursor=pointer]:
+            - /url: /filter-conditions
+          - link "模板 XML 导入" [ref=f8e81] [cursor=pointer]:
+            - /url: /base-template/import
+    - main [ref=f8e47]:
+      - generic [ref=f8e48]:
+        - navigation "breadcrumb":
+          - list
+        - heading "模板 XML 导入" [level=4] [ref=f8e50]
+      - generic [ref=f8e52]:
+        - generic [ref=f8e53]:
+          - generic "模板编码/标识，填写后将强制绑定到本次导入的所有记录" [ref=f8e54]: 模板ID
+          - textbox "填写后将强制绑定到本次导入的所有记录（items/triggers/discovery_rules 的 template_name）" [ref=f8e55]:
+            - /placeholder: 如 21001、91001
+            - text: "91001"
+        - button " 选择 XML 文件" [active] [ref=f8e56] [cursor=pointer]:
+          - generic [ref=f8e57]: 
+          - text: 选择 XML 文件
+        - button " 执行导入" [ref=f8e83] [cursor=pointer]:
+          - generic [ref=f8e84]: 
+          - text: 执行导入
+        - button "" [ref=f8e58] [cursor=pointer]
+      - generic [ref=f8e61]:
+        - heading "导入说明" [level=6] [ref=f8e62]
+        - paragraph [ref=f8e63]:
+          - text: 上传 Zabbix 5.0 模板导出的
+          - code [ref=f8e64]: <zabbix_export>
+          - text: XML 文件，解析并写入基础模板配置表 （模板 / 监控项 / 触发器 / 自动发现规则 / 过滤条件 / 监控项原型 / 触发器原型）。
+          - strong [ref=f8e65]: 幂等导入
+          - text: ：已存在的记录按「模板 + 键」匹配更新，不会重复插入；重复执行结果一致。
+      - generic [ref=f8e86]:
+        - heading " 解析预览" [level=6] [ref=f8e87]:
+          - generic [ref=f8e88]: 
+          - text: 解析预览
+        - generic [ref=f8e89]:
+          - generic [ref=f8e90]: 模板 1
+          - generic [ref=f8e91]: 监控项 34
+          - generic [ref=f8e92]: 触发器 12
+          - generic [ref=f8e93]: 发现规则 3
+          - generic [ref=f8e94]: 过滤条件 14
+          - generic [ref=f8e95]: 监控项原型 22
+          - generic [ref=f8e96]: 触发器原型 10
+        - table [ref=f8e98]:
+          - rowgroup [ref=f8e99]:
+            - row [ref=f8e100]:
+              - columnheader "模板" [ref=f8e101]
+              - columnheader "描述" [ref=f8e102]
+              - columnheader "监控项" [ref=f8e103]
+              - columnheader "触发器" [ref=f8e104]
+              - columnheader "发现规则" [ref=f8e105]
+              - columnheader "过滤条件" [ref=f8e106]
+              - columnheader "监控项原型" [ref=f8e107]
+              - columnheader "触发器原型" [ref=f8e108]
+          - rowgroup [ref=f8e109]:
+            - row [ref=f8e110]:
+              - cell [ref=f8e111]:
+                - strong [ref=f8e112]: "91001"
+              - 'cell "Official Linux template using node exporter. Known Issues: Description: node_exporter v0.16.0 renamed many metrics. CPU utilization for ''guest'' and ''guest_nice'' metrics are not supported in this template with node_exporter < 0.16. Disk IO metrics are not supported. Other metrics provided as ''best effort''. See https://github.com/prometheus/node_exporter/releases/tag/v0.16.0 for details. Version: below 0.16.0 Description: metric node_network_info with label ''device'' cannot be found, so network discovery is not possible. Version: below 0.18 You can discuss this template or leave feedback on our forum https://www.zabbix.com/forum/zabbix-suggestions-and-feedback/387225-discussion-thread-for-official-zabbix-template-for-linux Template tooling version used: 0.39" [ref=f8e113]'
+              - cell "34" [ref=f8e114]
+              - cell "12" [ref=f8e115]
+              - cell "3" [ref=f8e116]
+              - cell "14" [ref=f8e117]
+              - cell "22" [ref=f8e118]
+              - cell "10" [ref=f8e119]
+      - text: 
+  - alert [ref=f8e120]:
+    - generic [ref=f8e121]:
+      - generic [ref=f8e122]: 解析成功：共 1 个模板
+      - button [ref=f8e123] [cursor=pointer]

@@ -157,6 +157,8 @@ window.ReviewSyncPoller = {
                         clearInterval(window.ReviewSyncPoller._timer);
                         window.ReviewSyncPoller._timer = null;
                     }
+                    // 同步结束：释放已勾选项，避免 reload 后勾选被 sessionStorage 恢复
+                    if (window.BatchSync) { BatchSync.clearSelection(); }
                     setTimeout(function() { location.reload(); }, 1500);
                 }
             })

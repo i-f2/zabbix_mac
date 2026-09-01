@@ -1,0 +1,660 @@
+- generic [active] [ref=f1e1]:
+  - navigation [ref=f1e2]:
+    - generic [ref=f1e3]:
+      - button "" [ref=f1e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f1e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f1e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f1e9]
+    - generic [ref=f1e11]:
+      - button "" [ref=f1e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f1e14]:
+    - complementary:
+      - navigation [ref=f1e15]:
+        - link " 系统信息" [ref=f1e16] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f1e17]: 
+          - generic [ref=f1e18]: 系统信息
+        - link " 资产主机管理" [ref=f1e19] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f1e20]: 
+          - generic [ref=f1e21]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f1e22] [cursor=pointer]:
+          - generic [ref=f1e23]: 
+          - generic [ref=f1e24]: 监控复核工作台
+          - generic [ref=f1e25]: 
+        - generic [ref=f1e26]:
+          - link "监控项复核 198" [ref=f1e27] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f1e28]: 监控项复核
+            - generic [ref=f1e29]: "198"
+          - link "触发器复核 83" [ref=f1e30] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f1e31]: 触发器复核
+            - generic [ref=f1e32]: "83"
+          - link "监控项原型复核" [ref=f1e33] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f1e35] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f1e37] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f1e38]: Web场景复核
+            - generic [ref=f1e39]: "7"
+          - link "Web触发器复核" [ref=f1e40] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f1e42] [cursor=pointer]:
+          - generic [ref=f1e43]: 
+          - generic [ref=f1e44]: 基础模板配置
+          - generic [ref=f1e45]: 
+    - main [ref=f1e46]:
+      - generic [ref=f1e47]:
+        - navigation "breadcrumb" [ref=f1e48]:
+          - list [ref=f1e49]:
+            - listitem [ref=f1e50]: 复核表管理
+            - listitem [ref=f1e51]:
+              - text: /
+              - link "触发器原型复核" [ref=f1e52] [cursor=pointer]:
+                - /url: /trigger-prototypes-review
+        - heading "触发器原型复核表管理" [level=4] [ref=f1e54]
+      - generic [ref=f1e55]:
+        - generic [ref=f1e56]:
+          - button " 初始化" [ref=f1e57] [cursor=pointer]:
+            - generic [ref=f1e58]: 
+            - text: 初始化
+          - generic [ref=f1e59]:
+            - button " 监控同步" [disabled]:
+              - generic: 
+              - text: 监控同步
+            - button " 核验" [disabled]:
+              - generic: 
+              - text: 核验
+            - combobox [ref=f1e60]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - link " 导出" [ref=f1e61] [cursor=pointer]:
+            - /url: /trigger-prototypes-review/export
+            - generic [ref=f1e62]: 
+            - text: 导出
+          - button " 导入" [ref=f1e63] [cursor=pointer]:
+            - generic [ref=f1e64]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f1e65] [cursor=pointer]:
+            - generic [ref=f1e66]: 
+            - text: 显示技术细节
+          - button "" [ref=f1e68] [cursor=pointer]
+        - generic [ref=f1e71]:
+          - generic [ref=f1e72]:
+            - button " 待处理" [ref=f1e73] [cursor=pointer]:
+              - generic [ref=f1e74]: 
+              - text: 待处理
+            - button " 全部" [ref=f1e75] [cursor=pointer]:
+              - generic [ref=f1e76]: 
+              - text: 全部
+          - generic [ref=f1e77]: "|"
+      - generic [ref=f1e78]:
+        - generic [ref=f1e81]:
+          - generic [ref=f1e82]:
+            - generic [ref=f1e83]: 
+            - text: 复核进度
+          - generic [ref=f1e84]:
+            - generic [ref=f1e85]: "35"
+            - generic [ref=f1e86]: 总数
+            - generic [ref=f1e87]: "|"
+            - generic [ref=f1e88]: "1"
+            - generic [ref=f1e89]: 已确认
+            - generic [ref=f1e90]: "|"
+            - generic [ref=f1e91]: "34"
+            - generic [ref=f1e92]: 待确认
+          - generic [ref=f1e94]: "完成率: 2.9%"
+        - generic [ref=f1e97]:
+          - generic [ref=f1e98]:
+            - generic [ref=f1e99]: 
+            - text: 同步状态
+          - generic [ref=f1e100]:
+            - generic [ref=f1e101]: "1"
+            - generic [ref=f1e102]: 已同步
+            - generic [ref=f1e103]: "|"
+            - generic [ref=f1e104]: "34"
+            - generic [ref=f1e105]: 待同步
+          - generic [ref=f1e106]:
+            - generic [ref=f1e107]: 
+            - text: 还有 34 条待同步
+        - generic [ref=f1e110]:
+          - generic [ref=f1e111]:
+            - generic [ref=f1e112]: 
+            - text: 告警关联
+          - generic [ref=f1e113]:
+            - generic [ref=f1e114]: "0"
+            - generic [ref=f1e115]: 关联触发器
+          - generic [ref=f1e116]: 加载中...
+      - generic [ref=f1e117]:
+        - table [ref=f1e119]:
+          - rowgroup [ref=f1e120]:
+            - row [ref=f1e121]:
+              - columnheader [ref=f1e122]:
+                - checkbox "全选/全不选" [ref=f1e123] [cursor=pointer]
+              - columnheader [ref=f1e124]
+              - columnheader "主机 IP" [ref=f1e125]
+              - columnheader "告警描述 / 触发条件" [ref=f1e126]
+              - columnheader "严重等级" [ref=f1e127]
+              - columnheader "LLD 规则" [ref=f1e128]
+              - columnheader "机房" [ref=f1e129]
+              - columnheader "修改状态" [ref=f1e130]
+              - columnheader "同步状态" [ref=f1e131]
+              - columnheader "确认状态" [ref=f1e132]
+              - columnheader "状态核验" [ref=f1e133]
+              - columnheader "操作" [ref=f1e134]
+          - rowgroup [ref=f1e135]:
+            - row [ref=f1e136]:
+              - cell [ref=f1e137]:
+                - checkbox [ref=f1e138] [cursor=pointer]
+              - cell "" [ref=f1e139] [cursor=pointer]
+              - cell "Zabbix server" [ref=f1e141]
+              - cell [ref=f1e142]:
+                - generic [ref=f1e143]:
+                  - strong [ref=f1e144]: "{#FSNAME}: Running out of free inodes (free < 20%)"
+                  - code [ref=f1e145]: "{Zabbix server:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<20"
+              - cell "警告" [ref=f1e146]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e148]'
+              - cell "深交所证联网" [ref=f1e150]
+              - cell "未修改" [ref=f1e151]
+              - cell " 已同步" [ref=f1e152]:
+                - generic [ref=f1e153]:
+                  - generic [ref=f1e154]: 
+                  - text: 已同步
+              - cell "已确认" [ref=f1e155]
+              - cell "未核验" [ref=f1e156]
+              - cell [ref=f1e158]:
+                - link "修改" [ref=f1e159] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/1
+            - row [ref=f1e160]:
+              - cell [ref=f1e161]:
+                - checkbox [ref=f1e162] [cursor=pointer]
+              - cell "" [ref=f1e163] [cursor=pointer]
+              - cell "Zabbix server" [ref=f1e165]
+              - cell [ref=f1e166]:
+                - generic [ref=f1e167]:
+                  - strong [ref=f1e168]: "{#FSNAME}: Disk space is critically low (used > 90%)"
+                  - code [ref=f1e169]: "{Zabbix server:vfs.fs.size[{#FSNAME},pused].last()}>90 and (({Zabbix server:vfs.fs.size[{#FSNAME},total].last()}-{Zabbix server:vfs.fs.size[{#FSNAME},used].last()})<5G or {Zabbix server:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "一般" [ref=f1e170]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e172]'
+              - cell "深交所证联网" [ref=f1e174]
+              - cell "未修改" [ref=f1e175]
+              - cell " 待同步" [ref=f1e176]:
+                - generic [ref=f1e177]:
+                  - generic [ref=f1e178]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e179]
+              - cell "未核验" [ref=f1e180]
+              - cell [ref=f1e182]:
+                - link "修改" [ref=f1e183] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/2
+                - button " 确认变更" [ref=f1e184] [cursor=pointer]:
+                  - generic [ref=f1e185]: 
+                  - text: 确认变更
+            - row [ref=f1e186]:
+              - cell [ref=f1e187]:
+                - checkbox [ref=f1e188] [cursor=pointer]
+              - cell "" [ref=f1e189] [cursor=pointer]
+              - cell "Zabbix server" [ref=f1e191]
+              - cell [ref=f1e192]:
+                - generic [ref=f1e193]:
+                  - strong [ref=f1e194]: "{#FSNAME}: Disk space is low (used > 80%)"
+                  - code [ref=f1e195]: "{Zabbix server:vfs.fs.size[{#FSNAME},pused].last()}>80 and (({Zabbix server:vfs.fs.size[{#FSNAME},total].last()}-{Zabbix server:vfs.fs.size[{#FSNAME},used].last()})<10G or {Zabbix server:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "警告" [ref=f1e196]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e198]'
+              - cell "深交所证联网" [ref=f1e200]
+              - cell "未修改" [ref=f1e201]
+              - cell " 待同步" [ref=f1e202]:
+                - generic [ref=f1e203]:
+                  - generic [ref=f1e204]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e205]
+              - cell "未核验" [ref=f1e206]
+              - cell [ref=f1e208]:
+                - link "修改" [ref=f1e209] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/3
+                - button " 确认变更" [ref=f1e210] [cursor=pointer]:
+                  - generic [ref=f1e211]: 
+                  - text: 确认变更
+            - row [ref=f1e212]:
+              - cell [ref=f1e213]:
+                - checkbox [ref=f1e214] [cursor=pointer]
+              - cell "" [ref=f1e215] [cursor=pointer]
+              - cell "Zabbix server" [ref=f1e217]
+              - cell [ref=f1e218]:
+                - generic [ref=f1e219]:
+                  - strong [ref=f1e220]: "{#FSNAME}: Running out of free inodes (free < 10%)"
+                  - code [ref=f1e221]: "{Zabbix server:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<10"
+              - cell "一般" [ref=f1e222]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e224]'
+              - cell "深交所证联网" [ref=f1e226]
+              - cell "未修改" [ref=f1e227]
+              - cell " 待同步" [ref=f1e228]:
+                - generic [ref=f1e229]:
+                  - generic [ref=f1e230]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e231]
+              - cell "未核验" [ref=f1e232]
+              - cell [ref=f1e234]:
+                - link "修改" [ref=f1e235] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/4
+                - button " 确认变更" [ref=f1e236] [cursor=pointer]:
+                  - generic [ref=f1e237]: 
+                  - text: 确认变更
+            - row [ref=f1e238]:
+              - cell [ref=f1e239]:
+                - checkbox [ref=f1e240] [cursor=pointer]
+              - cell "" [ref=f1e241] [cursor=pointer]
+              - cell "Zabbix server" [ref=f1e243]
+              - cell [ref=f1e244]:
+                - generic [ref=f1e245]:
+                  - strong [ref=f1e246]: "{#DEVNAME}: Disk read/write request responses are too high (read > 20 ms for 15m or write > 20 ms for 15m)"
+                  - code [ref=f1e247]: "{Zabbix server:vfs.dev.read.await[{#DEVNAME}].min(15m)} > 20 or {Zabbix server:vfs.dev.write.await[{#DEVNAME}].min(15m)} > 20"
+              - cell "一般" [ref=f1e248]
+              - 'cell "LLD: Block devices discovery" [ref=f1e250]'
+              - cell "深交所证联网" [ref=f1e252]
+              - cell "未修改" [ref=f1e253]
+              - cell " 待同步" [ref=f1e254]:
+                - generic [ref=f1e255]:
+                  - generic [ref=f1e256]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e257]
+              - cell "未核验" [ref=f1e258]
+              - cell [ref=f1e260]:
+                - link "修改" [ref=f1e261] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/5
+                - button " 确认变更" [ref=f1e262] [cursor=pointer]:
+                  - generic [ref=f1e263]: 
+                  - text: 确认变更
+            - row [ref=f1e264]:
+              - cell [ref=f1e265]:
+                - checkbox [ref=f1e266] [cursor=pointer]
+              - cell "" [ref=f1e267] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f1e269]
+              - cell [ref=f1e270]:
+                - generic [ref=f1e271]:
+                  - strong [ref=f1e272]: "{#FSNAME}: Running out of free inodes (free < 20%)"
+                  - code [ref=f1e273]: "{10.24.3.12:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<20"
+              - cell "警告" [ref=f1e274]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e276]'
+              - cell "深交所证联网" [ref=f1e278]
+              - cell "未修改" [ref=f1e279]
+              - cell " 待同步" [ref=f1e280]:
+                - generic [ref=f1e281]:
+                  - generic [ref=f1e282]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e283]
+              - cell "未核验" [ref=f1e284]
+              - cell [ref=f1e286]:
+                - link "修改" [ref=f1e287] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/6
+                - button " 确认变更" [ref=f1e288] [cursor=pointer]:
+                  - generic [ref=f1e289]: 
+                  - text: 确认变更
+            - row [ref=f1e290]:
+              - cell [ref=f1e291]:
+                - checkbox [ref=f1e292] [cursor=pointer]
+              - cell "" [ref=f1e293] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f1e295]
+              - cell [ref=f1e296]:
+                - generic [ref=f1e297]:
+                  - strong [ref=f1e298]: "{#FSNAME}: Disk space is critically low (used > 90%)"
+                  - code [ref=f1e299]: "{10.24.3.12:vfs.fs.size[{#FSNAME},pused].last()}>90 and (({10.24.3.12:vfs.fs.size[{#FSNAME},total].last()}-{10.24.3.12:vfs.fs.size[{#FSNAME},used].last()})<5G or {10.24.3.12:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "一般" [ref=f1e300]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e302]'
+              - cell "深交所证联网" [ref=f1e304]
+              - cell "未修改" [ref=f1e305]
+              - cell " 待同步" [ref=f1e306]:
+                - generic [ref=f1e307]:
+                  - generic [ref=f1e308]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e309]
+              - cell "未核验" [ref=f1e310]
+              - cell [ref=f1e312]:
+                - link "修改" [ref=f1e313] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/7
+                - button " 确认变更" [ref=f1e314] [cursor=pointer]:
+                  - generic [ref=f1e315]: 
+                  - text: 确认变更
+            - row [ref=f1e316]:
+              - cell [ref=f1e317]:
+                - checkbox [ref=f1e318] [cursor=pointer]
+              - cell "" [ref=f1e319] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f1e321]
+              - cell [ref=f1e322]:
+                - generic [ref=f1e323]:
+                  - strong [ref=f1e324]: "{#FSNAME}: Disk space is low (used > 80%)"
+                  - code [ref=f1e325]: "{10.24.3.12:vfs.fs.size[{#FSNAME},pused].last()}>80 and (({10.24.3.12:vfs.fs.size[{#FSNAME},total].last()}-{10.24.3.12:vfs.fs.size[{#FSNAME},used].last()})<10G or {10.24.3.12:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "警告" [ref=f1e326]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e328]'
+              - cell "深交所证联网" [ref=f1e330]
+              - cell "未修改" [ref=f1e331]
+              - cell " 待同步" [ref=f1e332]:
+                - generic [ref=f1e333]:
+                  - generic [ref=f1e334]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e335]
+              - cell "未核验" [ref=f1e336]
+              - cell [ref=f1e338]:
+                - link "修改" [ref=f1e339] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/8
+                - button " 确认变更" [ref=f1e340] [cursor=pointer]:
+                  - generic [ref=f1e341]: 
+                  - text: 确认变更
+            - row [ref=f1e342]:
+              - cell [ref=f1e343]:
+                - checkbox [ref=f1e344] [cursor=pointer]
+              - cell "" [ref=f1e345] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f1e347]
+              - cell [ref=f1e348]:
+                - generic [ref=f1e349]:
+                  - strong [ref=f1e350]: "{#FSNAME}: Running out of free inodes (free < 10%)"
+                  - code [ref=f1e351]: "{10.24.3.12:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<10"
+              - cell "一般" [ref=f1e352]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e354]'
+              - cell "深交所证联网" [ref=f1e356]
+              - cell "未修改" [ref=f1e357]
+              - cell " 待同步" [ref=f1e358]:
+                - generic [ref=f1e359]:
+                  - generic [ref=f1e360]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e361]
+              - cell "未核验" [ref=f1e362]
+              - cell [ref=f1e364]:
+                - link "修改" [ref=f1e365] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/9
+                - button " 确认变更" [ref=f1e366] [cursor=pointer]:
+                  - generic [ref=f1e367]: 
+                  - text: 确认变更
+            - row [ref=f1e368]:
+              - cell [ref=f1e369]:
+                - checkbox [ref=f1e370] [cursor=pointer]
+              - cell "" [ref=f1e371] [cursor=pointer]
+              - cell "10.24.3.12" [ref=f1e373]
+              - cell [ref=f1e374]:
+                - generic [ref=f1e375]:
+                  - strong [ref=f1e376]: "{#DEVNAME}: Disk read/write request responses are too high (read > 20 ms for 15m or write > 20 ms for 15m)"
+                  - code [ref=f1e377]: "{10.24.3.12:vfs.dev.read.await[{#DEVNAME}].min(15m)} > 20 or {10.24.3.12:vfs.dev.write.await[{#DEVNAME}].min(15m)} > 20"
+              - cell "一般" [ref=f1e378]
+              - 'cell "LLD: Block devices discovery" [ref=f1e380]'
+              - cell "深交所证联网" [ref=f1e382]
+              - cell "未修改" [ref=f1e383]
+              - cell " 待同步" [ref=f1e384]:
+                - generic [ref=f1e385]:
+                  - generic [ref=f1e386]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e387]
+              - cell "未核验" [ref=f1e388]
+              - cell [ref=f1e390]:
+                - link "修改" [ref=f1e391] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/10
+                - button " 确认变更" [ref=f1e392] [cursor=pointer]:
+                  - generic [ref=f1e393]: 
+                  - text: 确认变更
+            - row [ref=f1e394]:
+              - cell [ref=f1e395]:
+                - checkbox [ref=f1e396] [cursor=pointer]
+              - cell "" [ref=f1e397] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f1e399]
+              - cell [ref=f1e400]:
+                - generic [ref=f1e401]:
+                  - strong [ref=f1e402]: "{#FSNAME}: Running out of free inodes (free < 20%)"
+                  - code [ref=f1e403]: "{10.24.3.23:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<20"
+              - cell "警告" [ref=f1e404]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e406]'
+              - cell "深交所证联网" [ref=f1e408]
+              - cell "未修改" [ref=f1e409]
+              - cell " 待同步" [ref=f1e410]:
+                - generic [ref=f1e411]:
+                  - generic [ref=f1e412]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e413]
+              - cell "未核验" [ref=f1e414]
+              - cell [ref=f1e416]:
+                - link "修改" [ref=f1e417] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/11
+                - button " 确认变更" [ref=f1e418] [cursor=pointer]:
+                  - generic [ref=f1e419]: 
+                  - text: 确认变更
+            - row [ref=f1e420]:
+              - cell [ref=f1e421]:
+                - checkbox [ref=f1e422] [cursor=pointer]
+              - cell "" [ref=f1e423] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f1e425]
+              - cell [ref=f1e426]:
+                - generic [ref=f1e427]:
+                  - strong [ref=f1e428]: "{#FSNAME}: Disk space is critically low (used > 90%)"
+                  - code [ref=f1e429]: "{10.24.3.23:vfs.fs.size[{#FSNAME},pused].last()}>90 and (({10.24.3.23:vfs.fs.size[{#FSNAME},total].last()}-{10.24.3.23:vfs.fs.size[{#FSNAME},used].last()})<5G or {10.24.3.23:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "一般" [ref=f1e430]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e432]'
+              - cell "深交所证联网" [ref=f1e434]
+              - cell "未修改" [ref=f1e435]
+              - cell " 待同步" [ref=f1e436]:
+                - generic [ref=f1e437]:
+                  - generic [ref=f1e438]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e439]
+              - cell "未核验" [ref=f1e440]
+              - cell [ref=f1e442]:
+                - link "修改" [ref=f1e443] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/12
+                - button " 确认变更" [ref=f1e444] [cursor=pointer]:
+                  - generic [ref=f1e445]: 
+                  - text: 确认变更
+            - row [ref=f1e446]:
+              - cell [ref=f1e447]:
+                - checkbox [ref=f1e448] [cursor=pointer]
+              - cell "" [ref=f1e449] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f1e451]
+              - cell [ref=f1e452]:
+                - generic [ref=f1e453]:
+                  - strong [ref=f1e454]: "{#FSNAME}: Disk space is low (used > 80%)"
+                  - code [ref=f1e455]: "{10.24.3.23:vfs.fs.size[{#FSNAME},pused].last()}>80 and (({10.24.3.23:vfs.fs.size[{#FSNAME},total].last()}-{10.24.3.23:vfs.fs.size[{#FSNAME},used].last()})<10G or {10.24.3.23:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "警告" [ref=f1e456]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e458]'
+              - cell "深交所证联网" [ref=f1e460]
+              - cell "未修改" [ref=f1e461]
+              - cell " 待同步" [ref=f1e462]:
+                - generic [ref=f1e463]:
+                  - generic [ref=f1e464]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e465]
+              - cell "未核验" [ref=f1e466]
+              - cell [ref=f1e468]:
+                - link "修改" [ref=f1e469] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/13
+                - button " 确认变更" [ref=f1e470] [cursor=pointer]:
+                  - generic [ref=f1e471]: 
+                  - text: 确认变更
+            - row [ref=f1e472]:
+              - cell [ref=f1e473]:
+                - checkbox [ref=f1e474] [cursor=pointer]
+              - cell "" [ref=f1e475] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f1e477]
+              - cell [ref=f1e478]:
+                - generic [ref=f1e479]:
+                  - strong [ref=f1e480]: "{#FSNAME}: Running out of free inodes (free < 10%)"
+                  - code [ref=f1e481]: "{10.24.3.23:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<10"
+              - cell "一般" [ref=f1e482]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e484]'
+              - cell "深交所证联网" [ref=f1e486]
+              - cell "未修改" [ref=f1e487]
+              - cell " 待同步" [ref=f1e488]:
+                - generic [ref=f1e489]:
+                  - generic [ref=f1e490]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e491]
+              - cell "未核验" [ref=f1e492]
+              - cell [ref=f1e494]:
+                - link "修改" [ref=f1e495] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/14
+                - button " 确认变更" [ref=f1e496] [cursor=pointer]:
+                  - generic [ref=f1e497]: 
+                  - text: 确认变更
+            - row [ref=f1e498]:
+              - cell [ref=f1e499]:
+                - checkbox [ref=f1e500] [cursor=pointer]
+              - cell "" [ref=f1e501] [cursor=pointer]
+              - cell "10.24.3.23" [ref=f1e503]
+              - cell [ref=f1e504]:
+                - generic [ref=f1e505]:
+                  - strong [ref=f1e506]: "{#DEVNAME}: Disk read/write request responses are too high (read > 20 ms for 15m or write > 20 ms for 15m)"
+                  - code [ref=f1e507]: "{10.24.3.23:vfs.dev.read.await[{#DEVNAME}].min(15m)} > 20 or {10.24.3.23:vfs.dev.write.await[{#DEVNAME}].min(15m)} > 20"
+              - cell "一般" [ref=f1e508]
+              - 'cell "LLD: Block devices discovery" [ref=f1e510]'
+              - cell "深交所证联网" [ref=f1e512]
+              - cell "未修改" [ref=f1e513]
+              - cell " 待同步" [ref=f1e514]:
+                - generic [ref=f1e515]:
+                  - generic [ref=f1e516]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e517]
+              - cell "未核验" [ref=f1e518]
+              - cell [ref=f1e520]:
+                - link "修改" [ref=f1e521] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/15
+                - button " 确认变更" [ref=f1e522] [cursor=pointer]:
+                  - generic [ref=f1e523]: 
+                  - text: 确认变更
+            - row [ref=f1e524]:
+              - cell [ref=f1e525]:
+                - checkbox [ref=f1e526] [cursor=pointer]
+              - cell "" [ref=f1e527] [cursor=pointer]
+              - cell "192.168.1.200" [ref=f1e529]
+              - cell [ref=f1e530]:
+                - generic [ref=f1e531]:
+                  - strong [ref=f1e532]: "{#FSNAME}: Running out of free inodes (free < 20%)"
+                  - code [ref=f1e533]: "{host:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<20"
+              - cell "警告" [ref=f1e534]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e536]'
+              - cell [ref=f1e538]
+              - cell "未修改" [ref=f1e539]
+              - cell " 待同步" [ref=f1e540]:
+                - generic [ref=f1e541]:
+                  - generic [ref=f1e542]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e543]
+              - cell "未核验" [ref=f1e544]
+              - cell [ref=f1e546]:
+                - link "修改" [ref=f1e547] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/16
+                - button " 确认" [ref=f1e548] [cursor=pointer]:
+                  - generic [ref=f1e549]: 
+                  - text: 确认
+            - row [ref=f1e550]:
+              - cell [ref=f1e551]:
+                - checkbox [ref=f1e552] [cursor=pointer]
+              - cell "" [ref=f1e553] [cursor=pointer]
+              - cell "192.168.1.200" [ref=f1e555]
+              - cell [ref=f1e556]:
+                - generic [ref=f1e557]:
+                  - strong [ref=f1e558]: "{#FSNAME}: Disk space is critically low (used > 90%)"
+                  - code [ref=f1e559]: "{host:vfs.fs.size[{#FSNAME},pused].last()}>90 and (({host:vfs.fs.size[{#FSNAME},total].last()}-{host:vfs.fs.size[{#FSNAME},used].last()})<5G or {host:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "一般" [ref=f1e560]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e562]'
+              - cell [ref=f1e564]
+              - cell "未修改" [ref=f1e565]
+              - cell " 待同步" [ref=f1e566]:
+                - generic [ref=f1e567]:
+                  - generic [ref=f1e568]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e569]
+              - cell "未核验" [ref=f1e570]
+              - cell [ref=f1e572]:
+                - link "修改" [ref=f1e573] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/17
+                - button " 确认" [ref=f1e574] [cursor=pointer]:
+                  - generic [ref=f1e575]: 
+                  - text: 确认
+            - row [ref=f1e576]:
+              - cell [ref=f1e577]:
+                - checkbox [ref=f1e578] [cursor=pointer]
+              - cell "" [ref=f1e579] [cursor=pointer]
+              - cell "192.168.1.200" [ref=f1e581]
+              - cell [ref=f1e582]:
+                - generic [ref=f1e583]:
+                  - strong [ref=f1e584]: "{#FSNAME}: Disk space is low (used > 80%)"
+                  - code [ref=f1e585]: "{host:vfs.fs.size[{#FSNAME},pused].last()}>80 and (({host:vfs.fs.size[{#FSNAME},total].last()}-{host:vfs.fs.size[{#FSNAME},used].last()})<10G or {host:vfs.fs.size[{#FSNAME},pused].timeleft(1h,,100)}<1d)"
+              - cell "警告" [ref=f1e586]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e588]'
+              - cell [ref=f1e590]
+              - cell "未修改" [ref=f1e591]
+              - cell " 待同步" [ref=f1e592]:
+                - generic [ref=f1e593]:
+                  - generic [ref=f1e594]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e595]
+              - cell "未核验" [ref=f1e596]
+              - cell [ref=f1e598]:
+                - link "修改" [ref=f1e599] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/18
+                - button " 确认" [ref=f1e600] [cursor=pointer]:
+                  - generic [ref=f1e601]: 
+                  - text: 确认
+            - row [ref=f1e602]:
+              - cell [ref=f1e603]:
+                - checkbox [ref=f1e604] [cursor=pointer]
+              - cell "" [ref=f1e605] [cursor=pointer]
+              - cell "192.168.1.200" [ref=f1e607]
+              - cell [ref=f1e608]:
+                - generic [ref=f1e609]:
+                  - strong [ref=f1e610]: "{#FSNAME}: Running out of free inodes (free < 10%)"
+                  - code [ref=f1e611]: "{host:vfs.fs.inode[{#FSNAME},pfree].min(5m)}<10"
+              - cell "一般" [ref=f1e612]
+              - 'cell "LLD: Mounted filesystem discovery" [ref=f1e614]'
+              - cell [ref=f1e616]
+              - cell "未修改" [ref=f1e617]
+              - cell " 待同步" [ref=f1e618]:
+                - generic [ref=f1e619]:
+                  - generic [ref=f1e620]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e621]
+              - cell "未核验" [ref=f1e622]
+              - cell [ref=f1e624]:
+                - link "修改" [ref=f1e625] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/19
+                - button " 确认" [ref=f1e626] [cursor=pointer]:
+                  - generic [ref=f1e627]: 
+                  - text: 确认
+            - row [ref=f1e628]:
+              - cell [ref=f1e629]:
+                - checkbox [ref=f1e630] [cursor=pointer]
+              - cell "" [ref=f1e631] [cursor=pointer]
+              - cell "192.168.1.200" [ref=f1e633]
+              - cell [ref=f1e634]:
+                - generic [ref=f1e635]:
+                  - strong [ref=f1e636]: "{#DEVNAME}: Disk read/write request responses are too high (read > 20 ms for 15m or write > 20 ms for 15m)"
+                  - code [ref=f1e637]: "{host:vfs.dev.read.await[{#DEVNAME}].min(15m)} > 20 or {host:vfs.dev.write.await[{#DEVNAME}].min(15m)} > 20"
+              - cell "一般" [ref=f1e638]
+              - 'cell "LLD: Block devices discovery" [ref=f1e640]'
+              - cell [ref=f1e642]
+              - cell "未修改" [ref=f1e643]
+              - cell " 待同步" [ref=f1e644]:
+                - generic [ref=f1e645]:
+                  - generic [ref=f1e646]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f1e647]
+              - cell "未核验" [ref=f1e648]
+              - cell [ref=f1e650]:
+                - link "修改" [ref=f1e651] [cursor=pointer]:
+                  - /url: /trigger-prototype-review/edit/20
+                - button " 确认" [ref=f1e652] [cursor=pointer]:
+                  - generic [ref=f1e653]: 
+                  - text: 确认
+        - generic [ref=f1e654]:
+          - generic [ref=f1e655]: 共 35 条，显示 1-20
+          - button "" [disabled] [ref=f1e656]
+          - generic [ref=f1e658]: "1"
+          - button "2" [ref=f1e659] [cursor=pointer]
+          - button "" [ref=f1e660] [cursor=pointer]
+          - combobox [ref=f1e662] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"
+  - text:  

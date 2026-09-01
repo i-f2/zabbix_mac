@@ -1,0 +1,155 @@
+- generic [active] [ref=f38e1]:
+  - navigation [ref=f38e2]:
+    - generic [ref=f38e3]:
+      - button "" [ref=f38e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f38e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f38e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f38e9]
+    - generic [ref=f38e11]:
+      - button "" [ref=f38e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f38e14]:
+    - complementary [ref=f38e15]:
+      - navigation [ref=f38e16]:
+        - link " 系统信息" [ref=f38e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f38e18]: 
+          - generic [ref=f38e19]: 系统信息
+        - link " 资产主机管理" [ref=f38e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f38e21]: 
+          - generic [ref=f38e22]: 资产主机管理
+        - button " 监控复核工作台 " [ref=f38e23] [cursor=pointer]:
+          - generic [ref=f38e24]: 
+          - generic [ref=f38e25]: 监控复核工作台
+          - generic [ref=f38e26]: 
+        - generic [ref=f38e27]:
+          - link "监控项复核" [ref=f38e28] [cursor=pointer]:
+            - /url: /items-review
+          - link "触发器复核" [ref=f38e30] [cursor=pointer]:
+            - /url: /triggers-review
+          - link "监控项原型复核" [ref=f38e32] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f38e34] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核" [ref=f38e36] [cursor=pointer]:
+            - /url: /webscenarios-review
+          - link "Web触发器复核" [ref=f38e38] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [expanded] [ref=f38e40] [cursor=pointer]:
+          - generic [ref=f38e41]: 
+          - generic [ref=f38e42]: 基础模板配置
+          - generic [ref=f38e43]: 
+        - generic:
+          - link "监控项管理" [ref=f38e44] [cursor=pointer]:
+            - /url: /items
+          - link "触发器管理" [ref=f38e46] [cursor=pointer]:
+            - /url: /triggers
+          - link "监控项原型管理" [ref=f38e48] [cursor=pointer]:
+            - /url: /item-prototypes
+          - link "触发器原型管理" [ref=f38e50] [cursor=pointer]:
+            - /url: /trigger-prototypes
+          - link "Web场景管理" [ref=f38e52] [cursor=pointer]:
+            - /url: /webscenarios
+          - link "自动发现规则列表" [ref=f38e54] [cursor=pointer]:
+            - /url: /discovery-rules
+          - link "自动发现过滤规则管理" [ref=f38e56] [cursor=pointer]:
+            - /url: /filter-conditions
+          - link "模板 XML 导入" [ref=f38e58] [cursor=pointer]:
+            - /url: /base-template/import
+    - main [ref=f38e60]:
+      - generic [ref=f38e61]:
+        - navigation "breadcrumb" [ref=f38e62]:
+          - list [ref=f38e63]:
+            - listitem [ref=f38e64]:
+              - link "系统信息" [ref=f38e65] [cursor=pointer]:
+                - /url: /system-info
+        - heading "系统信息" [level=4] [ref=f38e67]
+      - generic [ref=f38e68]:
+        - generic [ref=f38e69]:
+          - generic [ref=f38e72]:
+            - generic [ref=f38e73]:
+              - heading "平台核心引擎" [level=6] [ref=f38e74]
+              - generic [ref=f38e75]: RUNNING 正常
+            - generic [ref=f38e76]: 
+          - generic [ref=f38e80]:
+            - generic [ref=f38e81]:
+              - heading "Zabbix API 连通性" [level=6] [ref=f38e82]
+              - generic [ref=f38e83]: CONNECTED 38ms
+            - generic [ref=f38e84]: 
+          - generic [ref=f38e88]:
+            - generic [ref=f38e89]:
+              - heading "PostgreSQL 数据库" [level=6] [ref=f38e90]
+              - generic [ref=f38e91]: ONLINE 在线
+            - generic [ref=f38e92]: 
+          - generic [ref=f38e96]:
+            - generic [ref=f38e97]:
+              - heading "系统部署模式" [level=6] [ref=f38e98]
+              - generic [ref=f38e99]: Standalone (systemd)
+            - generic [ref=f38e100]: 
+        - generic [ref=f38e102]:
+          - generic [ref=f38e104]:
+            - strong [ref=f38e106]:
+              - generic [ref=f38e107]: 
+              - text: 系统运行环境 (Runtime)
+            - table [ref=f38e109]:
+              - rowgroup [ref=f38e110]:
+                - row [ref=f38e111]:
+                  - cell "应用系统版本" [ref=f38e112]
+                  - cell "v1.2.5" [ref=f38e113]
+                - row [ref=f38e114]:
+                  - cell "Python 解释器" [ref=f38e115]
+                  - cell "3.12.13" [ref=f38e116]
+                - row [ref=f38e117]:
+                  - cell "宿主机操作系统" [ref=f38e118]
+                  - 'cell " Darwin 24.5.0 (Darwin Kernel Version 24.5.0: Tue Apr 22 19:54:43 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8132)" [ref=f38e119]':
+                    - generic [ref=f38e120]: 
+                    - text: "Darwin 24.5.0 (Darwin Kernel Version 24.5.0: Tue Apr 22 19:54:43 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8132)"
+                - row [ref=f38e121]:
+                  - cell "系统持续运行时间" [ref=f38e122]
+                  - cell " 0天 0小时 10分钟" [ref=f38e123]:
+                    - generic [ref=f38e124]: 
+                    - text: 0天 0小时 10分钟
+                - row [ref=f38e125]:
+                  - cell "系统部署模式" [ref=f38e126]
+                  - cell "Standalone (systemd)" [ref=f38e127]
+          - generic [ref=f38e130]:
+            - strong [ref=f38e132]:
+              - generic [ref=f38e133]: 
+              - text: 依赖组件与服务集成 (Integrations)
+            - table [ref=f38e135]:
+              - rowgroup [ref=f38e136]:
+                - row [ref=f38e137]:
+                  - cell "Zabbix Server 地址" [ref=f38e138]
+                  - cell "http://localhost:8080/api_jsonrpc.php" [ref=f38e139]
+                - row [ref=f38e140]:
+                  - cell "Zabbix API 版本" [ref=f38e141]
+                  - cell "5.0.47" [ref=f38e142]
+                - row [ref=f38e143]:
+                  - cell "数据库驱动 & 实例" [ref=f38e144]
+                  - 'cell "Psycopg2 / ops (Port: 5432)" [ref=f38e145]'
+                - row [ref=f38e146]:
+                  - cell "上游同步源 (Assets)" [ref=f38e147]
+                  - cell "hosts 表联通 (8 台主机)" [ref=f38e148]
+                - row [ref=f38e150]:
+                  - cell "上次全局刷新时间" [ref=f38e151]
+                  - cell "2026-08-26 16:42:56" [ref=f38e152]
+        - generic [ref=f38e153]:
+          - strong [ref=f38e155]:
+            - generic [ref=f38e156]: 
+            - text: 本地缓存资产统计快照 (Cached Analytics)
+          - generic [ref=f38e158]:
+            - generic [ref=f38e159]:
+              - generic [ref=f38e160]: 已同步资产主机
+              - heading "8 台" [level=3] [ref=f38e161]
+            - generic [ref=f38e162]:
+              - generic [ref=f38e163]: 复核监控项存量
+              - heading "252 个" [level=3] [ref=f38e164]
+            - generic [ref=f38e165]:
+              - generic [ref=f38e166]: 复核触发器存量
+              - heading "174 个" [level=3] [ref=f38e167]
+            - generic [ref=f38e168]:
+              - generic [ref=f38e169]: 复核Web场景存量
+              - heading "8 组" [level=3] [ref=f38e170]

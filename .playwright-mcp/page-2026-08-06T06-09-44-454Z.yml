@@ -1,0 +1,687 @@
+- generic [active] [ref=f7e1]:
+  - navigation [ref=f7e2]:
+    - generic [ref=f7e3]:
+      - button "" [ref=f7e4] [cursor=pointer]
+      - link "Zabbix MaC" [ref=f7e6] [cursor=pointer]:
+        - /url: /
+    - generic [ref=f7e8]:
+      - generic: 
+      - textbox "搜索监控项、触发器、主机、模板..." [ref=f7e9]
+    - generic [ref=f7e11]:
+      - button "" [ref=f7e12] [cursor=pointer]
+      - text:   
+  - generic [ref=f7e14]:
+    - complementary [ref=f7e15]:
+      - navigation [ref=f7e16]:
+        - link " 系统信息" [ref=f7e17] [cursor=pointer]:
+          - /url: /system-info
+          - generic [ref=f7e18]: 
+          - generic [ref=f7e19]: 系统信息
+        - link " 资产主机管理" [ref=f7e20] [cursor=pointer]:
+          - /url: /hosts
+          - generic [ref=f7e21]: 
+          - generic [ref=f7e22]: 资产主机管理
+        - button " 监控复核工作台 " [expanded] [ref=f7e23] [cursor=pointer]:
+          - generic [ref=f7e24]: 
+          - generic [ref=f7e25]: 监控复核工作台
+          - generic [ref=f7e26]: 
+        - generic [ref=f7e27]:
+          - link "监控项复核 198" [ref=f7e28] [cursor=pointer]:
+            - /url: /items-review
+            - generic [ref=f7e29]: 监控项复核
+            - generic [ref=f7e30]: "198"
+          - link "触发器复核 83" [ref=f7e31] [cursor=pointer]:
+            - /url: /triggers-review
+            - generic [ref=f7e32]: 触发器复核
+            - generic [ref=f7e33]: "83"
+          - link "监控项原型复核" [ref=f7e34] [cursor=pointer]:
+            - /url: /item-prototypes-review
+          - link "触发器原型复核" [ref=f7e36] [cursor=pointer]:
+            - /url: /trigger-prototypes-review
+          - link "Web场景复核 7" [ref=f7e38] [cursor=pointer]:
+            - /url: /webscenarios-review
+            - generic [ref=f7e39]: Web场景复核
+            - generic [ref=f7e40]: "7"
+          - link "Web触发器复核" [ref=f7e41] [cursor=pointer]:
+            - /url: /web-triggers-review
+        - button " 基础模板配置 " [ref=f7e43] [cursor=pointer]:
+          - generic [ref=f7e44]: 
+          - generic [ref=f7e45]: 基础模板配置
+          - generic [ref=f7e46]: 
+    - main [ref=f7e47]:
+      - generic [ref=f7e48]:
+        - navigation "breadcrumb" [ref=f7e49]:
+          - list [ref=f7e50]:
+            - listitem [ref=f7e51]: 复核表管理
+            - listitem [ref=f7e52]:
+              - text: /
+              - link "监控项复核" [ref=f7e53] [cursor=pointer]:
+                - /url: /items-review
+        - heading "监控项复核表管理" [level=4] [ref=f7e55]
+      - generic [ref=f7e56]:
+        - generic [ref=f7e57]:
+          - button " 初始化" [ref=f7e58] [cursor=pointer]:
+            - generic [ref=f7e59]: 
+            - text: 初始化
+          - generic [ref=f7e60]:
+            - button " 监控同步" [disabled]:
+              - generic: 
+              - text: 监控同步
+            - button " 核验" [disabled]:
+              - generic: 
+              - text: 核验
+            - combobox [ref=f7e61]:
+              - option "选择环境" [selected]
+              - option "深交所证联网"
+              - option "深交所互联网"
+              - option "上交所证联网"
+              - option "上交所互联网"
+          - button " 添加监控项" [ref=f7e62] [cursor=pointer]:
+            - generic [ref=f7e63]: 
+            - text: 添加监控项
+          - link " 导出" [ref=f7e64] [cursor=pointer]:
+            - /url: /items-review/export
+            - generic [ref=f7e65]: 
+            - text: 导出
+          - button " 导入" [ref=f7e66] [cursor=pointer]:
+            - generic [ref=f7e67]: 
+            - text: 导入
+          - button " 显示技术细节" [ref=f7e68] [cursor=pointer]:
+            - generic [ref=f7e69]: 
+            - text: 显示技术细节
+          - button "" [ref=f7e71] [cursor=pointer]
+        - generic [ref=f7e74]:
+          - generic [ref=f7e75]:
+            - button " 待处理" [ref=f7e76] [cursor=pointer]:
+              - generic [ref=f7e77]: 
+              - text: 待处理
+            - button " 全部" [ref=f7e78] [cursor=pointer]:
+              - generic [ref=f7e79]: 
+              - text: 全部
+          - generic [ref=f7e80]: "|"
+        - generic [ref=f7e81]:
+          - textbox "主机IP" [ref=f7e82]
+          - combobox "系统名称" [ref=f7e83]
+          - combobox "模块名称" [ref=f7e84]
+          - combobox [ref=f7e85]:
+            - option "基线类别" [selected]
+            - option "必选基线"
+            - option "硬件外设"
+            - option "中间件/服务"
+            - option "业务指标"
+          - button " 筛选" [ref=f7e86] [cursor=pointer]:
+            - generic [ref=f7e87]: 
+            - text: 筛选
+      - generic [ref=f7e88]:
+        - generic [ref=f7e91]:
+          - generic [ref=f7e92]:
+            - generic [ref=f7e93]: 
+            - text: 复核进度
+          - generic [ref=f7e94]:
+            - generic [ref=f7e95]: "210"
+            - generic [ref=f7e96]: 总数
+            - generic [ref=f7e97]: "|"
+            - generic [ref=f7e98]: "12"
+            - generic [ref=f7e99]: 已确认
+            - generic [ref=f7e100]: "|"
+            - generic [ref=f7e101]: "198"
+            - generic [ref=f7e102]: 待确认
+          - generic [ref=f7e104]: "完成率: 5.7%"
+        - generic [ref=f7e107]:
+          - generic [ref=f7e108]:
+            - generic [ref=f7e109]: 
+            - text: 同步状态
+          - generic [ref=f7e110]:
+            - generic [ref=f7e111]: "0"
+            - generic [ref=f7e112]: 已同步
+            - generic [ref=f7e113]: "|"
+            - generic [ref=f7e114]: "210"
+            - generic [ref=f7e115]: 待同步
+          - generic [ref=f7e116]:
+            - generic [ref=f7e117]: 
+            - text: 还有 210 条待同步
+        - generic [ref=f7e120]:
+          - generic [ref=f7e121]:
+            - generic [ref=f7e122]: 
+            - text: 告警关联
+          - generic [ref=f7e123]:
+            - generic [ref=f7e124]: "85"
+            - generic [ref=f7e125]: 关联触发器
+          - generic [ref=f7e126]: 加载中...
+      - generic [ref=f7e127]:
+        - table [ref=f7e129]:
+          - rowgroup [ref=f7e130]:
+            - row [ref=f7e131]:
+              - columnheader [ref=f7e132]:
+                - checkbox "全选/全不选" [ref=f7e133] [cursor=pointer]
+              - columnheader [ref=f7e134]
+              - columnheader "主机 IP" [ref=f7e135]
+              - columnheader "监控项名称 / 键值" [ref=f7e136]
+              - columnheader "采集周期" [ref=f7e137]
+              - columnheader "系统名称" [ref=f7e138]
+              - columnheader "模块名称" [ref=f7e139]
+              - columnheader "机房" [ref=f7e140]
+              - columnheader "修改状态" [ref=f7e141]
+              - columnheader "同步状态" [ref=f7e142]
+              - columnheader "确认状态" [ref=f7e143]
+              - columnheader "状态核验" [ref=f7e144]
+              - columnheader "操作" [ref=f7e145]
+          - rowgroup [ref=f7e146]:
+            - row [ref=f7e147]:
+              - cell [ref=f7e148]:
+                - checkbox [ref=f7e149] [cursor=pointer]
+              - cell "" [ref=f7e150] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e152]
+              - cell "Host name of Zabbix agent running 业务指标 agent.hostname" [ref=f7e153]:
+                - generic [ref=f7e154]:
+                  - strong [ref=f7e155]: Host name of Zabbix agent running
+                  - generic [ref=f7e156]: 业务指标
+                  - code [ref=f7e157]: agent.hostname
+              - cell "1h" [ref=f7e158]
+              - cell "上市系统" [ref=f7e159]
+              - cell "上市日常监管模块" [ref=f7e160]
+              - cell "深交所证联网" [ref=f7e161]
+              - cell "未修改" [ref=f7e162]
+              - cell " 待同步" [ref=f7e163]:
+                - generic [ref=f7e164]:
+                  - generic [ref=f7e165]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e166]
+              - cell "已核验" [ref=f7e167]
+              - cell [ref=f7e169]:
+                - link "修改" [ref=f7e170] [cursor=pointer]:
+                  - /url: /item-review/edit/463
+            - row [ref=f7e171]:
+              - cell [ref=f7e172]:
+                - checkbox [ref=f7e173] [cursor=pointer]
+              - cell "" [ref=f7e174] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e176]
+              - cell "Zabbix agent ping 必选基线 agent.ping" [ref=f7e177]:
+                - generic [ref=f7e178]:
+                  - strong [ref=f7e179]: Zabbix agent ping
+                  - generic [ref=f7e180]: 必选基线
+                  - code [ref=f7e181]: agent.ping
+              - cell "1m" [ref=f7e182]
+              - cell "上市系统" [ref=f7e183]
+              - cell "上市日常监管模块" [ref=f7e184]
+              - cell "深交所证联网" [ref=f7e185]
+              - cell "未修改" [ref=f7e186]
+              - cell " 待同步" [ref=f7e187]:
+                - generic [ref=f7e188]:
+                  - generic [ref=f7e189]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e190]
+              - cell "已核验" [ref=f7e191]
+              - cell [ref=f7e193]:
+                - link "修改" [ref=f7e194] [cursor=pointer]:
+                  - /url: /item-review/edit/464
+            - row [ref=f7e195]:
+              - cell [ref=f7e196]:
+                - checkbox [ref=f7e197] [cursor=pointer]
+              - cell "" [ref=f7e198] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e200]
+              - cell "Version of Zabbix agent running 业务指标 agent.version" [ref=f7e201]:
+                - generic [ref=f7e202]:
+                  - strong [ref=f7e203]: Version of Zabbix agent running
+                  - generic [ref=f7e204]: 业务指标
+                  - code [ref=f7e205]: agent.version
+              - cell "1h" [ref=f7e206]
+              - cell "上市系统" [ref=f7e207]
+              - cell "上市日常监管模块" [ref=f7e208]
+              - cell "深交所证联网" [ref=f7e209]
+              - cell "未修改" [ref=f7e210]
+              - cell " 待同步" [ref=f7e211]:
+                - generic [ref=f7e212]:
+                  - generic [ref=f7e213]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e214]
+              - cell "已核验" [ref=f7e215]
+              - cell [ref=f7e217]:
+                - link "修改" [ref=f7e218] [cursor=pointer]:
+                  - /url: /item-review/edit/465
+            - row [ref=f7e219]:
+              - cell [ref=f7e220]:
+                - checkbox [ref=f7e221] [cursor=pointer]
+              - cell "" [ref=f7e222] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e224]
+              - cell "Zabbix agent availability 业务指标 zabbix[host,agent,available]" [ref=f7e225]:
+                - generic [ref=f7e226]:
+                  - strong [ref=f7e227]: Zabbix agent availability
+                  - generic [ref=f7e228]: 业务指标
+                  - code [ref=f7e229]: zabbix[host,agent,available]
+              - cell "1m" [ref=f7e230]
+              - cell "上市系统" [ref=f7e231]
+              - cell "上市日常监管模块" [ref=f7e232]
+              - cell "深交所证联网" [ref=f7e233]
+              - cell "未修改" [ref=f7e234]
+              - cell " 待同步" [ref=f7e235]:
+                - generic [ref=f7e236]:
+                  - generic [ref=f7e237]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e238]
+              - cell "已核验" [ref=f7e239]
+              - cell [ref=f7e241]:
+                - link "修改" [ref=f7e242] [cursor=pointer]:
+                  - /url: /item-review/edit/466
+            - row [ref=f7e243]:
+              - cell [ref=f7e244]:
+                - checkbox [ref=f7e245] [cursor=pointer]
+              - cell "" [ref=f7e246] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e248]
+              - cell "Interrupts per second 必选基线 system.cpu.intr" [ref=f7e249]:
+                - generic [ref=f7e250]:
+                  - strong [ref=f7e251]: Interrupts per second
+                  - generic [ref=f7e252]: 必选基线
+                  - code [ref=f7e253]: system.cpu.intr
+              - cell "1m" [ref=f7e254]
+              - cell "上市系统" [ref=f7e255]
+              - cell "上市日常监管模块" [ref=f7e256]
+              - cell "深交所证联网" [ref=f7e257]
+              - cell "未修改" [ref=f7e258]
+              - cell " 待同步" [ref=f7e259]:
+                - generic [ref=f7e260]:
+                  - generic [ref=f7e261]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e262]
+              - cell "已核验" [ref=f7e263]
+              - cell [ref=f7e265]:
+                - link "修改" [ref=f7e266] [cursor=pointer]:
+                  - /url: /item-review/edit/467
+            - row [ref=f7e267]:
+              - cell [ref=f7e268]:
+                - checkbox [ref=f7e269] [cursor=pointer]
+              - cell "" [ref=f7e270] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e272]
+              - cell "Load average (1m avg) 必选基线 system.cpu.load[all,avg1]" [ref=f7e273]:
+                - generic [ref=f7e274]:
+                  - strong [ref=f7e275]: Load average (1m avg)
+                  - generic [ref=f7e276]: 必选基线
+                  - code [ref=f7e277]: system.cpu.load[all,avg1]
+              - cell "1m" [ref=f7e278]
+              - cell "上市系统" [ref=f7e279]
+              - cell "上市日常监管模块" [ref=f7e280]
+              - cell "深交所证联网" [ref=f7e281]
+              - cell "未修改" [ref=f7e282]
+              - cell " 待同步" [ref=f7e283]:
+                - generic [ref=f7e284]:
+                  - generic [ref=f7e285]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e286]
+              - cell "已核验" [ref=f7e287]
+              - cell [ref=f7e289]:
+                - link "修改" [ref=f7e290] [cursor=pointer]:
+                  - /url: /item-review/edit/468
+            - row [ref=f7e291]:
+              - cell [ref=f7e292]:
+                - checkbox [ref=f7e293] [cursor=pointer]
+              - cell "" [ref=f7e294] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e296]
+              - cell "Load average (15m avg) 必选基线 system.cpu.load[all,avg15]" [ref=f7e297]:
+                - generic [ref=f7e298]:
+                  - strong [ref=f7e299]: Load average (15m avg)
+                  - generic [ref=f7e300]: 必选基线
+                  - code [ref=f7e301]: system.cpu.load[all,avg15]
+              - cell "1m" [ref=f7e302]
+              - cell "上市系统" [ref=f7e303]
+              - cell "上市日常监管模块" [ref=f7e304]
+              - cell "深交所证联网" [ref=f7e305]
+              - cell "未修改" [ref=f7e306]
+              - cell " 待同步" [ref=f7e307]:
+                - generic [ref=f7e308]:
+                  - generic [ref=f7e309]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e310]
+              - cell "已核验" [ref=f7e311]
+              - cell [ref=f7e313]:
+                - link "修改" [ref=f7e314] [cursor=pointer]:
+                  - /url: /item-review/edit/469
+            - row [ref=f7e315]:
+              - cell [ref=f7e316]:
+                - checkbox [ref=f7e317] [cursor=pointer]
+              - cell "" [ref=f7e318] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e320]
+              - cell "Load average (5m avg) 必选基线 system.cpu.load[all,avg5]" [ref=f7e321]:
+                - generic [ref=f7e322]:
+                  - strong [ref=f7e323]: Load average (5m avg)
+                  - generic [ref=f7e324]: 必选基线
+                  - code [ref=f7e325]: system.cpu.load[all,avg5]
+              - cell "1m" [ref=f7e326]
+              - cell "上市系统" [ref=f7e327]
+              - cell "上市日常监管模块" [ref=f7e328]
+              - cell "深交所证联网" [ref=f7e329]
+              - cell "未修改" [ref=f7e330]
+              - cell " 待同步" [ref=f7e331]:
+                - generic [ref=f7e332]:
+                  - generic [ref=f7e333]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e334]
+              - cell "已核验" [ref=f7e335]
+              - cell [ref=f7e337]:
+                - link "修改" [ref=f7e338] [cursor=pointer]:
+                  - /url: /item-review/edit/470
+            - row [ref=f7e339]:
+              - cell [ref=f7e340]:
+                - checkbox [ref=f7e341] [cursor=pointer]
+              - cell "" [ref=f7e342] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e344]
+              - cell "Number of CPUs 必选基线 system.cpu.num" [ref=f7e345]:
+                - generic [ref=f7e346]:
+                  - strong [ref=f7e347]: Number of CPUs
+                  - generic [ref=f7e348]: 必选基线
+                  - code [ref=f7e349]: system.cpu.num
+              - cell "1m" [ref=f7e350]
+              - cell "上市系统" [ref=f7e351]
+              - cell "上市日常监管模块" [ref=f7e352]
+              - cell "深交所证联网" [ref=f7e353]
+              - cell "未修改" [ref=f7e354]
+              - cell " 待同步" [ref=f7e355]:
+                - generic [ref=f7e356]:
+                  - generic [ref=f7e357]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e358]
+              - cell "已核验" [ref=f7e359]
+              - cell [ref=f7e361]:
+                - link "修改" [ref=f7e362] [cursor=pointer]:
+                  - /url: /item-review/edit/471
+            - row [ref=f7e363]:
+              - cell [ref=f7e364]:
+                - checkbox [ref=f7e365] [cursor=pointer]
+              - cell "" [ref=f7e366] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e368]
+              - cell "Context switches per second 必选基线 system.cpu.switches" [ref=f7e369]:
+                - generic [ref=f7e370]:
+                  - strong [ref=f7e371]: Context switches per second
+                  - generic [ref=f7e372]: 必选基线
+                  - code [ref=f7e373]: system.cpu.switches
+              - cell "1m" [ref=f7e374]
+              - cell "上市系统" [ref=f7e375]
+              - cell "上市日常监管模块" [ref=f7e376]
+              - cell "深交所证联网" [ref=f7e377]
+              - cell "未修改" [ref=f7e378]
+              - cell " 待同步" [ref=f7e379]:
+                - generic [ref=f7e380]:
+                  - generic [ref=f7e381]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e382]
+              - cell "已核验" [ref=f7e383]
+              - cell [ref=f7e385]:
+                - link "修改" [ref=f7e386] [cursor=pointer]:
+                  - /url: /item-review/edit/472
+            - row [ref=f7e387]:
+              - cell [ref=f7e388]:
+                - checkbox [ref=f7e389] [cursor=pointer]
+              - cell "" [ref=f7e390] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e392]
+              - cell "CPU idle time 必选基线 system.cpu.util[,idle]" [ref=f7e393]:
+                - generic [ref=f7e394]:
+                  - strong [ref=f7e395]: CPU idle time
+                  - generic [ref=f7e396]: 必选基线
+                  - code [ref=f7e397]: system.cpu.util[,idle]
+              - cell "1m" [ref=f7e398]
+              - cell "上市系统" [ref=f7e399]
+              - cell "上市日常监管模块" [ref=f7e400]
+              - cell "深交所证联网" [ref=f7e401]
+              - cell "未修改" [ref=f7e402]
+              - cell " 待同步" [ref=f7e403]:
+                - generic [ref=f7e404]:
+                  - generic [ref=f7e405]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e406]
+              - cell "已核验" [ref=f7e407]
+              - cell [ref=f7e409]:
+                - link "修改" [ref=f7e410] [cursor=pointer]:
+                  - /url: /item-review/edit/473
+            - row [ref=f7e411]:
+              - cell [ref=f7e412]:
+                - checkbox [ref=f7e413] [cursor=pointer]
+              - cell "" [ref=f7e414] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e416]
+              - cell "CPU utilization 必选基线 system.cpu.util" [ref=f7e417]:
+                - generic [ref=f7e418]:
+                  - strong [ref=f7e419]: CPU utilization
+                  - generic [ref=f7e420]: 必选基线
+                  - code [ref=f7e421]: system.cpu.util
+              - cell "1m" [ref=f7e422]
+              - cell "上市系统" [ref=f7e423]
+              - cell "上市日常监管模块" [ref=f7e424]
+              - cell "深交所证联网" [ref=f7e425]
+              - cell "未修改" [ref=f7e426]
+              - cell " 待同步" [ref=f7e427]:
+                - generic [ref=f7e428]:
+                  - generic [ref=f7e429]: 
+                  - text: 待同步
+              - cell "已确认" [ref=f7e430]
+              - cell "不一致" [ref=f7e431]
+              - cell [ref=f7e433]:
+                - link "修改" [ref=f7e434] [cursor=pointer]:
+                  - /url: /item-review/edit/474
+            - row [ref=f7e435]:
+              - cell [ref=f7e436]:
+                - checkbox [ref=f7e437] [cursor=pointer]
+              - cell "" [ref=f7e438] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e440]
+              - cell "CPU guest nice time 必选基线 system.cpu.util[,guest_nice]" [ref=f7e441]:
+                - generic [ref=f7e442]:
+                  - strong [ref=f7e443]: CPU guest nice time
+                  - generic [ref=f7e444]: 必选基线
+                  - code [ref=f7e445]: system.cpu.util[,guest_nice]
+              - cell "1m" [ref=f7e446]
+              - cell "上市系统" [ref=f7e447]
+              - cell "上市日常监管模块" [ref=f7e448]
+              - cell "深交所证联网" [ref=f7e449]
+              - cell "未修改" [ref=f7e450]
+              - cell " 待同步" [ref=f7e451]:
+                - generic [ref=f7e452]:
+                  - generic [ref=f7e453]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e454]
+              - cell "已核验" [ref=f7e455]
+              - cell [ref=f7e457]:
+                - link "修改" [ref=f7e458] [cursor=pointer]:
+                  - /url: /item-review/edit/475
+                - button " 确认变更" [ref=f7e459] [cursor=pointer]:
+                  - generic [ref=f7e460]: 
+                  - text: 确认变更
+            - row [ref=f7e461]:
+              - cell [ref=f7e462]:
+                - checkbox [ref=f7e463] [cursor=pointer]
+              - cell "" [ref=f7e464] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e466]
+              - cell "CPU guest time 必选基线 system.cpu.util[,guest]" [ref=f7e467]:
+                - generic [ref=f7e468]:
+                  - strong [ref=f7e469]: CPU guest time
+                  - generic [ref=f7e470]: 必选基线
+                  - code [ref=f7e471]: system.cpu.util[,guest]
+              - cell "1m" [ref=f7e472]
+              - cell "上市系统" [ref=f7e473]
+              - cell "上市日常监管模块" [ref=f7e474]
+              - cell "深交所证联网" [ref=f7e475]
+              - cell "未修改" [ref=f7e476]
+              - cell " 待同步" [ref=f7e477]:
+                - generic [ref=f7e478]:
+                  - generic [ref=f7e479]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e480]
+              - cell "已核验" [ref=f7e481]
+              - cell [ref=f7e483]:
+                - link "修改" [ref=f7e484] [cursor=pointer]:
+                  - /url: /item-review/edit/476
+                - button " 确认变更" [ref=f7e485] [cursor=pointer]:
+                  - generic [ref=f7e486]: 
+                  - text: 确认变更
+            - row [ref=f7e487]:
+              - cell [ref=f7e488]:
+                - checkbox [ref=f7e489] [cursor=pointer]
+              - cell "" [ref=f7e490] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e492]
+              - cell "CPU interrupt time 必选基线 system.cpu.util[,interrupt]" [ref=f7e493]:
+                - generic [ref=f7e494]:
+                  - strong [ref=f7e495]: CPU interrupt time
+                  - generic [ref=f7e496]: 必选基线
+                  - code [ref=f7e497]: system.cpu.util[,interrupt]
+              - cell "1m" [ref=f7e498]
+              - cell "上市系统" [ref=f7e499]
+              - cell "上市日常监管模块" [ref=f7e500]
+              - cell "深交所证联网" [ref=f7e501]
+              - cell "未修改" [ref=f7e502]
+              - cell " 待同步" [ref=f7e503]:
+                - generic [ref=f7e504]:
+                  - generic [ref=f7e505]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e506]
+              - cell "已核验" [ref=f7e507]
+              - cell [ref=f7e509]:
+                - link "修改" [ref=f7e510] [cursor=pointer]:
+                  - /url: /item-review/edit/477
+                - button " 确认变更" [ref=f7e511] [cursor=pointer]:
+                  - generic [ref=f7e512]: 
+                  - text: 确认变更
+            - row [ref=f7e513]:
+              - cell [ref=f7e514]:
+                - checkbox [ref=f7e515] [cursor=pointer]
+              - cell "" [ref=f7e516] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e518]
+              - cell "CPU iowait time 必选基线 system.cpu.util[,iowait]" [ref=f7e519]:
+                - generic [ref=f7e520]:
+                  - strong [ref=f7e521]: CPU iowait time
+                  - generic [ref=f7e522]: 必选基线
+                  - code [ref=f7e523]: system.cpu.util[,iowait]
+              - cell "1m" [ref=f7e524]
+              - cell "上市系统" [ref=f7e525]
+              - cell "上市日常监管模块" [ref=f7e526]
+              - cell "深交所证联网" [ref=f7e527]
+              - cell "未修改" [ref=f7e528]
+              - cell " 待同步" [ref=f7e529]:
+                - generic [ref=f7e530]:
+                  - generic [ref=f7e531]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e532]
+              - cell "已核验" [ref=f7e533]
+              - cell [ref=f7e535]:
+                - link "修改" [ref=f7e536] [cursor=pointer]:
+                  - /url: /item-review/edit/478
+                - button " 确认变更" [ref=f7e537] [cursor=pointer]:
+                  - generic [ref=f7e538]: 
+                  - text: 确认变更
+            - row [ref=f7e539]:
+              - cell [ref=f7e540]:
+                - checkbox [ref=f7e541] [cursor=pointer]
+              - cell "" [ref=f7e542] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e544]
+              - cell "CPU nice time 必选基线 system.cpu.util[,nice]" [ref=f7e545]:
+                - generic [ref=f7e546]:
+                  - strong [ref=f7e547]: CPU nice time
+                  - generic [ref=f7e548]: 必选基线
+                  - code [ref=f7e549]: system.cpu.util[,nice]
+              - cell "1m" [ref=f7e550]
+              - cell "上市系统" [ref=f7e551]
+              - cell "上市日常监管模块" [ref=f7e552]
+              - cell "深交所证联网" [ref=f7e553]
+              - cell "未修改" [ref=f7e554]
+              - cell " 待同步" [ref=f7e555]:
+                - generic [ref=f7e556]:
+                  - generic [ref=f7e557]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e558]
+              - cell "已核验" [ref=f7e559]
+              - cell [ref=f7e561]:
+                - link "修改" [ref=f7e562] [cursor=pointer]:
+                  - /url: /item-review/edit/479
+                - button " 确认变更" [ref=f7e563] [cursor=pointer]:
+                  - generic [ref=f7e564]: 
+                  - text: 确认变更
+            - row [ref=f7e565]:
+              - cell [ref=f7e566]:
+                - checkbox [ref=f7e567] [cursor=pointer]
+              - cell "" [ref=f7e568] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e570]
+              - cell "CPU softirq time 必选基线 system.cpu.util[,softirq]" [ref=f7e571]:
+                - generic [ref=f7e572]:
+                  - strong [ref=f7e573]: CPU softirq time
+                  - generic [ref=f7e574]: 必选基线
+                  - code [ref=f7e575]: system.cpu.util[,softirq]
+              - cell "1m" [ref=f7e576]
+              - cell "上市系统" [ref=f7e577]
+              - cell "上市日常监管模块" [ref=f7e578]
+              - cell "深交所证联网" [ref=f7e579]
+              - cell "未修改" [ref=f7e580]
+              - cell " 待同步" [ref=f7e581]:
+                - generic [ref=f7e582]:
+                  - generic [ref=f7e583]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e584]
+              - cell "已核验" [ref=f7e585]
+              - cell [ref=f7e587]:
+                - link "修改" [ref=f7e588] [cursor=pointer]:
+                  - /url: /item-review/edit/480
+                - button " 确认变更" [ref=f7e589] [cursor=pointer]:
+                  - generic [ref=f7e590]: 
+                  - text: 确认变更
+            - row [ref=f7e591]:
+              - cell [ref=f7e592]:
+                - checkbox [ref=f7e593] [cursor=pointer]
+              - cell "" [ref=f7e594] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e596]
+              - cell "CPU steal time 必选基线 system.cpu.util[,steal]" [ref=f7e597]:
+                - generic [ref=f7e598]:
+                  - strong [ref=f7e599]: CPU steal time
+                  - generic [ref=f7e600]: 必选基线
+                  - code [ref=f7e601]: system.cpu.util[,steal]
+              - cell "1m" [ref=f7e602]
+              - cell "上市系统" [ref=f7e603]
+              - cell "上市日常监管模块" [ref=f7e604]
+              - cell "深交所证联网" [ref=f7e605]
+              - cell "未修改" [ref=f7e606]
+              - cell " 待同步" [ref=f7e607]:
+                - generic [ref=f7e608]:
+                  - generic [ref=f7e609]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e610]
+              - cell "已核验" [ref=f7e611]
+              - cell [ref=f7e613]:
+                - link "修改" [ref=f7e614] [cursor=pointer]:
+                  - /url: /item-review/edit/481
+                - button " 确认变更" [ref=f7e615] [cursor=pointer]:
+                  - generic [ref=f7e616]: 
+                  - text: 确认变更
+            - row [ref=f7e617]:
+              - cell [ref=f7e618]:
+                - checkbox [ref=f7e619] [cursor=pointer]
+              - cell "" [ref=f7e620] [cursor=pointer]
+              - cell "Zabbix server" [ref=f7e622]
+              - cell "CPU system time 必选基线 system.cpu.util[,system]" [ref=f7e623]:
+                - generic [ref=f7e624]:
+                  - strong [ref=f7e625]: CPU system time
+                  - generic [ref=f7e626]: 必选基线
+                  - code [ref=f7e627]: system.cpu.util[,system]
+              - cell "1m" [ref=f7e628]
+              - cell "上市系统" [ref=f7e629]
+              - cell "上市日常监管模块" [ref=f7e630]
+              - cell "深交所证联网" [ref=f7e631]
+              - cell "未修改" [ref=f7e632]
+              - cell " 待同步" [ref=f7e633]:
+                - generic [ref=f7e634]:
+                  - generic [ref=f7e635]: 
+                  - text: 待同步
+              - cell "未确认" [ref=f7e636]
+              - cell "已核验" [ref=f7e637]
+              - cell [ref=f7e639]:
+                - link "修改" [ref=f7e640] [cursor=pointer]:
+                  - /url: /item-review/edit/482
+                - button " 确认变更" [ref=f7e641] [cursor=pointer]:
+                  - generic [ref=f7e642]: 
+                  - text: 确认变更
+        - generic [ref=f7e643]:
+          - generic [ref=f7e644]: 共 210 条，显示 1-20
+          - button "" [disabled] [ref=f7e645]
+          - generic [ref=f7e647]: "1"
+          - button "2" [ref=f7e648] [cursor=pointer]
+          - button "3" [ref=f7e649] [cursor=pointer]
+          - generic [ref=f7e650]: ...
+          - button "11" [ref=f7e651] [cursor=pointer]
+          - button "" [ref=f7e652] [cursor=pointer]
+          - combobox [ref=f7e654] [cursor=pointer]:
+            - option "20条/页" [selected]
+            - option "50条/页"
+            - option "100条/页"
+  - text:  
