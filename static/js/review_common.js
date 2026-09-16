@@ -114,36 +114,119 @@ window.TechViewToggle = {
 // ========================================================
 // ReviewSyncPoller — shared sync progress polling
 // ========================================================
+// 后台任务阶段 → 文案。与 app.py 的 _JobContext.report_phase() 约定一一对应。
+var SYNC_PHASE_LABELS = {
+    load:   '正在读取现有记录',
+    source: '正在读取上游模板数据',
+    diff:   '正在比对差异',
+    build:  '正在组装记录',
+    insert: '正在写入新增',
+    update: '正在更新变更',
+    delete: '正在标记删除',
+    hosts:  '正在同步主机资产',
+    cleanup: '正在清理失效绑定'
+};
+
 window.ReviewSyncPoller = {
     _timer: null,
+    _modal: null,
+    _settled: false,
 
-    start: function(syncFn) {
+    // 给数字加千分位：1200 -> 1,200（ES5 正则写法，无 Intl 依赖）
+    _fmt: function(n) {
+        return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    },
+
+    // kind: 'init' 用于初始化任务，文案与按钮保持"同步"语义时用默认值
+    start: function(syncFn, opts) {
+        opts = opts || {};
         var modalEl = document.getElementById('syncProgressModal');
         if (!modalEl) { showToast('同步进度弹窗未找到', 'danger'); return; }
         var modal = new bootstrap.Modal(modalEl, {backdrop: 'static', keyboard: false});
         modal.show();
 
+        var self = this;
+        self._modal = modal;
+        self._opts = opts;
+        self._settled = false;
+        self._sawRunning = false;    // 是否观察到任务真正开始（running=true）
+        self._requestDone = false;   // 发起请求是否已返回
+        self._requestFailed = null;  // 请求本身的网络错误
+        self._conflict = null;       // 409 并发冲突的提示语
+
+        var title = document.getElementById('syncProgressTitle');
+        if (title) title.textContent = opts.title || '同步进度';
         var bar = document.getElementById('syncProgressBar');
         var text = document.getElementById('syncProgressText');
         if (bar) { bar.style.width = '0%'; bar.textContent = '0%'; }
-        if (text) text.textContent = '发起同步请求...';
+        if (text) text.textContent = opts.startText || '发起请求...';
+        var warnList = document.getElementById('syncWarnList');
+        if (warnList) warnList.innerHTML = '';
+        var errList = document.getElementById('syncErrorList');
+        if (errList) errList.innerHTML = '';
+        var stopBtn = document.getElementById('stopSyncBtn');
+        if (stopBtn) { stopBtn.disabled = false; stopBtn.innerHTML = '<i class="bi bi-stop-circle"></i> 停止同步'; }
 
-        syncFn().catch(function(e) { showToast('同步请求失败: ' + e.message, 'danger'); });
+        // fetch 对 409 也会 resolve，.catch 不触发 —— 必须显式看状态码，
+        // 否则并发冲突会被当成"任务已结束"，导致页面在同步未跑的情况下刷新。
+        var req = syncFn();
+        if (req && req.then) {
+            req.then(function(resp) {
+                if (!resp) return;
+                if (resp.status === 409) {
+                    self._conflict = '另一个同步/初始化操作正在进行，请稍后再试';
+                    return resp.json().then(function(d) {
+                        if (d && d.message) self._conflict = d.message;
+                    }).catch(function() {});
+                }
+                // 非 2xx 一律视为"任务没跑起来"。同样因为 fetch 只对网络故障 reject，
+                // 不显式看状态码的话 400/500/504 会被当成成功并静默刷新页面
+                // （504 正是本次改造要消灭的症状，被静默掉最难排查）。
+                if (resp.ok === false) {
+                    return resp.json().then(function(d) {
+                        self._requestFailed = (d && d.message) || ('HTTP ' + resp.status);
+                    }).catch(function() {
+                        self._requestFailed = 'HTTP ' + resp.status;   // 非 JSON 错误页（如网关 HTML）
+                    });
+                }
+            }).catch(function(e) {
+                self._requestFailed = e && e.message ? e.message : String(e);
+            }).then(function() {
+                self._requestDone = true;
+            });
+        } else {
+            self._requestDone = true;
+        }
 
-        var self = this;
         if (self._timer) clearInterval(self._timer);
         self._timer = setInterval(function() { self.poll(); }, 500);
     },
 
     poll: function() {
+        var self = window.ReviewSyncPoller;
         fetch('/review/sync-progress')
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var pct = data.hosts_total > 0 ? Math.round(data.hosts_done / data.hosts_total * 100) : 0;
+                if (data.running) self._sawRunning = true;
+
+                var pct;
+                if (data.percent != null) pct = data.percent;
+                else if (data.hosts_total > 0) pct = Math.round(data.hosts_done / data.hosts_total * 100);
+                else pct = 0;
+
                 var bar = document.getElementById('syncProgressBar');
                 var textEl = document.getElementById('syncProgressText');
                 if (bar) { bar.style.width = pct + '%'; bar.textContent = pct + '%'; }
-                if (textEl) textEl.textContent = data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
+                if (textEl) textEl.textContent = self._describe(data, pct);
+
+                if (data.warnings && data.warnings.length > 0) {
+                    var warnList = document.getElementById('syncWarnList');
+                    if (warnList) {
+                        warnList.innerHTML = data.warnings.slice(-3).map(function(w) {
+                            return '<div>' + w + '</div>';
+                        }).join('');
+                    }
+                }
                 if (data.errors && data.errors.length > 0) {
                     var errList = document.getElementById('syncErrorList');
                     if (errList) {
@@ -152,33 +235,98 @@ window.ReviewSyncPoller = {
                         }).join('');
                     }
                 }
-                if (!data.running) {
-                    if (window.ReviewSyncPoller._timer) {
-                        clearInterval(window.ReviewSyncPoller._timer);
-                        window.ReviewSyncPoller._timer = null;
-                    }
-                    // 同步结束：释放已勾选项，避免 reload 后勾选被 sessionStorage 恢复
-                    if (window.BatchSync) { BatchSync.clearSelection(); }
-                    setTimeout(function() { location.reload(); }, 1500);
-                }
+
+                if (!data.running && self._readyToSettle()) self._settle(data);
             })
             .catch(function(e) {
-                if (window.ReviewSyncPoller._timer) {
-                    clearInterval(window.ReviewSyncPoller._timer);
-                    window.ReviewSyncPoller._timer = null;
-                }
+                if (self._timer) { clearInterval(self._timer); self._timer = null; }
                 showToast('进度查询失败: ' + e.message, 'danger');
             });
     },
 
-    stop: function() {
-        if (this._timer) {
-            clearInterval(this._timer);
-            this._timer = null;
+    // 行级任务（后台初始化）显示 "阶段... 1,200 / 5,000 (24%)"；
+    // 主机级任务（/review/sync-all）沿用 "3/10 消息" 文案，逐字不变。
+    _describe: function(data, pct) {
+        if (data.unit && data.rows_total > 0) {
+            var label = SYNC_PHASE_LABELS[data.phase] || '正在处理';
+            return label + '... ' + this._fmt(data.rows_done) + ' / ' +
+                   this._fmt(data.rows_total) + ' (' + pct + '%)';
         }
+        if (data.unit) {
+            return data.message || (SYNC_PHASE_LABELS[data.phase] || '正在处理') + '...';
+        }
+        return data.hosts_done + '/' + data.hosts_total + ' ' + data.message;
+    },
+
+    // 何时可以判定任务已结束。
+    // 尚未看到 running=true、且发起请求也还没返回时，不能结算 —— 否则首个
+    // 500ms 轮询就会撞上"任务还没开始写进度"，把页面提前刷新掉。
+    _readyToSettle: function() {
+        if (this._settled) return false;
+        if (this._sawRunning || this._requestDone) return true;
+        return false;
+    },
+
+    _settle: function(data) {
+        var self = this;
+        self._settled = true;
+        if (self._timer) { clearInterval(self._timer); self._timer = null; }
+
+        var hide = function() { if (self._modal) self._modal.hide(); };
+        // 调用方的收尾（如恢复初始化按钮）—— 无论走哪条分支都要执行，
+        // 否则一次 409 会让按钮永久卡在"初始化中"。
+        var rewrite = function() {
+            if (self._opts && typeof self._opts.onSettle === 'function') {
+                try { self._opts.onSettle(); } catch (e) { /* 收尾失败不影响主流程 */ }
+            }
+        };
+        rewrite();
+
+        if (self._conflict) {
+            hide();
+            showToast(self._conflict, 'warning');
+            return;   // 任务根本没跑起来，不刷新
+        }
+        if (self._requestFailed) {
+            hide();
+            showToast('请求失败: ' + self._requestFailed, 'danger');
+            return;
+        }
+        // 中止必须先于 success === false 判定：runner 用 success=False 记录中止，
+        // 顺序反了会把"用户主动中止"报成"任务失败"。
+        // 中止路径不刷新、也不释放勾选 —— 数据零变更，用户可直接重试。
+        if (data.aborted) {
+            hide();
+            showToast(data.message || '任务已中止，数据未变更', 'warning');
+            return;
+        }
+        // 严格比较 false：/review/sync-all 不写 success 字段（保持 undefined），
+        // 仍应走 reload 分支 —— 用 if (!data.success) 会把它误判成失败。
+        if (data.success === false) {
+            hide();
+            showToast(data.message || '任务失败', 'danger');
+            return;
+        }
+
+        // 任务成功：释放已勾选项，避免 reload 后勾选被 sessionStorage 恢复
+        if (window.BatchSync) { BatchSync.clearSelection(); }
+
+        // 后台任务期的非致命提示（如"未绑定模板已用默认模板兜底"）逐条补弹 ——
+        // 这些以前挂在响应体 data.skipped_hosts 上，异步化后改走 warnings 通道。
+        if (data.warnings && data.warnings.length) {
+            data.warnings.forEach(function(w, i) {
+                setTimeout(function() { showToast(w, 'warning'); }, 300 * (i + 1));
+            });
+        }
+        setTimeout(function() { location.reload(); }, 1500);
+    },
+
+    stop: function() {
+        // 保持轮询：中止信号只让后台任务在下一个检查点退出，终态仍要靠轮询
+        // 读回来才能关窗/恢复按钮。在这里 clearInterval 会把弹窗永久留在屏幕上。
         fetch('/review/sync-abort', { method: 'POST' })
             .then(function() {
-                showToast('已发送停止信号', 'warning');
+                showToast('已发送停止信号，等待任务中止...', 'warning');
                 var btn = document.getElementById('stopSyncBtn');
                 if (btn) btn.disabled = true;
             })
@@ -299,6 +447,9 @@ window.TriggerDrillDown = (function() {
 // ReviewActions — shared init/import/sync actions for all review pages
 // ========================================================
 window.ReviewActions = {
+    // 初始化：请求立即返回 202，实际工作跑在后台线程里，进度与终态由
+    // ReviewSyncPoller 轮询 /review/sync-progress 得到。
+    // 按钮在整个任务期间保持禁用 —— 提前恢复会在任务未结束时诱发重复点击（409）。
     initReview: function(btnId, url, includeFilters) {
         var btn = document.getElementById(btnId);
         if (!btn) return;
@@ -312,28 +463,19 @@ window.ReviewActions = {
             if (systemEl) body.system = systemEl.value || '';
             if (subsystemEl) body.subsystem = subsystemEl.value || '';
         }
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            showToast(data.message, data.success ? 'success' : 'danger');
-            // Show warning if hosts were skipped (no template)
-            if (data.success && data.data && data.data.skipped_hosts > 0) {
-                setTimeout(function() {
-                    showToast(data.data.skipped_hosts + ' 台主机未绑定模板，已用默认模板兜底初始化', 'warning');
-                }, 500);
+        ReviewSyncPoller.start(function() {
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+        }, {
+            title: '初始化进度',
+            startText: '正在启动初始化任务...',
+            onSettle: function() {
+                btn.disabled = false;
+                btn.innerHTML = orig;
             }
-            if (data.success) setTimeout(function() { location.reload(); }, 2000);
-        })
-        .catch(function(e) {
-            showToast('初始化请求失败: ' + e.message, 'danger');
-        })
-        .then(function() {
-            btn.disabled = false;
-            btn.innerHTML = orig;
         });
     },
 

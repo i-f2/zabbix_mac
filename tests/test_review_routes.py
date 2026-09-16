@@ -171,6 +171,29 @@ class TestReviewExportRoutes:
                 f'{name} Content-Type: {ct}'
 
 
+@pytest.fixture
+def stub_dispatch(app, monkeypatch):
+    """把后台派发换成"立即完成"的桩：不启线程、不连数据库。
+
+    6 条 init 路由改造后是 202 + 后台线程执行。本文件的 smoke 测试只关心
+    路由契约（快速返回、任务规格正确），任务体本身由 test_background_jobs.py
+    与 test_diff_and_merge.py 覆盖。
+
+    桩必须自己释放锁 —— 真实实现里锁是由 worker 线程在 finally 中释放的，
+    桩不释放会让后续用例全部撞 409。
+    """
+    import app as app_module
+    dispatched = []
+
+    def fake_dispatch(job, token):
+        dispatched.append(job)
+        app_module._progress_finish(True, f'{job.name} 完成')
+        app_module._release_sync_lock(token)
+
+    monkeypatch.setattr(app_module, '_dispatch_background_job', fake_dispatch)
+    return dispatched
+
+
 class TestReviewInitRoutes:
     """Review 初始化路由测试"""
 
@@ -182,14 +205,34 @@ class TestReviewInitRoutes:
         ('/item-prototypes-review/initialize', 'item_prototypes_review'),
         ('/trigger-prototypes-review/initialize', 'trigger_prototypes_review'),
     ])
-    def test_initialize(self, client, url, name):
-        """初始化路由"""
+    def test_initialize(self, client, url, name, stub_dispatch):
+        """初始化路由契约：立即返回 202 + 任务已受理（6 条已全部异步化）
+
+        断言 202 是**严格**的 —— 退回同步执行（200）即回归，必须被这个用例拦住：
+        HTTP 请求里跑完整初始化正是本次改造要消灭的 504 成因。
+        """
         resp = client.post(url, json={})
-        assert resp.status_code in (200, 500), f'{name} init 返回 {resp.status_code}'
-        if resp.status_code == 200:
-            data = resp.get_json()
-            assert data is not None
-            assert 'success' in data or 'message' in data
+        assert resp.status_code == 202, \
+            f'{name} init 返回 {resp.status_code}，期望 202（异步受理）'
+        data = resp.get_json()
+        assert data['success'] is True
+        assert data['async'] is True
+        assert data['message']
+        assert len(stub_dispatch) == 1, f'{name} 返回 202 但未派发后台任务'
+        assert stub_dispatch[0].name == f'{name}_init'
+
+    def test_initialize_locked_returns_409(self, client, stub_dispatch):
+        """锁被占用时初始化返回 409，且不派发任务"""
+        import app as app_module
+        token = app_module._acquire_sync_lock()
+        assert token is not None
+        try:
+            resp = client.post('/items-review/initialize', json={})
+            assert resp.status_code == 409, f'期望 409，实际 {resp.status_code}'
+            assert resp.get_json()['success'] is False
+            assert not stub_dispatch
+        finally:
+            app_module._release_sync_lock(token)
 
 
 class TestReviewConfirmRoutes:

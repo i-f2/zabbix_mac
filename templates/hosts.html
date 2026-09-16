@@ -59,4 +59,10 @@
     {% endif %}
     {{ pg(page, per_page, total, total_pages) }}
 </div>
+
+{% include '_sync_progress_modal.html' %}
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/review_common.js') }}"></script>
 {% endblock %}

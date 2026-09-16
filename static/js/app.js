@@ -350,31 +350,46 @@ document.addEventListener('DOMContentLoaded', function () {
 // ========================================================
 // 主机资产同步
 // ========================================================
-async function syncHosts() {
+function syncHosts() {
     const btn = document.getElementById('syncHostsBtn');
     if (!btn) return;
     const originalHTML = btn.innerHTML;
 
-    // Loading 状态
+    // Loading 状态。按钮在整个任务期间保持禁用 —— 提前恢复会在任务未结束时
+    // 诱发重复点击（后台任务锁会返回 409）。恢复统一走 onSettle。
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 同步中...';
-
-    try {
-        const response = await fetch('/host/sync', { method: 'POST' });
-        const data = await response.json();
-
-        showToast(data.message, data.success ? 'success' : 'danger');
-
-        if (data.success) {
-            // 延迟刷新，让用户看到 toast
-            setTimeout(function () { location.reload(); }, 1500);
-        }
-    } catch (error) {
-        showToast('同步请求失败: ' + error.message, 'danger');
-    } finally {
+    const restore = function () {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+    };
+
+    // app.js 全站加载，review_common.js 只在复核页与 hosts.html 加载 —— 缺了
+    // 轮询器就回落到改造前的直接请求，而不是静默失败。
+    if (!window.ReviewSyncPoller) {
+        fetch('/host/sync', { method: 'POST' })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                showToast(data.message, data.success ? 'success' : 'danger');
+                if (data.success) {
+                    setTimeout(function () { location.reload(); }, 1500);
+                }
+            })
+            .catch(function (error) {
+                showToast('同步请求失败: ' + error.message, 'danger');
+            })
+            .then(restore);
+        return;
     }
+
+    // /host/sync 现在是后台任务：请求立即返回 202，进度与结果由轮询器读取。
+    ReviewSyncPoller.start(function () {
+        return fetch('/host/sync', { method: 'POST' });
+    }, {
+        title: '资产同步进度',
+        startText: '正在启动同步任务...',
+        onSettle: restore
+    });
 }
 
 // 通用 toast 通知函数

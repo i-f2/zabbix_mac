@@ -162,27 +162,376 @@ from functools import wraps
 _sync_lock = threading.Lock()
 _sync_abort_event = threading.Event()
 _sync_progress = {
+    # ---- 主机级进度：/review/sync-all 沿用，语义逐位不变 ----
     'running': False,
     'current_host': '',
     'hosts_done': 0,
     'hosts_total': 0,
     'message': '',
-    'errors': []
+    'errors': [],
+    'warnings': [],       # 非致命的用户可见提示，任务结束时由前端逐条补弹
+    # ---- 任务级进度：S1 新增，纯增量 ----
+    'job': '',            # 任务名，如 'items_review_init'
+    'unit': None,         # 行单位名（'条'/'台'），None 表示主机级任务
+    'phase': '',          # 当前阶段，如 'insert' / 'update' / 'delete'
+    'rows_done': 0,
+    'rows_total': 0,
+    'percent': None,      # None → 前端回退到 hosts_done/hosts_total 分支
+    'success': None,      # None=运行中 / True / False
+    'aborted': False,
+    'updated_at': 0.0,    # time.monotonic() 心跳，供僵死锁回收判定
 }
 _sync_progress_lock = threading.Lock()
 
+# ---- 全局同步锁的持有者追踪 ----
+#
+# 锁本身是进程内的 threading.Lock，但**生命周期可以跨请求**：异步初始化让请求线程拿锁、
+# worker 线程释放。用单调递增的 token 标记持有者，使"迟到的释放"成为空操作——
+# 僵死锁被回收并由新任务接管后，原 worker 的 finally 不会误释放别人的锁。
+#
+# ️ 进程内全局状态：当前部署为单进程 Flask。若将来改用 gunicorn workers>1，
+#    各进程各持一份锁，互斥会**静默失效**——届时须换成 pg_advisory_lock 或外部队列。
+_sync_lock_meta_lock = threading.Lock()
+_sync_lock_token_counter = 0
+_sync_held_token = None      # 当前持锁者 token；None 表示锁空闲
+_sync_acquired_at = 0.0      # 请求线程拿到锁的单调时刻
+
+_sync_cfg = _config.get('sync', {}) or {}
+# 单条语句超时：僵死任务的主防线，让 worker 卡在 SQL 上时能被 PostgreSQL 主动掐断
+SYNC_JOB_STATEMENT_TIMEOUT_MS = int(_sync_cfg.get('job_statement_timeout_seconds', 900)) * 1000
+# 硬超时：兜底。超过则强制回收锁，防止一次卡死导致此后所有同步/初始化永久 409
+SYNC_JOB_HARD_TIMEOUT = float(_sync_cfg.get('job_hard_timeout_seconds', 1800))
+
+_SYNC_BUSY_MESSAGE = '另一个同步/初始化操作正在进行，请稍后再试'
+
+
+def _next_sync_token():
+    global _sync_lock_token_counter
+    with _sync_lock_meta_lock:
+        _sync_lock_token_counter += 1
+        return _sync_lock_token_counter
+
+
+def _acquire_sync_lock():
+    """尝试获取全局同步锁。成功返回 token；失败返回 None（含一次僵死锁回收重试）。"""
+    global _sync_held_token, _sync_acquired_at
+    if not _sync_lock.acquire(blocking=False):
+        if not _try_reclaim_stale_lock():
+            return None
+        if not _sync_lock.acquire(blocking=False):
+            return None
+    token = _next_sync_token()
+    with _sync_lock_meta_lock:
+        _sync_held_token = token
+        _sync_acquired_at = time.monotonic()
+    return token
+
+
+def _release_sync_lock(token):
+    """释放全局同步锁。
+
+    token 与当前持有者不符时为空操作——锁已被僵死回收并交给别的任务了，
+    此时释放会误伤新任务。token 为 None（从未拿到锁）同样空操作。
+    """
+    global _sync_held_token
+    if token is None:
+        return
+    with _sync_lock_meta_lock:
+        if _sync_held_token != token:
+            return
+        _sync_held_token = None
+    try:
+        _sync_lock.release()
+    except RuntimeError:
+        pass
+
+
+def _try_reclaim_stale_lock():
+    """兜底回收僵死锁：worker 卡在 statement_timeout 掐不断的地方时，
+    锁会被永久占住，此后所有同步/初始化都 409。
+
+    判定依据取 max(拿锁时刻, 进度心跳)——长任务会持续刷新 updated_at，
+    只有真卡死的任务才会两个时间戳都过期。
+    """
+    global _sync_held_token
+    with _sync_lock_meta_lock:
+        if _sync_held_token is None:
+            return False
+        with _sync_progress_lock:
+            heartbeat = _sync_progress.get('updated_at') or 0.0
+        if time.monotonic() - max(_sync_acquired_at, heartbeat) < SYNC_JOB_HARD_TIMEOUT:
+            return False
+    try:
+        _sync_lock.release()
+    except RuntimeError:
+        return False
+    with _sync_lock_meta_lock:
+        _sync_held_token = None
+    app.logger.warning('检测到僵死同步锁，已强制回收（持有超过 %ss）', SYNC_JOB_HARD_TIMEOUT)
+    return True
+
 
 def _with_sync_lock(f):
-    """装饰器：防止并发同步/初始化操作"""
+    """装饰器：防止并发同步/初始化操作（锁的生命周期不超出本次请求）"""
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not _sync_lock.acquire(blocking=False):
-            return jsonify({'success': False, 'message': '另一个同步/初始化操作正在进行，请稍后再试'}), 409
+        token = _acquire_sync_lock()
+        if token is None:
+            return jsonify({'success': False, 'message': _SYNC_BUSY_MESSAGE}), 409
         try:
+            # 清掉上一个后台任务遗留的任务级字段，避免轮询端拿旧状态误判
+            # （主机级计数保留：/review/sync-all 的 hosts_done/hosts_total 语义不变）
+            _progress_clear_task_fields()
             return f(*args, **kwargs)
         finally:
-            _sync_lock.release()
+            _release_sync_lock(token)
     return wrapper
+
+
+# ============================================================================
+# 后台任务基础设施
+# ============================================================================
+
+# 测试接缝：置 True 时 _dispatch_background_job 在当前线程同步执行任务体，
+# 使 Flask test_client 可以在不引入真实线程/连接的前提下断言任务结果。
+_background_jobs_inline = False
+
+
+def _open_worker_connection():
+    """worker 线程专用的数据库连接。
+
+    绝不能用 get_db_connection()：它把连接缓存在 flask.g 上，而后台线程
+    没有 Flask 应用上下文，g 根本不可用。
+    """
+    cfg = dict(DB_CONFIG)
+    # DB_CONFIG['options'] 携带 `-c search_path=<schema>`（config_loader.get_db_config）。
+    # 这里必须**追加**而不能替换——覆盖掉会让所有查询报 relation "xxx" does not exist。
+    options = cfg.get('options', '')
+    cfg['options'] = f'{options} -c statement_timeout={SYNC_JOB_STATEMENT_TIMEOUT_MS}'.strip()
+    conn = psycopg2.connect(**cfg)
+    conn.set_client_encoding('utf8')
+    return conn
+
+
+def _progress_reset(job_name=''):
+    """派发新任务前重置全局进度。
+
+    必须在 _dispatch_background_job **之前**调用，且立刻把 running 置 True：
+    否则并发请求会看到"锁被占但 running=False"，并因 updated_at 陈旧而误判锁已僵死。
+    """
+    with _sync_progress_lock:
+        _sync_progress.update({
+            'running': True,
+            'current_host': '',
+            'hosts_done': 0,
+            'hosts_total': 0,
+            'message': '',
+            'errors': [],
+            'warnings': [],
+            'job': job_name,
+            'unit': None,
+            'phase': '',
+            'rows_done': 0,
+            'rows_total': 0,
+            'percent': None,
+            'success': None,
+            'aborted': False,
+            'updated_at': time.monotonic(),
+        })
+
+
+def _progress_clear_task_fields(job_name=''):
+    """清除任务级进度字段，**保留主机级计数**（hosts_done/hosts_total 语义不变）。
+
+    同步类路由（_with_sync_lock）在入口调用：否则会继承上一个后台任务遗留的
+    unit / rows_* / success，前端据此走错渲染分支，或因旧的 success=False 而误判
+    本次同步失败、拒不刷新页面。
+    """
+    with _sync_progress_lock:
+        _sync_progress.update({
+            'job': job_name,
+            'unit': None,
+            'phase': '',
+            'rows_done': 0,
+            'rows_total': 0,
+            'percent': None,
+            'success': None,
+            'aborted': False,
+            'warnings': [],
+        })
+
+
+def _progress_finish(success, message, aborted=False):
+    """任务终态写入。前端据此决定"弹窗收尾 + reload"还是"只报错不刷新"。"""
+    with _sync_progress_lock:
+        if success and _sync_progress['rows_total']:
+            _sync_progress['rows_done'] = _sync_progress['rows_total']
+            _sync_progress['percent'] = 100
+        _sync_progress.update({
+            'running': False,
+            'success': success,
+            'aborted': aborted,
+            'message': message,
+            'current_host': '',
+            'updated_at': time.monotonic(),
+        })
+
+
+def _progress_error(message):
+    with _sync_progress_lock:
+        _sync_progress['errors'].append(message)
+
+
+class _BackgroundJob:
+    """一个后台任务的规格。
+
+    run(ctx, cur) 在 worker 线程内被调用，收到的 cur 属于一个**单一事务**：
+    任务体只负责读写，commit / rollback 归 _run_background_job 所有。
+    """
+
+    __slots__ = ('name', 'run', 'unit', 'accepted_message')
+
+    def __init__(self, name, run, unit=None, accepted_message=None):
+        self.name = name
+        self.run = run
+        self.unit = unit
+        self.accepted_message = accepted_message or '初始化任务已后台启动，正在执行...'
+
+
+class _JobContext:
+    """worker 线程内的任务上下文：进度上报 + 中止检查 + 连接访问。
+
+    report() 与 should_abort() 可直接作为 progress_cb / abort_cb 传给
+    _diff_and_merge。
+    """
+
+    def __init__(self, job, conn):
+        self.job = job
+        self.conn = conn
+        self.phase = ''
+
+    def report(self, phase, done, total):
+        """行级进度：progress_cb 契约。"""
+        with _sync_progress_lock:
+            _sync_progress['phase'] = phase
+            _sync_progress['unit'] = self.job.unit
+            _sync_progress['rows_done'] = done
+            _sync_progress['rows_total'] = total
+            _sync_progress['percent'] = int(done * 100 / total) if total else 0
+            _sync_progress['updated_at'] = time.monotonic()
+        self.phase = phase
+
+    def report_phase(self, phase, message=''):
+        """阶段切换：不含行计数，用于"读源数据/写库"这类粗粒度阶段。"""
+        with _sync_progress_lock:
+            _sync_progress['phase'] = phase
+            _sync_progress['unit'] = self.job.unit
+            if message:
+                _sync_progress['message'] = message
+            _sync_progress['updated_at'] = time.monotonic()
+        self.phase = phase
+
+    def report_hosts(self, done, total, current=''):
+        """主机级进度：给以主机为单位的任务用（如 /host/sync）。"""
+        with _sync_progress_lock:
+            _sync_progress['hosts_done'] = done
+            _sync_progress['hosts_total'] = total
+            if current:
+                _sync_progress['current_host'] = current
+            _sync_progress['updated_at'] = time.monotonic()
+
+    def warn(self, message):
+        """记一条非致命提示。前端在任务结束时会逐条弹 warning toast。"""
+        with _sync_progress_lock:
+            _sync_progress['warnings'].append(message)
+
+    def should_abort(self):
+        """abort_cb 契约。"""
+        return _sync_abort_event.is_set()
+
+
+def _run_background_job(job, token):
+    """worker 线程入口。**事务边界在这里，且是全流程唯一的 commit 点。**
+
+    任务体自身不得 commit——中途 commit 会让"中止即数据零变更"的承诺失效
+    （webscenarios 的两个 init 依赖 TRUNCATE 的事务性回滚）。
+    """
+    conn = None
+    try:
+        conn = _open_worker_connection()
+        ctx = _JobContext(job, conn)
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            message = job.run(ctx, cur)
+        conn.commit()
+        _progress_finish(True, message or f'{job.name} 完成')
+    except _JobAborted:
+        _safe_rollback(conn)
+        _progress_finish(False, '任务已中止，数据未变更', aborted=True)
+    except BaseException as exc:                     # noqa: BLE001 — 含 KeyboardInterrupt
+        _safe_rollback(conn)
+        detail = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        app.logger.exception('后台任务 %s 失败', job.name)
+        _progress_error(f'{job.name}: {detail}')
+        _progress_finish(False, f'任务失败：{detail}')
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _release_sync_lock(token)
+
+
+def _safe_rollback(conn):
+    if conn is None:
+        return
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+
+
+def _dispatch_background_job(job, token):
+    """派发任务。测试模式下同线程执行，使 test_client 能直接断言结果。"""
+    if _background_jobs_inline:
+        _run_background_job(job, token)
+        return
+    threading.Thread(target=_run_background_job, args=(job, token),
+                     name=f'zac-job-{job.name}', daemon=True).start()
+
+
+def _with_background_sync_lock(job_name):
+    """装饰器：请求线程拿锁 → 派发后台任务 → worker 在线程内释放锁。
+
+    与 _with_sync_lock 的唯一区别是**锁的生命周期跨越请求**。被装饰的路由函数
+    只做参数校验并返回 _BackgroundJob 规格；返回非 job 对象（如 400 响应）时
+    按普通响应返回并立即释放锁。
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            token = _acquire_sync_lock()
+            if token is None:
+                return jsonify({'success': False, 'message': _SYNC_BUSY_MESSAGE}), 409
+            try:
+                # 中止信号必须在拿到锁之后、派发之前清除：上一轮残留的信号
+                # 会立刻毒化新任务（现有 sync-all 也是这么做的）。
+                _sync_abort_event.clear()
+                _progress_reset(job_name)
+                job = f(*args, **kwargs)
+                if not isinstance(job, _BackgroundJob):
+                    _release_sync_lock(token)
+                    return job
+            except Exception:
+                _release_sync_lock(token)
+                raise
+            _dispatch_background_job(job, token)
+            return jsonify({'success': True, 'async': True,
+                            'message': job.accepted_message}), 202
+        # 供测试断言"这条路由确实走后台"，func.__wrapped__ 无法区分两个装饰器
+        wrapper.__background_job_name__ = job_name
+        return wrapper
+    return decorator
 
 def _safe_pagination(page, per_page):
     """安全分页参数：page>=1, per_page 在 1-200 之间"""
@@ -269,6 +618,65 @@ def _safe_sql_value(v):
         return json.dumps(v, ensure_ascii=False)
     return v
 
+
+# 删除批的分片大小。删除走单条 `WHERE id = ANY(%s)`，参数量远小于 upsert，
+# 故可以放大分片以减少往返而不逼近 PostgreSQL 的 65535 参数上限。
+_DELETE_CHUNK_SIZE = 500
+
+# 重建式初始化（TRUNCATE + 全量 INSERT）的分片大小。与 _diff_and_merge 的
+# page_size 语义一致：分片只影响往返次数与进度粒度，不影响事务原子性。
+_REBUILD_CHUNK_SIZE = 500
+
+
+def _chunked(seq, size):
+    """把序列切成固定大小的批次（size<=0 时不切分）"""
+    if size <= 0:
+        yield seq
+        return
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
+
+
+class _JobAborted(Exception):
+    """后台任务被 /review/sync-abort 中止。
+
+    由 _run_background_job 统一捕获并回滚事务——任务体自身不处理此异常。
+    """
+
+
+def _emit(progress_cb, phase, done, total):
+    """进度上报。回调抛异常绝不拖垮事务，故整体吞掉。"""
+    if progress_cb is None:
+        return
+    try:
+        progress_cb(phase, done, total)
+    except Exception:
+        pass
+
+
+def _check_abort(abort_cb):
+    """中止检查点。abort_cb 为 None 时为空操作（现有同步调用点不受影响）。"""
+    if abort_cb is not None and abort_cb():
+        raise _JobAborted()
+
+
+def _dedupe_by_key(rows, unique_keys):
+    """按唯一键去重，保留首次出现的行。
+
+    ON CONFLICT ... DO UPDATE 不允许同一条语句内两行命中同一冲突键
+    （ERROR: ON CONFLICT DO UPDATE command cannot affect row a second time），
+    而旧的 DO NOTHING 会静默吸收重复行，故批量更新前必须先按唯一键去重。
+    """
+    seen = set()
+    result = []
+    for src in rows:
+        key = tuple(str(src.get(k, '')) for k in unique_keys)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(src)
+    return result
+
 def _diff_and_merge(
     cur: psycopg2.extensions.cursor,
     table_name: str,
@@ -277,6 +685,9 @@ def _diff_and_merge(
     new_rows: list,
     existing_rows: list,
     all_insert_cols: list,
+    progress_cb=None,
+    abort_cb=None,
+    page_size: int = 100,
 ) -> dict:
     """基于 Diff 算法的复核表增量合并
 
@@ -321,10 +732,9 @@ def _diff_and_merge(
                 str(src.get(col, '')) != str(existing.get(col, ''))
                 for col in content_columns
             )
-            if changed and existing.get('sync_status') == 'synced':
-                updates.append((existing['id'], src))
-            elif changed:
-                # 未 synced 的记录内容变了，也要更新内容但不改变状态
+            if changed:
+                # 内容变更：无论原 sync_status 是 synced 还是待同步，都更新内容并
+                # 标记为 update（下游 UPDATE 语句对两种情形写入相同的状态，故合并分支）
                 updates.append((existing['id'], src))
             elif existing.get('sync_status') == 'synced':
                 unchanged_synced += 1
@@ -338,51 +748,88 @@ def _diff_and_merge(
             deletions.append(row['id'])
 
     # --- 批量执行 ---
+    # 三个阶段共用一套完成度计数，按 page_size 分片以产生可见进度与中止检查点
     col_list = ", ".join(all_insert_cols)
-    placeholders = ", ".join(f"%s" for _ in all_insert_cols)
     conflict_cols = ", ".join(unique_keys)
+    from psycopg2.extras import execute_values
 
-    # 1. INSERT new
+    total_ops = len(inserts) + len(updates) + len(deletions)
+    done_ops = 0
+
+    # 1. INSERT new —— 保持 ON CONFLICT DO NOTHING 原样不动。
+    #    带筛选条件初始化时，"已存在但不符合筛选条件"的行会落进 inserts，
+    #    改走 DO UPDATE 会改变该边界行为并把它们错标成 change_type='new'。
     if inserts:
-        insert_values = []
-        for src in inserts:
-            vals = [_safe_sql_value(src.get(c)) for c in all_insert_cols]
-            vals += ['pending_confirm', 'new']
-            insert_values.append(vals)
-        icols = col_list + ", sync_status, change_type"
-        iplaceholders = placeholders + ", %s, %s"
-        from psycopg2.extras import execute_values
-        execute_values(cur,
-            f"INSERT INTO {table_name} ({icols}) VALUES %s ON CONFLICT ({conflict_cols}) DO NOTHING",
-            insert_values, page_size=100)
+        _emit(progress_cb, 'insert', done_ops, total_ops)
+        for chunk in _chunked(inserts, page_size):
+            _check_abort(abort_cb)
+            insert_values = []
+            for src in chunk:
+                vals = [_safe_sql_value(src.get(c)) for c in all_insert_cols]
+                vals += ['pending_confirm', 'new']
+                insert_values.append(vals)
+            execute_values(cur,
+                f"INSERT INTO {table_name} ({col_list}, sync_status, change_type) "
+                f"VALUES %s ON CONFLICT ({conflict_cols}) DO NOTHING",
+                insert_values, page_size=len(chunk))
+            done_ops += len(chunk)
+            _emit(progress_cb, 'insert', done_ops, total_ops)
 
-    # 2. UPDATE changed
+    # 2. UPDATE changed —— 折进 upsert（一条语句顶 N 条 UPDATE）
+    #
+    #    不用 UPDATE ... FROM (VALUES %s)：execute_values 内部用 mogrify 把参数内联成
+    #    字面量，而 FROM (VALUES ...) 的 RTE 没有目标列的类型上下文，字符串字面量一律
+    #    解析为 text。实测（postgres:13）只有 items_review.preprocessing 会炸：
+    #      DatatypeMismatch: column "preprocessing" is of type jsonb
+    #                        but expression is of type text          (42804)
+    #    —— 它是 6 张复核表里唯一没有从 text 隐式赋值转换的列。整型列不受影响
+    #    （9101 内联为整型字面量，解析为 integer），varchar 列也能经 text 与 varchar
+    #    的二元兼容比较正常收敛。ON CONFLICT ... DO UPDATE SET c = EXCLUDED.c 复用
+    #    INSERT 已有的类型上下文，对该 jsonb 列同样成立，故不必为每张表分情况处理。
+    #
+    #    语义等价：updates 中每条都来自 existing_by_key，必然命中唯一键 → 原地更新，
+    #    id / created_at / confirmed / status_verification 均不在 SET 列表中，全部保留。
     if updates:
-        for existing_id, src in updates:
-            set_parts = ", ".join(
-                f"{c} = %s" for c in all_insert_cols
-            )
-            vals = [_safe_sql_value(src.get(c)) for c in all_insert_cols]
-            cur.execute(f"""
-                UPDATE {table_name}
-                SET {set_parts},
-                    sync_status = 'pending_confirm',
-                    change_type = 'update',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            """, vals + [existing_id])
+        _emit(progress_cb, 'update', done_ops, total_ops)
+        # ON CONFLICT DO UPDATE 不允许一条语句内两行命中同一冲突键
+        # （cannot affect row a second time），而旧的 DO NOTHING 会静默吸收重复行
+        update_rows = _dedupe_by_key([src for _id, src in updates], unique_keys)
+        set_parts = ", ".join(f"{c} = EXCLUDED.{c}" for c in all_insert_cols)
+        for chunk in _chunked(update_rows, page_size):
+            _check_abort(abort_cb)
+            update_values = [
+                [_safe_sql_value(src.get(c)) for c in all_insert_cols]
+                for src in chunk
+            ]
+            execute_values(cur,
+                f"INSERT INTO {table_name} ({col_list}) VALUES %s "
+                f"ON CONFLICT ({conflict_cols}) DO UPDATE SET "
+                f"{set_parts}, "
+                f"sync_status = 'pending_confirm', "
+                f"change_type = 'update', "
+                f"updated_at = CURRENT_TIMESTAMP",
+                update_values, page_size=len(chunk))
+            done_ops += len(chunk)
+            _emit(progress_cb, 'update', done_ops, total_ops)
 
-    # 3. UPDATE deletions
+    # 3. UPDATE deletions —— 单条语句覆盖整批 id。
+    #    psycopg2 把 Python list 适配成 ARRAY[...] 字面量（类型安全，无推断风险）；
+    #    `if deletions:` 同时挡住空数组的 "cannot determine type of empty array"。
+    #    `AND sync_status = 'synced'` 守卫逐字保留：并发确认过的行不得被下线。
     if deletions:
-        for del_id in deletions:
+        _emit(progress_cb, 'delete', done_ops, total_ops)
+        for chunk in _chunked(deletions, _DELETE_CHUNK_SIZE):
+            _check_abort(abort_cb)
             cur.execute(f"""
                 UPDATE {table_name}
                 SET sync_status = 'pending_delete',
                     change_type = 'delete',
                     confirmed = false,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND sync_status = 'synced'
-            """, (del_id,))
+                WHERE id = ANY(%s) AND sync_status = 'synced'
+            """, (chunk,))
+            done_ops += len(chunk)
+            _emit(progress_cb, 'delete', done_ops, total_ops)
 
     return {
         'new': len(inserts),
@@ -390,6 +837,447 @@ def _diff_and_merge(
         'delete': len(deletions),
         'unchanged': unchanged_synced + unchanged_pending
     }
+
+
+# ============================================================================
+# Diff 式初始化：4 条路由（items / triggers / 两个原型）共用的任务体
+# ============================================================================
+
+def _review_filter_sql(prefix, system_filter, subsystem_filter):
+    """复核表/主机表的 system + subsystem 筛选子句。
+
+    prefix 用于区分同名列：复核表用 ''，主机表用 'h.'。
+    与各路由改造前的拼法逐字一致（同一份 where 也用于"现有记录"与"主机统计"）。
+    """
+    parts = ["1=1"]
+    params = []
+    if system_filter:
+        parts.append(f"{prefix}system = %s")
+        params.append(system_filter)
+    if subsystem_filter:
+        parts.append(f"{prefix}subsystem = %s")
+        params.append(subsystem_filter)
+    return " AND ".join(parts), params
+
+
+def _items_init_banner(cur, default_tmpl, system_filter, subsystem_filter):
+    """items 初始化特有：统计未绑定模板、改走默认模板兜底的主机数。
+
+    这段信息以前挂在响应体的 data.skipped_hosts 上，由前端弹一条 warning toast。
+    异步化后响应体不再携带统计，改由 _JobContext.warn() 走 warnings 通道，
+    前端在任务结束时逐条补弹 —— 用户的可见行为不变。
+    """
+    host_where, host_params = _review_filter_sql('h.', system_filter, subsystem_filter)
+    cur.execute(
+        f"SELECT COUNT(*) AS cnt FROM hosts h WHERE {host_where} "
+        f"AND (h.template_id IS NULL OR h.template_id = '')", host_params)
+    no_template = cur.fetchone()['cnt']
+    if no_template <= 0:
+        return None
+    return f'{no_template} 台主机未绑定模板，已用默认模板兜底初始化'
+
+
+def _job_body_diff_init(spec, ctx, cur):
+    """diff 式初始化的任务体。事务边界归 _run_background_job —— 这里绝不 commit。"""
+    table = spec['table']
+    system_filter = spec['system']
+    subsystem_filter = spec['subsystem']
+    default_tmpl = spec['default_template_name']
+
+    # 1. 现有记录（带筛选时只覆盖筛选范围，与改造前一致）
+    ctx.report_phase('load', '正在读取现有复核记录...')
+    existing_where, existing_params = _review_filter_sql('', system_filter, subsystem_filter)
+    cur.execute(f"SELECT * FROM {table} WHERE {existing_where}", existing_params)
+    existing_rows = cur.fetchall()
+
+    # 2. 上游最新数据
+    ctx.report_phase('source', '正在读取上游模板数据...')
+    where_clause, query_params = spec['upstream_where'](
+        default_tmpl, system_filter, subsystem_filter)
+    cur.execute(spec['upstream_sql'](where_clause), query_params)
+    new_rows = cur.fetchall()
+
+    # 3. 差异比对 + 批量落库（带进度与中止检查点）
+    ctx.report_phase('diff', f'正在比对并写入 {table} ...')
+    result = _diff_and_merge(
+        cur, table, spec['unique_keys'], spec['content_columns'],
+        new_rows, existing_rows, spec['all_insert_cols'],
+        progress_cb=ctx.report, abort_cb=ctx.should_abort,
+    )
+
+    msg = (f'{table} 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，'
+           f'标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条')
+    banner = spec.get('banner')
+    if banner:
+        warning = banner(cur, default_tmpl, system_filter, subsystem_filter)
+        if warning:
+            ctx.warn(warning)
+            msg += f'（{warning}）'
+    return msg
+
+
+def _diff_init_job(spec, data):
+    """请求线程：把配置与筛选条件**快照**进 job 规格，再交给 worker。
+
+    worker 线程没有 Flask 应用上下文，不得再读 app.config / request。
+    """
+    params = dict(spec)
+    # 两个原型路由改造前**完全忽略** system/subsystem（前端也没传），
+    # 故 spec 用 accepts_filters=False 显式关掉，而不是默认开启 ——
+    # 否则一个带参数的 POST 会悄悄把筛选应用上去，与改造前不一致。
+    if spec.get('accepts_filters', True):
+        params['system'] = (data.get('system') or '').strip()
+        params['subsystem'] = (data.get('subsystem') or '').strip()
+    else:
+        params['system'] = params['subsystem'] = ''
+    params['default_template_name'] = app.config['DEFAULT_TEMPLATE_NAME']
+    return _BackgroundJob(
+        spec['job_name'],
+        lambda ctx, cur: _job_body_diff_init(params, ctx, cur),
+        unit='条',
+    )
+
+
+_ITEMS_INIT_SPEC = {
+    'job_name': 'items_review_init',
+    'table': 'items_review',
+    'unique_keys': ['item_id', 'host_ip'],
+    'all_insert_cols': [
+        'item_id', 'host_ip', 'item_key', 'name', 'type', 'value_type', 'delay',
+        'description', 'units', 'multiplier', 'delta', 'history', 'trends',
+        'status', 'template_name', 'master_item', 'preprocessing',
+        'system', 'subsystem', 'in_room',
+    ],
+    'content_columns': [
+        'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
+        'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
+        'master_item', 'preprocessing', 'system', 'subsystem', 'in_room',
+    ],
+    # 关键修复（保留原注释）：COALESCE(NULLIF(h.template_id, ''), %s) 让未绑定模板的
+    # 主机也能用 DEFAULT_TEMPLATE_NAME 匹配 items，避免初始化跳过这类主机
+    'upstream_where': lambda tmpl, sysf, subf: (
+        " AND ".join(
+            ["i.template_name = COALESCE(NULLIF(h.template_id, ''), %s)"] +
+            (["h.system = %s"] if sysf else []) +
+            (["h.subsystem = %s"] if subf else [])
+        ),
+        [tmpl] + ([sysf] if sysf else []) + ([subf] if subf else []),
+    ),
+    'upstream_sql': lambda where_clause: f"""
+        SELECT
+            i.id as item_id,
+            h.name as host_ip,
+            i.item_key, i.name, i.type, i.value_type, i.delay,
+            i.description, i.units, i.multiplier, i.delta, i.history, i.trends,
+            i.status, i.template_name, i.master_item, i.preprocessing,
+            h.system, h.subsystem, h.in_room
+        FROM items i
+        CROSS JOIN hosts h
+        WHERE {where_clause}
+        ORDER BY i.id, h.name
+    """,
+    'banner': _items_init_banner,
+}
+
+
+# 说明：与 items 的差异只有两处 —— 上游 WHERE 用 tr.template_name（无 NULLIF 兜底，
+# 改造前即如此），以及 expression 里的 {host: → {<主机名>: 替换。列定义逐字沿用原路由。
+_TRIGGERS_INIT_SPEC = {
+    'job_name': 'triggers_review_init',
+    'table': 'triggers_review',
+    'unique_keys': ['trigger_id', 'host_ip'],
+    'all_insert_cols': [
+        'trigger_id', 'host_ip', 'name', 'expression', 'priority', 'description',
+        'status', 'template_name', 'system', 'subsystem', 'in_room',
+    ],
+    'content_columns': [
+        'name', 'expression', 'priority', 'description', 'status',
+        'template_name', 'system', 'subsystem', 'in_room',
+    ],
+    'upstream_where': lambda tmpl, sysf, subf: (
+        " AND ".join(
+            ["tr.template_name = %s", "h.template_id = tr.template_name"] +
+            (["h.system = %s"] if sysf else []) +
+            (["h.subsystem = %s"] if subf else [])
+        ),
+        [tmpl] + ([sysf] if sysf else []) + ([subf] if subf else []),
+    ),
+    'upstream_sql': lambda where_clause: f"""
+        SELECT
+            tr.id as trigger_id,
+            h.name as host_ip,
+            tr.name,
+            REPLACE(tr.expression, '{{host:', '{{' || h.name || ':') as expression,
+            tr.priority,
+            tr.description,
+            tr.status,
+            tr.template_name,
+            h.system,
+            h.subsystem,
+            h.in_room
+        FROM triggers tr
+        CROSS JOIN hosts h
+        WHERE {where_clause}
+        ORDER BY tr.id, h.name
+    """,
+}
+
+
+# 两个原型路由改造前不读任何筛选参数（前端 includeFilters=false，后端也不看），
+# 故 accepts_filters=False 把参数固定为空。
+_ITEM_PROTOTYPES_INIT_SPEC = {
+    'job_name': 'item_prototypes_review_init',
+    'table': 'item_prototypes_review',
+    'accepts_filters': False,
+    'unique_keys': ['item_prototype_id', 'host_ip'],
+    'all_insert_cols': [
+        'item_prototype_id', 'discovery_rule_id', 'host_ip', 'name', 'key',
+        'value_type', 'delay', 'description', 'units', 'multiplier', 'delta',
+        'history', 'trends', 'status', 'system', 'subsystem', 'in_room',
+    ],
+    'content_columns': [
+        'name', 'key', 'value_type', 'delay', 'description', 'units',
+        'multiplier', 'delta', 'history', 'trends', 'status', 'system', 'subsystem', 'in_room',
+    ],
+    'upstream_where': lambda tmpl, sysf, subf: (
+        "dr.template_name = %s AND h.template_id = dr.template_name", [tmpl]),
+    'upstream_sql': lambda where_clause: f"""
+        SELECT
+            ip.id as item_prototype_id,
+            ip.discovery_rule_id,
+            h.name as host_ip,
+            ip.name, ip.key, ip.value_type, ip.delay,
+            ip.description, ip.units, ip.multiplier, ip.delta, ip.history, ip.trends,
+            ip.status, h.system, h.subsystem, h.in_room
+        FROM item_prototypes ip
+        CROSS JOIN hosts h
+        JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
+        WHERE {where_clause}
+        ORDER BY ip.id, h.name
+    """,
+}
+
+_TRIGGER_PROTOTYPES_INIT_SPEC = {
+    'job_name': 'trigger_prototypes_review_init',
+    'table': 'trigger_prototypes_review',
+    'accepts_filters': False,
+    'unique_keys': ['trigger_prototype_id', 'host_ip'],
+    'all_insert_cols': [
+        'trigger_prototype_id', 'discovery_rule_id', 'host_ip', 'description',
+        'expression', 'priority', 'status', 'system', 'subsystem', 'in_room',
+    ],
+    'content_columns': [
+        'description', 'expression', 'priority', 'status', 'system', 'subsystem', 'in_room',
+    ],
+    'upstream_where': lambda tmpl, sysf, subf: (
+        "dr.template_name = %s AND h.template_id = dr.template_name", [tmpl]),
+    'upstream_sql': lambda where_clause: f"""
+        SELECT
+            tp.id as trigger_prototype_id,
+            tp.discovery_rule_id,
+            h.name as host_ip,
+            tp.description,
+            REPLACE(tp.expression, '{{host:', '{{' || h.name || ':') as expression,
+            tp.priority, tp.status, h.system, h.subsystem, h.in_room
+        FROM trigger_prototypes tp
+        CROSS JOIN hosts h
+        JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
+        WHERE {where_clause}
+        ORDER BY tp.id, h.name
+    """,
+}
+
+
+def _job_body_rebuild(spec, ctx, cur):
+    """全量重建式初始化的任务体（TRUNCATE + 批量 INSERT）。事务边界归 _run_background_job。
+
+    **与改造前的关键差别：先读源数据、再 TRUNCATE。** 原实现是 TRUNCATE 在前，
+    于是整张复核表在慢查询（webscenarios 是 4 个 UNION ALL 全表扫描）期间一直持
+    ACCESS EXCLUSIVE 锁，任何并发页面渲染都被阻塞；异步化后这个窗口只会更长。
+
+    中止检查刻意放在 TRUNCATE **之前**：此时中止只是回滚，表内容原样保留。
+    TRUNCATE 在 PostgreSQL 里是事务性的（行与序列一起回滚），所以即便写在
+    TRUNCATE 之后中止，"中止即数据零变更"的承诺依然成立。
+    """
+    from psycopg2.extras import execute_values
+
+    table = spec['table']
+
+    # 1. 读源数据（此时还没动复核表）
+    ctx.report_phase('source', spec['source_message'])
+    where_suffix, params = spec['source_where'](spec['system'], spec['subsystem'])
+    cur.execute(spec['source_sql'](where_suffix), params)
+    rows = cur.fetchall()
+
+    # 2. 构建待写入行
+    ctx.report_phase('build', spec.get('build_message', '正在组装记录...'))
+    insert_rows = spec['build_rows'](rows, spec['room_mapping'])
+
+    if not insert_rows:
+        cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
+        return spec['empty_message']
+
+    _check_abort(ctx.should_abort)
+
+    # 3. 清空复核表（与写入同处一个事务）
+    cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
+
+    # 4. 分片批量写入
+    ctx.report_phase('insert', f'正在写入 {table} ...')
+    sql = f"INSERT INTO {table} ({', '.join(spec['columns'])}) VALUES %s"
+    total = len(insert_rows)
+    done = 0
+    for chunk in _chunked(insert_rows, _REBUILD_CHUNK_SIZE):
+        _check_abort(ctx.should_abort)
+        execute_values(cur, sql, chunk, page_size=len(chunk))
+        done += len(chunk)
+        ctx.report('insert', done, total)
+
+    return spec['done_message'](total)
+
+
+def _rebuild_init_job(spec, data):
+    """请求线程：快照筛选条件与机房映射，再交给 worker。"""
+    params = dict(spec)
+    if spec.get('accepts_filters', True):
+        params['system'] = (data.get('system') or '').strip()
+        params['subsystem'] = (data.get('subsystem') or '').strip()
+    else:
+        params['system'] = params['subsystem'] = ''
+    # _config 是模块级配置，后台线程可安全读取；这里快照是为了让任务规格自洽
+    params['room_mapping'] = _config.get('zabbix_room_mapping', {}) or {}
+    return _BackgroundJob(
+        spec['job_name'],
+        lambda ctx, cur: _job_body_rebuild(params, ctx, cur),
+        unit='条',
+    )
+
+
+def _empty_source_where(system_filter, subsystem_filter):
+    """无筛选能力的数据源：返回空后缀（web-triggers 重建只读已确认场景）。"""
+    return '', []
+
+
+def _webscenarios_source_where(system_filter, subsystem_filter):
+    """webscenarios 的筛选以 ` AND col = %s` 后缀形式拼进 4 个 UNION ALL 分支。
+
+    后缀在 SQL 里出现 4 次而参数只传 1 份 —— psycopg2 的位置参数可重复引用，
+    改造前即如此。
+    """
+    suffix = ''
+    params = []
+    if system_filter:
+        suffix += " AND system = %s"
+        params.append(system_filter)
+    if subsystem_filter:
+        suffix += " AND subsystem = %s"
+        params.append(subsystem_filter)
+    return suffix, params
+
+
+def _build_webscenario_rows(rows, room_mapping):
+    """注入机房对应的 Zabbix Server IP，生成 `[{ip}] Web scenario [{name}] failed`。"""
+    insert_rows = []
+    for r in rows:
+        room = (r.get('in_room') or '').strip()
+        zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room)) or 'Unknown'
+        new_name = f"[{zabbix_ip}] Web scenario [{r['name']}] failed"
+        insert_rows.append((
+            r['system'], r['subsystem'], r['host'],
+            new_name, r['url'], r['status_code'], r['in_room'],
+        ))
+    return insert_rows
+
+
+def _build_web_trigger_rows(rows, room_mapping):
+    """由已确认的 Web 场景派生 Web 触发器：名称带机房 IP，表达式指向该场景。"""
+    insert_rows = []
+    for r in rows:
+        room = (r.get('in_room') or '').strip()
+        zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room)) or 'Unknown'
+        scenario_name = r['web_scenario_name']
+        host = r['host']
+        trigger_name = f"[{zabbix_ip}] Web scenario [{scenario_name}] failed"
+        expression = "{" + f"{host}:web.test.fail[{scenario_name}].count(#3,0,ne)" + "}>2"
+        insert_rows.append((
+            host, scenario_name, trigger_name, expression,
+            3,   # priority: warning
+            0,   # status: enabled
+            r.get('system', ''), r.get('subsystem', ''), r.get('in_room', ''),
+        ))
+    return insert_rows
+
+
+_WEBSCENARIOS_INIT_SPEC = {
+    'job_name': 'webscenarios_review_init',
+    'table': 'webscenario_items_review',
+    'columns': ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room'],
+    'source_message': '正在读取 Web 场景源数据...',
+    'build_message': '正在注入机房 IP 并组装记录...',
+    'source_where': _webscenarios_source_where,
+    'source_sql': lambda where_suffix: f"""
+        SELECT system, subsystem, host, name, url, status_code, in_room
+        FROM (
+            SELECT system, subsystem,
+                'Zabbix server' as host,
+                system || '_' || subsystem || '_clb' as name,
+                nginx_clb as url, '200' as status_code, in_room
+            FROM webscenario_items
+            WHERE nginx_clb IS NOT NULL AND nginx_clb != ''{where_suffix}
+            UNION ALL
+            SELECT system, subsystem,
+                'Zabbix server' as host,
+                system || '_' || subsystem || '_nginx' as name,
+                nginx as url, '200' as status_code, in_room
+            FROM webscenario_items
+            WHERE nginx IS NOT NULL AND nginx != ''{where_suffix}
+            UNION ALL
+            SELECT system, subsystem,
+                'Zabbix server' as host,
+                system || '_' || subsystem || '_clb_direct' as name,
+                clb as url, '200' as status_code, in_room
+            FROM webscenario_items
+            WHERE clb IS NOT NULL AND clb != ''{where_suffix}
+            UNION ALL
+            SELECT system, subsystem,
+                'Zabbix server' as host,
+                system || '_' || subsystem || '_pod' as name,
+                pod as url, '200' as status_code, in_room
+            FROM webscenario_items
+            WHERE pod IS NOT NULL AND pod != ''{where_suffix}
+        ) src
+        ORDER BY name
+    """,
+    'build_rows': _build_webscenario_rows,
+    'empty_message': '源表无数据，复核表已清空',
+    'done_message': lambda n: f'webscenario_items_review 初始化完成：插入 {n} 条记录',
+}
+
+
+_WEB_TRIGGERS_INIT_SPEC = {
+    'job_name': 'web_triggers_review_init',
+    'table': 'web_trigger_review',
+    'columns': ['host', 'web_scenario_name', 'trigger_name', 'expression',
+                'priority', 'status', 'system', 'subsystem', 'in_room'],
+    'source_message': '正在读取已确认的 Web 场景...',
+    'build_message': '正在注入机房 IP 并生成触发器记录...',
+    'accepts_filters': False,          # 改造前不读任何筛选参数
+    'source_where': _empty_source_where,
+    'source_sql': lambda where_suffix: f"""
+        SELECT
+            host,
+            name as web_scenario_name,
+            system,
+            subsystem,
+            in_room
+        FROM webscenario_items_review
+        WHERE confirmed = TRUE{where_suffix}
+        ORDER BY host, name
+    """,
+    'build_rows': _build_web_trigger_rows,
+    'empty_message': 'web_trigger_review 初始化完成：无已确认的 Web 场景，表已清空',
+    'done_message': lambda n: f'web_trigger_review 初始化完成：插入 {n} 条记录',
+}
 
 
 @app.context_processor
@@ -1892,18 +2780,14 @@ def _load_dr_configs_with_filters(cur, dr_ids):
     return dr_configs
 
 
-@app.route('/host/sync', methods=['POST'])
-def sync_hosts():
-    """从 ops.sub_assets 同步主机资产到 zabbix_mac.hosts
+def _job_body_host_sync(spec, ctx, cur):
+    """任务体：ops.sub_assets → hosts 的多模板拆分同步。事务边界归 _run_background_job。
 
-    多模板拆分：sub_assets.template_id 可能为逗号分隔的多模板（如 '21001,91001,60001'），
-    按逗号拆分为多条 hosts 记录（每条绑定一个模板，唯一键 (name, template_id)）。
-    幂等性：以 (name, template_id) 为组合键 UPSERT，重复执行不产生重复数据。
-    清理：仅删除「源资产中存在、但模板集合已不再包含」的旧绑定；
-          不在源资产中的手动主机不受影响。
-    事务控制：整批操作在一个事务中，失败即 rollback。
+    批量写：改造前每行一次 cur.execute（2000 台 ≈ 4000+ 次往返），现按
+    _DELETE_CHUNK_SIZE 分片走 execute_values。
     """
-    conn = get_db_connection()
+    from psycopg2.extras import execute_values
+
     stats = {
         'processed_sub_assets': 0,
         'created_hosts_count': 0,
@@ -1912,93 +2796,131 @@ def sync_hosts():
         'deleted_count': 0,
     }
 
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 读取源资产（全量）与现有 hosts 绑定（全量）
-            cur.execute("""
-                SELECT system, subsystem, hostname, ip, template_id, in_room
-                FROM ops.sub_assets
-                ORDER BY ip
-            """)
-            sub_assets = cur.fetchall()
+    # 1. 读源资产（全量）与现有 hosts 绑定（全量）
+    ctx.report_phase('source', '正在读取资产数据...')
+    cur.execute("""
+        SELECT system, subsystem, hostname, ip, template_id, in_room
+        FROM ops.sub_assets
+        ORDER BY ip
+    """)
+    sub_assets = cur.fetchall()
 
-            cur.execute("""
-                SELECT id, name, template_id, system, subsystem, in_room, description
-                FROM hosts
-            """)
-            existing = cur.fetchall()
+    cur.execute("""
+        SELECT id, name, template_id, system, subsystem, in_room, description
+        FROM hosts
+    """)
+    existing = cur.fetchall()
 
-            # 构建索引： (name, template_id) → row ； name → [row]
-            existing_by_key = {}
-            existing_by_name = {}
-            for row in existing:
-                existing_by_key[(row['name'], row['template_id'])] = row
-                existing_by_name.setdefault(row['name'], []).append(row)
+    # 构建索引： (name, template_id) → row ； name → [row]
+    existing_by_key = {}
+    existing_by_name = {}
+    for row in existing:
+        existing_by_key[(row['name'], row['template_id'])] = row
+        existing_by_name.setdefault(row['name'], []).append(row)
 
-            # 2. 逐条解析 + UPSERT
-            source_names = set()    # 源资产中的主机名集合（用于清理）
-            wanted_pairs = set()    # 源资产要求的 (name, template_id) 集合
-            for sa in sub_assets:
-                name = sa['ip']
-                source_names.add(name)
-                stats['processed_sub_assets'] += 1
+    # 2. 解析 + 分类（内存中完成，不逐条写库）
+    source_names = set()    # 源资产中的主机名集合（用于清理）
+    wanted_pairs = set()    # 源资产要求的 (name, template_id) 集合
+    inserts = []            # (name, system, subsystem, template_id, description, in_room)
+    updates = []            # 同上，走 ON CONFLICT DO UPDATE 原地更新
 
-                template_ids = _parse_template_ids(sa['template_id'])
-                if not template_ids:
-                    stats['skipped_count'] += 1
-                    app.logger.warning(f"主机 {name} 无有效 template_id，跳过同步")
-                    continue
+    total = len(sub_assets)
+    for idx, sa in enumerate(sub_assets):
+        _check_abort(ctx.should_abort)
+        name = sa['ip']
+        source_names.add(name)
+        stats['processed_sub_assets'] += 1
 
-                for tpl in template_ids:
-                    wanted_pairs.add((name, tpl))
-                    key = (name, tpl)
-                    if key in existing_by_key:
-                        row = existing_by_key[key]
-                        if (row['system'], row['subsystem'], row['in_room'], row['description']) != \
-                           (sa['system'], sa['subsystem'], sa['in_room'], sa['hostname']):
-                            cur.execute("""
-                                UPDATE hosts
-                                SET system=%s, subsystem=%s, in_room=%s,
-                                    description=%s, updated_at=CURRENT_TIMESTAMP
-                                WHERE id=%s
-                            """, (sa['system'], sa['subsystem'], sa['in_room'],
-                                  sa['hostname'], row['id']))
-                            stats['updated_hosts_count'] += 1
-                    else:
-                        cur.execute("""
-                            INSERT INTO hosts (name, system, subsystem, template_id, description, in_room)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (name, template_id) DO NOTHING
-                        """, (name, sa['system'], sa['subsystem'], tpl,
-                              sa['hostname'], sa['in_room']))
-                        stats['created_hosts_count'] += 1
+        template_ids = _parse_template_ids(sa['template_id'])
+        if not template_ids:
+            stats['skipped_count'] += 1
+            app.logger.warning(f"主机 {name} 无有效 template_id，跳过同步")
+            continue
 
-            # 3. 清理：源 IP 存在、但模板集合已不再包含的旧绑定（手动主机不受影响）
-            for name in source_names:
-                for row in existing_by_name.get(name, []):
-                    if (row['name'], row['template_id']) not in wanted_pairs:
-                        cur.execute("DELETE FROM hosts WHERE id = %s", (row['id'],))
-                        stats['deleted_count'] += 1
+        for tpl in template_ids:
+            wanted_pairs.add((name, tpl))
+            key = (name, tpl)
+            row = existing_by_key.get(key)
+            if row is None:
+                inserts.append((name, sa['system'], sa['subsystem'], tpl,
+                                sa['hostname'], sa['in_room']))
+                stats['created_hosts_count'] += 1
+            elif (row['system'], row['subsystem'], row['in_room'], row['description']) != \
+                 (sa['system'], sa['subsystem'], sa['in_room'], sa['hostname']):
+                updates.append((name, sa['system'], sa['subsystem'], tpl,
+                                sa['hostname'], sa['in_room']))
+                stats['updated_hosts_count'] += 1
 
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'code': 200,
-            'message': (f'资产同步完成：处理 {stats["processed_sub_assets"]} 台资产，'
-                        f'新增 {stats["created_hosts_count"]}，更新 {stats["updated_hosts_count"]}，'
-                        f'清理 {stats["deleted_count"]}，跳过 {stats["skipped_count"]}'),
-            'data': stats,
-        })
-    except Exception as e:
-        conn.rollback()
-        return jsonify({
-            'success': False,
-            'code': 500,
-            'message': f'同步失败: {str(e)}',
-            'data': stats,
-        }), 500
-    finally:
-        conn.close()
+        ctx.report('hosts', idx + 1, total)
+
+    # 3a. 批量新增（幂等：唯一键冲突即忽略，与改造前的 DO NOTHING 一致）
+    insert_cols = ['name', 'system', 'subsystem', 'template_id', 'description', 'in_room']
+    if inserts:
+        insert_sql = (f"INSERT INTO hosts ({', '.join(insert_cols)}) VALUES %s "
+                      f"ON CONFLICT (name, template_id) DO NOTHING")
+        for chunk in _chunked(inserts, _DELETE_CHUNK_SIZE):
+            _check_abort(ctx.should_abort)
+            execute_values(cur, insert_sql, list(chunk), page_size=len(chunk))
+
+    # 3b. 批量更新。走 upsert 而非 `UPDATE ... FROM (VALUES %s)`：
+    #     execute_values 把参数内联成字面量，而 FROM (VALUES ...) 的 RTE 没有目标列的
+    #     类型上下文（S0 里在 items_review.preprocessing 上实测炸过）。ON CONFLICT
+    #     复用 INSERT 的类型上下文，且只改这 4 个可变字段 + updated_at，
+    #     id / created_at / name / template_id 全部原地保留，与改造前的 UPDATE 等价。
+    if updates:
+        set_parts = ", ".join(f"{c} = EXCLUDED.{c}"
+                              for c in ('system', 'subsystem', 'description', 'in_room'))
+        update_sql = (f"INSERT INTO hosts ({', '.join(insert_cols)}) VALUES %s "
+                      f"ON CONFLICT (name, template_id) DO UPDATE SET "
+                      f"{set_parts}, updated_at = CURRENT_TIMESTAMP")
+        for chunk in _chunked(updates, _DELETE_CHUNK_SIZE):
+            _check_abort(ctx.should_abort)
+            execute_values(cur, update_sql, list(chunk), page_size=len(chunk))
+
+    # 4. 清理：源 IP 存在、但模板集合已不再包含的旧绑定（手动主机不受影响）
+    stale_ids = [row['id'] for name in source_names
+                 for row in existing_by_name.get(name, [])
+                 if (row['name'], row['template_id']) not in wanted_pairs]
+    if stale_ids:
+        # 按清理进度上报行数：report_phase 只换阶段、不动 rows_total，
+        # 会把"资产已处理完"的旧计数留在弹窗上，看起来像删除已 100% 完成。
+        cleaned = 0
+        for chunk in _chunked(stale_ids, _DELETE_CHUNK_SIZE):
+            _check_abort(ctx.should_abort)
+            cur.execute("DELETE FROM hosts WHERE id = ANY(%s)", (list(chunk),))
+            stats['deleted_count'] += len(chunk)
+            cleaned += len(chunk)
+            ctx.report('cleanup', cleaned, len(stale_ids))
+
+    return (f'资产同步完成：处理 {stats["processed_sub_assets"]} 台资产，'
+            f'新增 {stats["created_hosts_count"]}，更新 {stats["updated_hosts_count"]}，'
+            f'清理 {stats["deleted_count"]}，跳过 {stats["skipped_count"]}')
+
+
+def _host_sync_job():
+    """请求线程：无参数需要快照（源表与目标表都是全量的），直接给出任务规格。"""
+    return _BackgroundJob('host_sync',
+                          lambda ctx, cur: _job_body_host_sync(None, ctx, cur),
+                          unit='台')
+
+
+@app.route('/host/sync', methods=['POST'])
+@_with_background_sync_lock('host_sync')
+def sync_hosts():
+    """从 ops.sub_assets 同步主机资产到 zabbix_mac.hosts（后台任务，202 受理）
+
+    多模板拆分：sub_assets.template_id 可能为逗号分隔的多模板（如 '21001,91001,60001'），
+    按逗号拆分为多条 hosts 记录（每条绑定一个模板，唯一键 (name, template_id)）。
+    幂等性：以 (name, template_id) 为组合键 UPSERT，重复执行不产生重复数据。
+    清理：仅删除「源资产中存在、但模板集合已不再包含」的旧绑定；
+          不在源资产中的手动主机不受影响。
+    事务控制：整批操作在一个事务中（`_run_background_job` 持有边界），失败即 rollback；
+              失败信息写进 _sync_progress，由前端轮询读出，不再走 HTTP 状态码。
+
+    改造前本路由**无锁**：可与某个 init 并发跑，而 init 正在读它写的 hosts 表。
+    现已并入全局同步锁，并发触发返回 409。
+    """
+    return _host_sync_job()
 
 @app.route('/host/add', methods=['GET', 'POST'])
 def add_host():
@@ -2170,133 +3092,13 @@ def items_review():
 
 
 @app.route('/items-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('items_review_init')
 def initialize_items_review():
-    """初始化 items_review 表：基于 Diff 算法增量更新
+    """初始化 items_review 表：基于 Diff 算法增量更新（后台执行，立即返回 202）
     （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）
     支持未绑定模板的主机：自动使用 DEFAULT_TEMPLATE_NAME 兜底。"""
     data = request.get_json() if request.is_json else {}
-    system_filter = data.get('system', '').strip() if data else ''
-    subsystem_filter = data.get('subsystem', '').strip() if data else ''
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 0. 统计主机信息（用于反馈跳过/处理数量）
-            host_conditions = ["1=1"]
-            host_params = []
-            if system_filter:
-                host_conditions.append("h.system = %s")
-                host_params.append(system_filter)
-            if subsystem_filter:
-                host_conditions.append("h.subsystem = %s")
-                host_params.append(subsystem_filter)
-            host_where = " AND ".join(host_conditions)
-
-            cur.execute(f"SELECT COUNT(*) as cnt FROM hosts h WHERE {host_where}", host_params)
-            total_hosts = cur.fetchone()['cnt']
-
-            cur.execute(
-                f"SELECT COUNT(*) as cnt FROM hosts h WHERE {host_where} AND (h.template_id IS NULL OR h.template_id = '')",
-                host_params
-            )
-            no_template_hosts = cur.fetchone()['cnt']
-
-            cur.execute(
-                f"SELECT h.name FROM hosts h WHERE {host_where} AND (h.template_id IS NULL OR h.template_id = '') ORDER BY h.name",
-                host_params
-            )
-            skipped_host_names = [r['name'] for r in cur.fetchall()]
-
-            # 1. 获取现有记录
-            existing_conditions = ["1=1"]
-            existing_params = []
-            if system_filter:
-                existing_conditions.append("system = %s")
-                existing_params.append(system_filter)
-            if subsystem_filter:
-                existing_conditions.append("subsystem = %s")
-                existing_params.append(subsystem_filter)
-            existing_where = " AND ".join(existing_conditions)
-            cur.execute(f"SELECT * FROM items_review WHERE {existing_where}", existing_params)
-            existing_rows = cur.fetchall()
-
-            # 2. 获取上游最新数据
-            # 关键修复：COALESCE(NULLIF(h.template_id, ''), %s) 让未绑定模板的主机
-            # 也能用 DEFAULT_TEMPLATE_NAME 匹配 items，避免初始化跳过这类主机
-            default_tmpl = app.config['DEFAULT_TEMPLATE_NAME']
-            where_parts = [
-                "i.template_name = COALESCE(NULLIF(h.template_id, ''), %s)"
-            ]
-            query_params = [default_tmpl]
-            if system_filter:
-                where_parts.append("h.system = %s")
-                query_params.append(system_filter)
-            if subsystem_filter:
-                where_parts.append("h.subsystem = %s")
-                query_params.append(subsystem_filter)
-            where_clause = " AND ".join(where_parts)
-
-            cur.execute(f"""
-                SELECT
-                    i.id as item_id,
-                    h.name as host_ip,
-                    i.item_key, i.name, i.type, i.value_type, i.delay,
-                    i.description, i.units, i.multiplier, i.delta, i.history, i.trends,
-                    i.status, i.template_name, i.master_item, i.preprocessing,
-                    h.system, h.subsystem, h.in_room
-                FROM items i
-                CROSS JOIN hosts h
-                WHERE {where_clause}
-                ORDER BY i.id, h.name
-            """, query_params)
-            new_rows = cur.fetchall()
-
-            all_insert_cols = [
-                'item_id', 'host_ip', 'item_key', 'name', 'type', 'value_type', 'delay',
-                'description', 'units', 'multiplier', 'delta', 'history', 'trends',
-                'status', 'template_name', 'master_item', 'preprocessing', 'system', 'subsystem', 'in_room'
-            ]
-            content_columns = [
-                'item_key', 'name', 'type', 'value_type', 'delay', 'description', 'units',
-                'multiplier', 'delta', 'history', 'trends', 'status', 'template_name',
-                'master_item', 'preprocessing', 'system', 'subsystem', 'in_room'
-            ]
-            unique_keys = ['item_id', 'host_ip']
-
-            result = _diff_and_merge(
-                cur, 'items_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
-        conn.commit()
-
-        # 构建增强响应
-        processed = total_hosts - no_template_hosts
-        msg = (f'items_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，'
-               f'标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条')
-        if no_template_hosts > 0:
-            msg += f'（{no_template_hosts} 台主机未绑定模板，已用默认模板 "{default_tmpl}" 兜底）'
-
-        return jsonify({
-            'success': True,
-            'message': msg,
-            'data': {
-                'total_hosts': total_hosts,
-                'processed_hosts': processed,
-                'skipped_hosts': no_template_hosts,
-                'skip_reasons': {name: '主机未绑定模板，已用默认模板兜底' for name in skipped_host_names[:10]},
-                'created': result['new'],
-                'updated': result['update'],
-                'deleted': result['delete'],
-                'unchanged': result['unchanged']
-            }
-        })
-    except Exception as e:
-        conn.rollback()
-        app.logger.error(f"items-review/initialize 失败: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
+    return _diff_init_job(_ITEMS_INIT_SPEC, data or {})
 
 
 @app.route('/items-review/sync', methods=['POST'])
@@ -3291,85 +4093,13 @@ def triggers_review():
 
 
 @app.route('/triggers-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('triggers_review_init')
 def initialize_triggers_review():
-    """初始化 triggers_review 表：基于 Diff 算法增量更新
+    """初始化 triggers_review 表：基于 Diff 算法增量更新（后台执行，立即返回 202）
     （已同步记录保持不变，新增/变更/删除均通过 change_type 标记）"""
     data = request.get_json() if request.is_json else {}
-    system_filter = data.get('system', '').strip() if data else ''
-    subsystem_filter = data.get('subsystem', '').strip() if data else ''
+    return _diff_init_job(_TRIGGERS_INIT_SPEC, data or {})
 
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 获取现有记录
-            existing_conditions = ["1=1"]
-            existing_params = []
-            if system_filter:
-                existing_conditions.append("system = %s")
-                existing_params.append(system_filter)
-            if subsystem_filter:
-                existing_conditions.append("subsystem = %s")
-                existing_params.append(subsystem_filter)
-            existing_where = " AND ".join(existing_conditions)
-            cur.execute(f"SELECT * FROM triggers_review WHERE {existing_where}", existing_params)
-            existing_rows = cur.fetchall()
-
-            # 2. 获取上游最新数据
-            where_parts = ["tr.template_name = %s", "h.template_id = tr.template_name"]
-            query_params = [app.config['DEFAULT_TEMPLATE_NAME']]
-            if system_filter:
-                where_parts.append("h.system = %s")
-                query_params.append(system_filter)
-            if subsystem_filter:
-                where_parts.append("h.subsystem = %s")
-                query_params.append(subsystem_filter)
-            where_clause = " AND ".join(where_parts)
-
-            cur.execute(f"""
-                SELECT
-                    tr.id as trigger_id,
-                    h.name as host_ip,
-                    tr.name,
-                    REPLACE(tr.expression, '{{host:', '{{' || h.name || ':') as expression,
-                    tr.priority,
-                    tr.description,
-                    tr.status,
-                    tr.template_name,
-                    h.system,
-                    h.subsystem,
-                    h.in_room
-                FROM triggers tr
-                CROSS JOIN hosts h
-                WHERE {where_clause}
-                ORDER BY tr.id, h.name
-            """, query_params)
-            new_rows = cur.fetchall()
-
-            all_insert_cols = [
-                'trigger_id', 'host_ip', 'name', 'expression', 'priority', 'description',
-                'status', 'template_name', 'system', 'subsystem', 'in_room'
-            ]
-            content_columns = [
-                'name', 'expression', 'priority', 'description', 'status',
-                'template_name', 'system', 'subsystem', 'in_room'
-            ]
-            unique_keys = ['trigger_id', 'host_ip']
-
-            result = _diff_and_merge(
-                cur, 'triggers_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'message': f'triggers_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
-        })
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
 
 @app.route('/trigger-review/edit/<int:review_id>', methods=['GET', 'POST'])
 def edit_trigger_review(review_id):
@@ -3729,104 +4459,14 @@ def webscenarios_review():
 
 
 @app.route('/webscenarios-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('webscenarios_review_init')
 def initialize_webscenarios_review():
-    """初始化 webscenario_items_review 表：全量清空重建。
+    """初始化 webscenario_items_review 表：全量清空重建（后台执行，立即返回 202）。
     触发器名称动态注入机房对应的 Zabbix Server IP:
       格式: [{zabbix_ip}] Web scenario [{name}] failed
     """
     data = request.get_json() if request.is_json else {}
-    system_filter = data.get('system', '').strip() if data else ''
-    subsystem_filter = data.get('subsystem', '').strip() if data else ''
-
-    # 加载机房映射
-    room_mapping = _config.get('zabbix_room_mapping', {}) or {}
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 清空复核表
-            cur.execute("TRUNCATE webscenario_items_review RESTART IDENTITY")
-
-            # 2. 拉取源数据（4 个 UNION ALL）
-            source_where = ""
-            source_params = []
-            if system_filter:
-                source_where += " AND system = %s"
-                source_params.append(system_filter)
-            if subsystem_filter:
-                source_where += " AND subsystem = %s"
-                source_params.append(subsystem_filter)
-
-            cur.execute(f"""
-                SELECT system, subsystem, host, name, url, status_code, in_room
-                FROM (
-                    SELECT system, subsystem,
-                        'Zabbix server' as host,
-                        system || '_' || subsystem || '_clb' as name,
-                        nginx_clb as url, '200' as status_code, in_room
-                    FROM webscenario_items
-                    WHERE nginx_clb IS NOT NULL AND nginx_clb != ''{source_where}
-                    UNION ALL
-                    SELECT system, subsystem,
-                        'Zabbix server' as host,
-                        system || '_' || subsystem || '_nginx' as name,
-                        nginx as url, '200' as status_code, in_room
-                    FROM webscenario_items
-                    WHERE nginx IS NOT NULL AND nginx != ''{source_where}
-                    UNION ALL
-                    SELECT system, subsystem,
-                        'Zabbix server' as host,
-                        system || '_' || subsystem || '_clb_direct' as name,
-                        clb as url, '200' as status_code, in_room
-                    FROM webscenario_items
-                    WHERE clb IS NOT NULL AND clb != ''{source_where}
-                    UNION ALL
-                    SELECT system, subsystem,
-                        'Zabbix server' as host,
-                        system || '_' || subsystem || '_pod' as name,
-                        pod as url, '200' as status_code, in_room
-                    FROM webscenario_items
-                    WHERE pod IS NOT NULL AND pod != ''{source_where}
-                ) src
-                ORDER BY name
-            """, source_params)
-            rows = cur.fetchall()
-
-            if not rows:
-                conn.commit()
-                return jsonify({'success': True, 'message': '源表无数据，复核表已清空'})
-
-            # 3. 注入机房 IP → 转换名称
-            from psycopg2.extras import execute_values
-            insert_rows = []
-            for r in rows:
-                room = (r.get('in_room') or '').strip()
-                zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room))
-                if not zabbix_ip:
-                    zabbix_ip = 'Unknown'
-                new_name = f"[{zabbix_ip}] Web scenario [{r['name']}] failed"
-                insert_rows.append((
-                    r['system'], r['subsystem'], r['host'],
-                    new_name, r['url'], r['status_code'], r['in_room']
-                ))
-
-            # 4. 批量 INSERT
-            cols = ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room']
-            sql = f"INSERT INTO webscenario_items_review ({', '.join(cols)}) VALUES %s"
-            execute_values(cur, sql, insert_rows)
-
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'message': f'webscenario_items_review 初始化完成：插入 {len(insert_rows)} 条记录'
-        })
-    except Exception as e:
-        conn.rollback()
-        app.logger.error(f"WebScenario 复核表初始化失败: {e}")
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
+    return _rebuild_init_job(_WEBSCENARIOS_INIT_SPEC, data or {})
 
 
 @app.route('/webscenarios-review/sync', methods=['POST'])
@@ -4219,82 +4859,13 @@ def web_triggers_review():
 
 
 @app.route('/web-triggers-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('web_triggers_review_init')
 def initialize_web_triggers_review():
-    """初始化 web_trigger_review 表：全量清空重建。
+    """初始化 web_trigger_review 表：全量清空重建（后台执行，立即返回 202）。
     触发器名称动态注入机房对应的 Zabbix Server IP:
       格式: [{zabbix_ip}] Web scenario [{scenario_name}] failed
     """
-    room_mapping = _config.get('zabbix_room_mapping', {}) or {}
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 清空复核表
-            cur.execute("TRUNCATE web_trigger_review RESTART IDENTITY")
-
-            # 2. 拉取已确认的 Web 场景数据
-            cur.execute("""
-                SELECT
-                    host,
-                    name as web_scenario_name,
-                    system,
-                    subsystem,
-                    in_room
-                FROM webscenario_items_review
-                WHERE confirmed = TRUE
-                ORDER BY host, name
-            """)
-            rows = cur.fetchall()
-
-            if not rows:
-                conn.commit()
-                return jsonify({'success': True,
-                    'message': 'web_trigger_review 初始化完成：无已确认的 Web 场景，表已清空'})
-
-            # 3. 注入机房 IP，构建触发器记录
-            from psycopg2.extras import execute_values
-            insert_rows = []
-            for r in rows:
-                room = (r.get('in_room') or '').strip()
-                zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room))
-                if not zabbix_ip:
-                    zabbix_ip = 'Unknown'
-
-                scenario_name = r['web_scenario_name']
-                host = r['host']
-                trigger_name = f"[{zabbix_ip}] Web scenario [{scenario_name}] failed"
-                expression = "{" + f"{host}:web.test.fail[{scenario_name}].count(#3,0,ne)" + "}>2"
-
-                insert_rows.append((
-                    host,
-                    scenario_name,
-                    trigger_name,
-                    expression,
-                    3,   # priority: warning
-                    0,   # status: enabled
-                    r.get('system', ''),
-                    r.get('subsystem', ''),
-                    r.get('in_room', '')
-                ))
-
-            # 4. 批量 INSERT
-            cols = ['host', 'web_scenario_name', 'trigger_name', 'expression',
-                    'priority', 'status', 'system', 'subsystem', 'in_room']
-            sql = f"INSERT INTO web_trigger_review ({', '.join(cols)}) VALUES %s"
-            execute_values(cur, sql, insert_rows)
-
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'message': f'web_trigger_review 初始化完成：插入 {len(insert_rows)} 条记录'
-        })
-    except Exception as e:
-        conn.rollback()
-        app.logger.error(f"Web 触发器复核表初始化失败: {e}")
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
+    return _rebuild_init_job(_WEB_TRIGGERS_INIT_SPEC, {})
 
 
 @app.route('/web-triggers-review/verify', methods=['POST'])
@@ -4803,58 +5374,10 @@ def unconfirm_trigger_prototype_review(review_id):
 
 
 @app.route('/item-prototypes-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('item_prototypes_review_init')
 def initialize_item_prototypes_review():
-    """初始化 item_prototypes_review 表：基于 Diff 算法增量更新"""
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 获取现有记录
-            cur.execute("SELECT * FROM item_prototypes_review")
-            existing_rows = cur.fetchall()
-
-            # 2. 获取上游最新数据
-            cur.execute("""
-                SELECT
-                    ip.id as item_prototype_id,
-                    ip.discovery_rule_id,
-                    h.name as host_ip,
-                    ip.name, ip.key, ip.value_type, ip.delay,
-                    ip.description, ip.units, ip.multiplier, ip.delta, ip.history, ip.trends,
-                    ip.status, h.system, h.subsystem, h.in_room
-                FROM item_prototypes ip
-                CROSS JOIN hosts h
-                JOIN discovery_rules dr ON ip.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s AND h.template_id = dr.template_name
-                ORDER BY ip.id, h.name
-            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            new_rows = cur.fetchall()
-
-            all_insert_cols = [
-                'item_prototype_id', 'discovery_rule_id', 'host_ip', 'name', 'key',
-                'value_type', 'delay', 'description', 'units', 'multiplier', 'delta',
-                'history', 'trends', 'status', 'system', 'subsystem', 'in_room'
-            ]
-            content_columns = [
-                'name', 'key', 'value_type', 'delay', 'description', 'units',
-                'multiplier', 'delta', 'history', 'trends', 'status', 'system', 'subsystem', 'in_room'
-            ]
-            unique_keys = ['item_prototype_id', 'host_ip']
-
-            result = _diff_and_merge(
-                cur, 'item_prototypes_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'message': f'item_prototypes_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
-        })
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
+    """初始化 item_prototypes_review 表：基于 Diff 算法增量更新（后台执行，立即返回 202）"""
+    return _diff_init_job(_ITEM_PROTOTYPES_INIT_SPEC, {})
 
 
 @app.route('/item-prototypes-review/export')
@@ -4936,56 +5459,10 @@ def import_item_prototypes_review():
 
 
 @app.route('/trigger-prototypes-review/initialize', methods=['POST'])
-@_with_sync_lock
+@_with_background_sync_lock('trigger_prototypes_review_init')
 def initialize_trigger_prototypes_review():
-    """初始化 trigger_prototypes_review 表：基于 Diff 算法增量更新"""
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cur:
-            # 1. 获取现有记录
-            cur.execute("SELECT * FROM trigger_prototypes_review")
-            existing_rows = cur.fetchall()
-
-            # 2. 获取上游最新数据
-            cur.execute("""
-                SELECT
-                    tp.id as trigger_prototype_id,
-                    tp.discovery_rule_id,
-                    h.name as host_ip,
-                    tp.description,
-                    REPLACE(tp.expression, '{host:', '{' || h.name || ':') as expression,
-                    tp.priority, tp.status, h.system, h.subsystem, h.in_room
-                FROM trigger_prototypes tp
-                CROSS JOIN hosts h
-                JOIN discovery_rules dr ON tp.discovery_rule_id = dr.id
-                WHERE dr.template_name = %s AND h.template_id = dr.template_name
-                ORDER BY tp.id, h.name
-            """, (app.config['DEFAULT_TEMPLATE_NAME'],))
-            new_rows = cur.fetchall()
-
-            all_insert_cols = [
-                'trigger_prototype_id', 'discovery_rule_id', 'host_ip', 'description',
-                'expression', 'priority', 'status', 'system', 'subsystem', 'in_room'
-            ]
-            content_columns = [
-                'description', 'expression', 'priority', 'status', 'system', 'subsystem', 'in_room'
-            ]
-            unique_keys = ['trigger_prototype_id', 'host_ip']
-
-            result = _diff_and_merge(
-                cur, 'trigger_prototypes_review', unique_keys, content_columns,
-                new_rows, existing_rows, all_insert_cols
-            )
-        conn.commit()
-        return jsonify({
-            'success': True,
-            'message': f'trigger_prototypes_review 表 Diff 完成：新增 {result["new"]} 条，变更 {result["update"]} 条，标记删除 {result["delete"]} 条，无变化 {result["unchanged"]} 条'
-        })
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'success': False, 'message': f'初始化失败: {str(e)}'}), 500
-    finally:
-        conn.close()
+    """初始化 trigger_prototypes_review 表：基于 Diff 算法增量更新（后台执行，立即返回 202）"""
+    return _diff_init_job(_TRIGGER_PROTOTYPES_INIT_SPEC, {})
 
 
 @app.route('/trigger-prototypes-review/export')

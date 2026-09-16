@@ -36,6 +36,12 @@ def _defaults() -> Dict[str, Any]:
             'default_workers': 5,
             'max_retry_attempts': 3,
             'retry_delay': 2,
+            # 后台初始化/同步任务的单条语句超时（秒）。僵死任务的主防线：
+            # 卡在 SQL 上时由 PostgreSQL 主动掐断，异常路径负责回滚并释放锁。
+            'job_statement_timeout_seconds': 900,
+            # 兜底硬超时（秒）。超过则强制回收全局同步锁，避免一次卡死
+            # 导致此后所有同步/初始化永久返回 409。
+            'job_hard_timeout_seconds': 1800,
         },
     }
 
