@@ -6510,6 +6510,7 @@ _ACTION_TYPE_TO_TABLE = {
     'item': 'items_review',
     'trigger': 'triggers_review',
     'webscenario': 'webscenario_items_review',
+    'webtrigger': 'web_trigger_review',
     'itemprototype': 'item_prototypes_review',
     'triggerprototype': 'trigger_prototypes_review',
 }
@@ -6997,25 +6998,44 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                     summary['unchanged_count'] += 1
 
     elif table == 'web_trigger_review':
-        try:
-            # 必须用关键字参数——pyzabbix 会把单个位置 dict 包成 [dict]，
-            # Zabbix 会忽略 hostids 返回全部触发器
-            zabbix_triggers = client.api.trigger.get(
-                hostids=host_id,
-                output=['triggerid', 'description'],
-            )
-            zabbix_names = {t['description'] for t in zabbix_triggers}
-        except Exception as e:
-            app.logger.error(f"compare_entity fetch failed: {e}"); zabbix_names = set()
-        for row in rows:
-            tname = row['trigger_name']
-            if tname in zabbix_names:
-                summary['unchanged_count'] += 1
-            else:
-                changes.append({'host': row['host'], 'type': 'WebTrigger', 'key': tname,
+        # 与 triggers_review 同构：托管识别走 get_managed_triggers（5.0 触发器
+        # 支持 tags，MANAGED_TAG 有效），身份锚 = 表达式里的 web.test.* item key
+        # —— web 触发器按 web.test.fail[场景名] 引用场景，键与场景名都在引用链
+        # 上，天然锚定。旧实现 output=['triggerid','description'] 拉全主机触发器
+        # （含模板继承）按名称集合比对 —— 无指纹、无 UPDATE、模板触发器误命中。
+        # 行名映射 trigger_name→name 后复用触发器匹配器/载荷投影。
+        existing_triggers = client.get_managed_triggers(host_id)
+        views = [dict(r, name=r.get('trigger_name', '') or '') for r in rows]
+        for view, matched in _match_trigger_rows(views, existing_triggers):
+            tname = view.get('name', '')
+            anchored = _trigger_identity(view.get('expression', '')) is not None
+            if view.get('change_type') == 'delete':
+                if matched is not None:
+                    changes.append({'host': view['host'], 'type': 'WebTrigger', 'key': tname,
+                                    'name': tname, 'action': 'DELETE',
+                                    'details': 'Zabbix 中存在但已标记为删除'})
+                    summary['delete_count'] += 1
+                else:
+                    summary['unchanged_count'] += 1
+                continue
+            trigger_data = _trigger_payload_from_row(view)
+            if matched is None:
+                changes.append({'host': view['host'], 'type': 'WebTrigger', 'key': tname,
                                 'name': tname, 'action': 'CREATE',
-                                'details': 'Zabbix 中不存在，将新建'})
+                                'details': ('Zabbix 中不存在，将新建' if anchored else
+                                            'Zabbix 中不存在，将新建'
+                                            '（该表达式未含可锚定的 web.test key，已按名称匹配）')})
                 summary['create_count'] += 1
+            else:
+                target_fp = client.calculate_fingerprint(trigger_data)
+                current_fp = client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))
+                if target_fp != current_fp:
+                    changes.append({'host': view['host'], 'type': 'WebTrigger', 'key': tname,
+                                    'name': tname, 'action': 'UPDATE',
+                                    'details': '配置已变更，将更新'})
+                    summary['update_count'] += 1
+                else:
+                    summary['unchanged_count'] += 1
 
     elif table == 'item_prototypes_review':
         # 从本地 discovery_rules 获取 dr_key（替代原来不可用的 row.dr_key）
@@ -7378,23 +7398,27 @@ def api_sync_apply():
                             updated += 1
 
                 elif table == 'web_trigger_review':
-                    # Use ZabbixUltimateAutomator for web trigger sync
-                    from zabbix_mac import ZabbixUltimateAutomator
-                    automator = ZabbixUltimateAutomator(client)
-                    for row in host_rows:
-                        try:
-                            automator.create_web_scenario_triggers(
-                                host_name=row['host'],
-                                scenario_name=row.get('web_scenario_name', ''),
-                                triggers_config=[{
-                                    'description': row['trigger_name'],
-                                    'expression': row.get('expression', ''),
-                                    'priority': int(row.get('priority', 3)),
-                                }]
-                            )
+                    # 与 triggers_review 同构：身份锚（web.test.* item key）+ 指纹
+                    # 投影 + UPDATE/DELETE 分支。旧实现调
+                    # ZabbixUltimateAutomator.create_web_scenario_triggers —— 该方法
+                    # 签名是 (self)，传 kwargs 必然 TypeError，web 触发器同步从未
+                    # 成功过；即便签名吻合也是无条件 CREATE，重复执行必然复制。
+                    existing_triggers = client.get_managed_triggers(host_id)
+                    views = [dict(r, name=r.get('trigger_name', '') or '') for r in host_rows]
+                    for view, matched in _match_trigger_rows(views, existing_triggers):
+                        if view.get('change_type') == 'delete':
+                            if matched is not None:
+                                client.delete_trigger(matched['triggerid'])
+                                deleted += 1
+                            continue
+                        trigger_data = _trigger_payload_from_row(view)
+                        if matched is None:
+                            client.create_trigger(trigger_data)
                             created += 1
-                        except Exception as e:
-                            errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
+                        elif (client.calculate_fingerprint(trigger_data)
+                              != client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))):
+                            client.update_trigger(matched['triggerid'], trigger_data)
+                            updated += 1
 
                 elif table == 'item_prototypes_review':
                     # 查询所有涉及的 discovery_rules 配置
@@ -7754,23 +7778,25 @@ def api_sync_execute():
                         synced_ids.append(row['id'])
 
                 elif table == 'web_trigger_review':
-                    from zabbix_mac import ZabbixUltimateAutomator
-                    automator = ZabbixUltimateAutomator(client)
-                    for row in host_rows:
-                        try:
-                            automator.create_web_scenario_triggers(
-                                host_name=row['host'],
-                                scenario_name=row.get('web_scenario_name', ''),
-                                triggers_config=[{
-                                    'description': row['trigger_name'],
-                                    'expression': row.get('expression', ''),
-                                    'priority': int(row.get('priority', 3)),
-                                }]
-                            )
+                    # 与 apply/triggers_review 同构（前端 execute 以
+                    # action_type='webtrigger' 派发，映射见 _ACTION_TYPE_TO_TABLE）
+                    existing_triggers = client.get_managed_triggers(host_id)
+                    views = [dict(r, name=r.get('trigger_name', '') or '') for r in host_rows]
+                    for view, matched in _match_trigger_rows(views, existing_triggers):
+                        if view.get('change_type') == 'delete':
+                            if matched is not None:
+                                client.delete_trigger(matched['triggerid'])
+                                deleted += 1
+                            continue
+                        trigger_data = _trigger_payload_from_row(view)
+                        if matched is None:
+                            client.create_trigger(trigger_data)
                             created += 1
-                            synced_ids.append(row['id'])
-                        except Exception as e:
-                            errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
+                        elif (client.calculate_fingerprint(trigger_data)
+                              != client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))):
+                            client.update_trigger(matched['triggerid'], trigger_data)
+                            updated += 1
+                        synced_ids.append(view['id'])
 
                 elif table == 'webscenario_items_review':
                     # 与 apply 共用任务体：steps 形载荷（url/status_codes 平铺在

@@ -57,6 +57,10 @@ class FakeZabbixClient:
         self.create_calls = []
         self.update_calls = []
         self.delete_calls = []
+        self.triggers = []
+        self.trigger_create_calls = []
+        self.trigger_update_calls = []
+        self.trigger_delete_calls = []
 
     def get_host_id(self, host):
         return HOST_ID
@@ -74,6 +78,21 @@ class FakeZabbixClient:
 
     def delete_web_scenario(self, scenario_id):
         self.delete_calls.append(scenario_id)
+        return True
+
+    def get_managed_triggers(self, host_id):
+        return list(self.triggers)
+
+    def create_trigger(self, data):
+        self.trigger_create_calls.append(dict(data))
+        return '70001'
+
+    def update_trigger(self, trigger_id, data):
+        self.trigger_update_calls.append((trigger_id, dict(data)))
+        return True
+
+    def delete_trigger(self, trigger_id):
+        self.trigger_delete_calls.append(trigger_id)
         return True
 
 
@@ -273,3 +292,157 @@ class TestScenarioExecute:
         assert resp.status_code == 200 and data['success'] is True
         assert data['created'] == 1
         assert not any('请使用全局' in e for e in data.get('errors', []))
+
+
+# ---- Web 触发器域 ----
+
+def _wrow(rid, name, expression, priority=4, change_type=None):
+    """web_trigger_review 复核行（只含路由实际取用的字段）"""
+    return {'id': rid, 'host': '10.0.0.1', 'trigger_name': name,
+            'expression': expression, 'priority': priority,
+            'web_scenario_name': '场景A', 'change_type': change_type}
+
+
+def _zwebtrigger(tid, description, expression, priority=4):
+    """output='extend' + expandExpression + selectTags 形态 —— 字段数远多于本地载荷"""
+    return {'triggerid': str(tid), 'description': description,
+            'expression': expression, 'priority': str(priority),
+            'status': '0', 'value': '0', 'state': '0', 'error': '',
+            'lastchange': '0', 'comments': '', 'url': '', 'type': '0',
+            'recovery_mode': '0', 'correlation_mode': '0', 'manual_close': '0',
+            'opdata': '', 'flags': '0', 'templateid': '0', 'hosts': [],
+            'dependencies': [],
+            'tags': [{'tag': 'ManagedBy', 'value': 'PythonScript'}]}
+
+
+class TestWebTriggerPreview:
+
+    def test_identical_trigger_is_unchanged(self, app, client, fake_zabbix):
+        """内容逐字一致的存量 web 触发器必须 UNCHANGED —— 指纹投影复用
+        触发器同款三字段对齐（修复前无指纹、无 UPDATE 判定）"""
+        expr = '{10.0.0.1:web.test.fail[场景A].last()}<>0'
+        fake_zabbix.triggers = [_zwebtrigger(1, '场景A失败', expr)]
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景A失败', expr)]
+
+        resp = client.post('/api/sync/preview', json={
+            'ids': [1], 'table': 'web_trigger_review', 'environment': ENV})
+
+        data = resp.get_json()
+        assert data['changes'] == [], data['changes']
+        assert data['summary']['unchanged_count'] == 1
+
+    def test_rename_previews_as_update_not_create(self, app, client, fake_zabbix):
+        """web.test.* item key 身份锚：引用同一场景键的改名触发器 →
+        UPDATE。修复前按名称集合比对，改名的行恒判 CREATE"""
+        fake_zabbix.triggers = [_zwebtrigger(
+            1, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景A连续失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+
+        resp = client.post('/api/sync/preview', json={
+            'ids': [1], 'table': 'web_trigger_review', 'environment': ENV})
+
+        data = resp.get_json()
+        actions = [c['action'] for c in data['changes']]
+        assert 'CREATE' not in actions, f'改名被误判为新增：{data["changes"]}'
+        assert actions == ['UPDATE']
+
+    def test_missing_trigger_previews_as_create(self, app, client, fake_zabbix):
+        fake_zabbix.triggers = []
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景B失败', '{10.0.0.1:web.test.fail[场景B].last()}<>0')]
+
+        resp = client.post('/api/sync/preview', json={
+            'ids': [1], 'table': 'web_trigger_review', 'environment': ENV})
+
+        data = resp.get_json()
+        assert [c['action'] for c in data['changes']] == ['CREATE']
+
+
+class TestWebTriggerExecute:
+
+    def test_execute_update_not_create(self, app, client, fake_zabbix):
+        """前端批量同步走 execute（action_type='webtrigger'）。旧实现调
+        ZabbixUltimateAutomator.create_web_scenario_triggers —— 该方法签名是
+        (self)，传 kwargs 必然 TypeError，web 触发器同步从未成功过"""
+        fake_zabbix.triggers = [_zwebtrigger(
+            1, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>3')]
+
+        resp = client.post('/api/sync/execute', json={
+            'ids': [1], 'action_type': 'webtrigger', 'environment': ENV})
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['updated'] == 1 and data['created'] == 0
+        tid, payload = fake_zabbix.trigger_update_calls[0]
+        assert tid == '1'
+        assert payload['expression'] == '{10.0.0.1:web.test.fail[场景A].last()}<>3'
+
+    def test_execute_missing_creates(self, app, client, fake_zabbix):
+        fake_zabbix.triggers = []
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景C失败', '{10.0.0.1:web.test.fail[场景C].last()}<>0')]
+
+        resp = client.post('/api/sync/execute', json={
+            'ids': [1], 'action_type': 'webtrigger', 'environment': ENV})
+
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['created'] == 1
+        payload = fake_zabbix.trigger_create_calls[0]
+        assert payload['description'] == '场景C失败'
+        assert payload['expression'] == '{10.0.0.1:web.test.fail[场景C].last()}<>0'
+
+    def test_execute_delete_by_identity(self, app, client, fake_zabbix):
+        """下线按身份锚命中原触发器（修复前只管无条件 CREATE，删除分支不存在）"""
+        fake_zabbix.triggers = [_zwebtrigger(
+            7, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0',
+                  change_type='delete')]
+
+        resp = client.post('/api/sync/execute', json={
+            'ids': [1], 'action_type': 'webtrigger', 'environment': ENV})
+
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data['deleted'] == 1
+        assert fake_zabbix.trigger_delete_calls == ['7']
+        assert fake_zabbix.trigger_create_calls == [] \
+               and fake_zabbix.trigger_update_calls == []
+
+    def test_execute_rerun_is_idempotent(self, app, client, fake_zabbix):
+        """重跑收敛：第二轮 Zabbix 侧已有等值触发器 → created=0 / updated=0。
+        修复前无条件 CREATE，每次同步都会复制一份"""
+        name, expr = '场景D失败', '{10.0.0.1:web.test.fail[场景D].last()}<>0'
+        app.test_mock_cursor.fetchall.return_value = [_wrow(1, name, expr)]
+
+        resp1 = client.post('/api/sync/execute', json={
+            'ids': [1], 'action_type': 'webtrigger', 'environment': ENV})
+        assert resp1.get_json()['created'] == 1
+
+        fake_zabbix.triggers = [_zwebtrigger(9, name, expr)]
+        resp2 = client.post('/api/sync/execute', json={
+            'ids': [1], 'action_type': 'webtrigger', 'environment': ENV})
+        data = resp2.get_json()
+        assert data['created'] == 0, '重跑不得重复创建'
+        assert data['updated'] == 0, '等值时不得触发 UPDATE'
+        assert len(fake_zabbix.trigger_create_calls) == 1
+
+    def test_apply_path_syncs_web_triggers(self, app, client, fake_zabbix):
+        """apply（table 直传）与 execute（action_type 派发）行为一致"""
+        fake_zabbix.triggers = [_zwebtrigger(
+            3, '场景A失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+        app.test_mock_cursor.fetchall.return_value = [
+            _wrow(1, '场景A连续失败', '{10.0.0.1:web.test.fail[场景A].last()}<>0')]
+
+        resp = client.post('/api/sync/apply', json={
+            'ids': [1], 'table': 'web_trigger_review', 'environment': ENV})
+
+        data = resp.get_json()
+        assert resp.status_code == 200 and data['success'] is True
+        assert data['updated'] == 1 and data['created'] == 0
+        assert fake_zabbix.trigger_create_calls == []
