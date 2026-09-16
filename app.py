@@ -6732,6 +6732,89 @@ def _build_item_data_from_row(row: dict, host_id: str, interface_id: str = None)
         item_data['preprocessing'] = row['preprocessing']
     return item_data
 
+
+def _trigger_identity(expression: str):
+    """触发器的功能身份 = 表达式里被监控的 item key 升序元组。
+
+    用作复核行 ↔ Zabbix 触发器的匹配锚点：名称（description）与阈值都是可
+    编辑属性，只有"被监控的 item key 集合"在改名/改阈值时保持不变 ——
+    这是"改了名称/表达式却被判成新增"这一缺陷的修复基础。
+
+    解析不出任何 item key（如 {TRIGGER.VALUE}=1 这类时间型触发器）时返回
+    None，调用方据此回落名称匹配：无迁移方案下没有更好的信号，回落至少
+    不劣于改造前的纯名称匹配。
+    """
+    keys = _parse_trigger_item_keys(expression or '')
+    return tuple(keys) if keys else None
+
+
+def _trigger_payload_from_row(row: dict) -> dict:
+    """从复核行构建下发/比对载荷。
+
+    字段集与改造前 _compare_entity / api_sync_apply 手写的 dict 逐字段一致
+    （description 取自复核行 name），刻意不扩大 —— 加入 status 等属于行为
+    变更，超出本次"修判定"的范围。
+    """
+    return {
+        'description': row.get('name', '') or '',
+        'expression': row.get('expression', '') or '',
+        'priority': int(row.get('priority', 0) or 0),
+    }
+
+
+def _trigger_payload_from_zabbix(t: dict) -> dict:
+    """把 output='extend' 的触发器投影成与本地构建**同形**的比对载荷。
+
+    必须投影：calculate_fingerprint 是"滤掉少数 id 字段后整体 json.dumps"，
+    拿 3 字段的本地 dict 去比 extend 形态的约 40 字段 dict 永远不相等 ——
+    存量触发器因此恒判 UPDATE，UNCHANGED 分支不可达（本轮第二处缺陷）。
+    Zabbix 返回的 priority 是字符串，与本地 int() 归一后可比。
+    """
+    return {
+        'description': t.get('description', '') or '',
+        'expression': t.get('expression', '') or '',
+        'priority': int(t.get('priority', 0) or 0),
+    }
+
+
+def _match_trigger_rows(rows: list, zabbix_triggers):
+    """把复核行与主机的 Zabbix 托管触发器配对 → [(row, trigger 或 None)]。
+
+    两级锚定：item key 元组优先（改造后主路径）；解析不出 item key 的行
+    回落名称匹配（改造前唯一手段，保留为兜底而非回归）。
+
+    每个触发器只被消费一次（consumed 集合）：同一主机上监控同一 item key
+    的多条触发器不会被同一复核行抢走，也不会被两行各匹配一次；ident 池与
+    name 池并存时同样由 consumed 拦住跨池重复匹配。池里存 triggerid 而非
+    dict，避免 dict 按值 == 引起的误配。
+    """
+    by_id = {}
+    by_identity = {}
+    by_name = {}
+    for t in zabbix_triggers or []:
+        tid = str(t.get('triggerid', '') or '')
+        by_id[tid] = t
+        ident = _trigger_identity(t.get('expression', ''))
+        if ident is not None:
+            by_identity.setdefault(ident, []).append(tid)
+        by_name.setdefault(t.get('description', '') or '', []).append(tid)
+
+    consumed = set()
+    pairs = []
+    for row in rows:
+        ident = _trigger_identity(row.get('expression', ''))
+        pool = (by_identity.get(ident, []) if ident is not None
+                else by_name.get(row.get('name', '') or '', []))
+        matched = None
+        for tid in pool:
+            if tid not in consumed:
+                consumed.add(tid)
+                matched = by_id[tid]
+                break
+        pairs.append((row, matched))
+    return pairs
+
+
 def _compare_entity(table: str, client, host_id: str, rows: list,
                     changes: list, summary: dict, interface_id: str = None,
                     dr_configs: dict = None):
@@ -6772,11 +6855,13 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
 
     elif table == 'triggers_review':
         existing_triggers = client.get_managed_triggers(host_id)
-        current_map = {t['description']: t for t in existing_triggers}
-        for row in rows:
-            name = row['name']
+        # 匹配走 item key 锚定而非 description：名称是可编辑属性，改了名就
+        # 查不到，会被误判成新增（本次修复的根因）。
+        for row, matched in _match_trigger_rows(rows, existing_triggers):
+            name = row.get('name', '')
+            anchored = _trigger_identity(row.get('expression', '')) is not None
             if row.get('change_type') == 'delete':
-                if name in current_map:
+                if matched is not None:
                     changes.append({'host': row['host_ip'], 'type': 'Trigger', 'key': name,
                                     'name': name, 'action': 'DELETE',
                                     'details': 'Zabbix 中存在但已标记为删除'})
@@ -6785,19 +6870,19 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                     summary['unchanged_count'] += 1
                 continue
 
-            trigger_data = {
-                'description': name,
-                'expression': row.get('expression', ''),
-                'priority': int(row.get('priority', 0)),
-            }
-            if name not in current_map:
+            trigger_data = _trigger_payload_from_row(row)
+            if matched is None:
                 changes.append({'host': row['host_ip'], 'type': 'Trigger', 'key': name,
                                 'name': name, 'action': 'CREATE',
-                                'details': 'Zabbix 中不存在，将新建'})
+                                'details': ('Zabbix 中不存在，将新建' if anchored else
+                                            'Zabbix 中不存在，将新建'
+                                            '（该表达式未含可锚定的 item key，已按名称匹配）')})
                 summary['create_count'] += 1
             else:
+                # 两侧都投影成同形三元组再比指纹 —— 拿本地 3 字段 dict 直接比
+                # extend 的原始 dict 永不相等，UNCHANGED 会不可达。
                 target_fp = client.calculate_fingerprint(trigger_data)
-                current_fp = client.calculate_fingerprint(current_map[name])
+                current_fp = client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))
                 if target_fp != current_fp:
                     changes.append({'host': row['host_ip'], 'type': 'Trigger', 'key': name,
                                     'name': name, 'action': 'UPDATE',
@@ -7170,27 +7255,22 @@ def api_sync_apply():
                                 created += 1
 
                 elif table == 'triggers_review':
+                    # 与 _compare_entity 共用匹配器：item key 锚定，名称可编辑不再是身份
                     existing_triggers = client.get_managed_triggers(host_id)
-                    current_map = {t['description']: t for t in existing_triggers}
-                    for row in host_rows:
-                        name = row['name']
+                    for row, matched in _match_trigger_rows(host_rows, existing_triggers):
                         if row.get('change_type') == 'delete':
-                            if name in current_map:
-                                client.delete_trigger(current_map[name]['triggerid'])
+                            if matched is not None:
+                                client.delete_trigger(matched['triggerid'])
                                 deleted += 1
                             continue
-                        trigger_data = {
-                            'description': name,
-                            'expression': row.get('expression', ''),
-                            'priority': int(row.get('priority', 0)),
-                        }
-                        if name in current_map:
-                            if client.calculate_fingerprint(trigger_data) != client.calculate_fingerprint(current_map[name]):
-                                client.update_trigger(current_map[name]['triggerid'], trigger_data)
-                                updated += 1
-                        else:
+                        trigger_data = _trigger_payload_from_row(row)
+                        if matched is None:
                             client.create_trigger(trigger_data)
                             created += 1
+                        elif (client.calculate_fingerprint(trigger_data)
+                              != client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))):
+                            client.update_trigger(matched['triggerid'], trigger_data)
+                            updated += 1
 
                 elif table == 'web_trigger_review':
                     # Use ZabbixUltimateAutomator for web trigger sync
@@ -7545,27 +7625,22 @@ def api_sync_execute():
                         synced_ids.append(row['id'])
 
                 elif table == 'triggers_review':
+                    # 与 _compare_entity 共用匹配器：item key 锚定，名称可编辑不再是身份
                     existing_triggers = client.get_managed_triggers(host_id)
-                    current_map = {t['description']: t for t in existing_triggers}
-                    for row in host_rows:
-                        name = row['name']
+                    for row, matched in _match_trigger_rows(host_rows, existing_triggers):
                         if row.get('change_type') == 'delete':
-                            if name in current_map:
-                                client.delete_trigger(current_map[name]['triggerid'])
+                            if matched is not None:
+                                client.delete_trigger(matched['triggerid'])
                                 deleted += 1
                             continue
-                        trigger_data = {
-                            'description': name,
-                            'expression': row.get('expression', ''),
-                            'priority': int(row.get('priority', 0)),
-                        }
-                        if name in current_map:
-                            if client.calculate_fingerprint(trigger_data) != client.calculate_fingerprint(current_map[name]):
-                                client.update_trigger(current_map[name]['triggerid'], trigger_data)
-                                updated += 1
-                        else:
+                        trigger_data = _trigger_payload_from_row(row)
+                        if matched is None:
                             client.create_trigger(trigger_data)
                             created += 1
+                        elif (client.calculate_fingerprint(trigger_data)
+                              != client.calculate_fingerprint(_trigger_payload_from_zabbix(matched))):
+                            client.update_trigger(matched['triggerid'], trigger_data)
+                            updated += 1
                         synced_ids.append(row['id'])
 
                 elif table == 'web_trigger_review':
