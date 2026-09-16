@@ -6777,6 +6777,86 @@ def _trigger_payload_from_zabbix(t: dict) -> dict:
     }
 
 
+# ---- Web 场景（webscenario_items_review）----
+
+
+def _scenario_payload_from_row(row: dict, host_id: str) -> dict:
+    """从复核行构建 web 场景下发载荷（steps 形）。
+
+    Zabbix 5.0 的 url/status_codes/timeout 是 **step 属性**，平铺在场景级会被
+    httptest.create/update 以 unexpected parameter 整单拒收（zbx50 真机实证，
+    存量 7 个场景亦均为 steps 形单 step）。复核行只有 url/status_code 两个
+    业务字段，delay/retries/agent 等取平台固定默认（与存量对象一致）。
+    """
+    url = row.get('url', '') or ''
+    return {
+        'name': row.get('name', '') or '',
+        'hostid': host_id,
+        'agent': '0',
+        'retries': '1',
+        'steps': [{
+            'no': 1,
+            'name': url,
+            'url': url,
+            'timeout': '30',
+            'status_codes': str(row.get('status_code', '200') or '200'),
+            'follow_redirects': '1',
+        }],
+    }
+
+
+def _scenario_project(obj: dict) -> dict:
+    """把 web 场景投影为平台管理的字段同形结构（指纹可比）。
+
+    calculate_fingerprint 是"滤掉 id 后整体 json.dumps"，本地 5 字段载荷去比
+    extend 形态的 20+ 字段 + steps 永不相等 —— 与触发器域第二轮修的指纹
+    不对称同款缺陷。指纹只含复核过的数据：name + steps[(url, status_codes)]；
+    step 名/delay/retries/agent 属平台固定默认，不入指纹。两种形态都能投影：
+    复核行（url/status_code 平铺）与 httptest extend 对象（steps 数组）。
+    """
+    steps = obj.get('steps')
+    if steps is None:
+        steps = [{'url': obj.get('url', ''), 'status_codes': obj.get('status_code', '')}]
+    projected = sorted(
+        (s.get('url', '') or '', str(s.get('status_codes', '') or ''))
+        for s in steps
+    )
+    return {'name': obj.get('name', '') or '', 'steps': projected}
+
+
+def _sync_web_scenarios_for_host(client, host_id: str, host_rows: list) -> dict:
+    """Web 场景同步任务体（apply / execute 共用）。
+
+    身份锚 = (hostid, 场景名) —— 场景名是下游 web.test.* 触发器表达式的引用
+    锚，天然不可随意改名，与触发器域"名称可编辑"相反。5.0 web 场景无任何
+    管理判别器（无 tags，真机实证），托管识别宽松：同名即视为托管对象。
+    """
+    result = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'synced_ids': []}
+    existing = client.get_managed_web_scenarios(host_id) or []
+    scenario_map = {s.get('name', '') or '': s for s in existing}
+    for row in host_rows:
+        name = row.get('name', '') or ''
+        try:
+            matched = scenario_map.get(name)
+            if row.get('change_type') == 'delete':
+                if matched is not None:
+                    client.delete_web_scenario(matched['httptestid'])
+                    result['deleted'] += 1
+                continue
+            payload = _scenario_payload_from_row(row, host_id)
+            if matched is None:
+                client.create_web_scenario(payload)
+                result['created'] += 1
+            elif (client.calculate_fingerprint(_scenario_project(payload))
+                  != client.calculate_fingerprint(_scenario_project(matched))):
+                client.update_web_scenario(matched['httptestid'], payload)
+                result['updated'] += 1
+            result['synced_ids'].append(row['id'])
+        except Exception as e:
+            result['errors'].append(f'{row.get("host", host_id)}/{name}: {e}')
+    return result
+
+
 def _match_trigger_rows(rows: list, zabbix_triggers):
     """把复核行与主机的 Zabbix 托管触发器配对 → [(row, trigger 或 None)]。
 
@@ -7033,33 +7113,33 @@ def _compare_entity(table: str, client, host_id: str, rows: list,
                 summary['unchanged_count'] += 1
 
     elif table == 'webscenario_items_review':
+        # 托管识别与 apply/execute 共用 get_managed_web_scenarios（含 steps）。
+        # 旧实现的两处硬伤：① output=['httptestid','name','url'] —— httptest
+        # 对象没有 url 属性（url 在 step 上），existing.get('url','') 恒空串，
+        # 比对退化为"本地 url 非空就 UPDATE"；② 直接拉全量不做托管锚定，模板
+        # 继承/手工同名场景也被当成比对对象。指纹走 _scenario_project 同形
+        # 投影（与下发分支一致），等集可达 UNCHANGED。
         try:
-            # 必须用关键字参数——pyzabbix 会把单个位置 dict 包成 [dict]，
-            # Zabbix 会忽略 hostids 返回全部 Web 场景
-            existing_scenarios = client.api.httptest.get(
-                hostids=host_id,
-                output=['httptestid', 'name', 'url'],
-            )
-            scenario_map = {s['name']: s for s in existing_scenarios}
+            existing_scenarios = client.get_managed_web_scenarios(host_id) or []
         except Exception as e:
-            app.logger.error(f"compare_entity webscenario fetch failed: {e}"); scenario_map = {}
+            app.logger.error(f"compare_entity webscenario fetch failed: {e}")
+            existing_scenarios = []
+        scenario_map = {s.get('name', '') or '': s for s in existing_scenarios}
         for row in rows:
             name = row.get('name', '')
-            url = row.get('url', '')
             if name not in scenario_map:
                 changes.append({'host': row['host'], 'type': 'WebScenario', 'key': name,
                                 'name': name, 'action': 'CREATE',
-                                'details': f'URL: {url}，Zabbix 中不存在'})
+                                'details': f"URL: {row.get('url', '')}，Zabbix 中不存在"})
                 summary['create_count'] += 1
+            elif (client.calculate_fingerprint(_scenario_project(row))
+                  != client.calculate_fingerprint(_scenario_project(scenario_map[name]))):
+                changes.append({'host': row['host'], 'type': 'WebScenario', 'key': name,
+                                'name': name, 'action': 'UPDATE',
+                                'details': '内容差异（URL/状态码阈值，按 steps 投影比对）'})
+                summary['update_count'] += 1
             else:
-                existing = scenario_map[name]
-                if existing.get('url', '') != url:
-                    changes.append({'host': row['host'], 'type': 'WebScenario', 'key': name,
-                                    'name': name, 'action': 'UPDATE',
-                                    'details': f'URL 变更: {existing.get("url", "")} -> {url}'})
-                    summary['update_count'] += 1
-                else:
-                    summary['unchanged_count'] += 1
+                summary['unchanged_count'] += 1
 
 
 @app.route('/api/sync/preview', methods=['POST'])
@@ -7479,8 +7559,13 @@ def api_sync_apply():
                                     errors.append(f'{host_key}/删除触发器原型 {desc}: {e}')
 
                 elif table == 'webscenario_items_review':
-                    errors.append(f'{host_key}: Web 场景同步请使用全局"监控同步"功能')
-                    continue
+                    # 与 execute 共用任务体（此前本分支直接拒绝下发，
+                    # 预览弹窗算出的 CREATE/UPDATE 无处落地）
+                    web_res = _sync_web_scenarios_for_host(client, host_id, host_rows)
+                    created += web_res['created']
+                    updated += web_res['updated']
+                    deleted += web_res['deleted']
+                    errors.extend(web_res['errors'])
 
             except ZabbixAPIException as e:
                 errors.append(f'{host_key}: Zabbix API 错误 - {e}')
@@ -7688,31 +7773,15 @@ def api_sync_execute():
                             errors.append(f'{row["host"]}/{row["trigger_name"]}: {e}')
 
                 elif table == 'webscenario_items_review':
-                    existing_scenarios = client.get_managed_web_scenarios(host_id)
-                    scenario_map = {s['name']: s for s in existing_scenarios}
-                    for row in host_rows:
-                        name = row['name']
-                        if row.get('change_type') == 'delete':
-                            if name in scenario_map:
-                                client.delete_web_scenario(scenario_map[name]['httptestid'])
-                                deleted += 1
-                            continue
-                        scenario_data = {
-                            'name': name,
-                            'hostid': host_id,
-                            'url': row.get('url', ''),
-                            'status_codes': int(row.get('status_code', 200)),
-                            'timeout': '15s',
-                        }
-                        if name in scenario_map:
-                            existing = scenario_map[name]
-                            if client.calculate_fingerprint(scenario_data) != client.calculate_fingerprint(existing):
-                                client.update_web_scenario(existing['httptestid'], scenario_data)
-                                updated += 1
-                        else:
-                            client.create_web_scenario(scenario_data)
-                            created += 1
-                        synced_ids.append(row['id'])
+                    # 与 apply 共用任务体：steps 形载荷（url/status_codes 平铺在
+                    # 场景级会被 5.0 整单拒收）+ 指纹投影对齐 + 按 (hostid, 场景名)
+                    # 身份锚配对（重跑收敛，不再重复创建）
+                    web_res = _sync_web_scenarios_for_host(client, host_id, host_rows)
+                    created += web_res['created']
+                    updated += web_res['updated']
+                    deleted += web_res['deleted']
+                    errors.extend(web_res['errors'])
+                    synced_ids.extend(web_res['synced_ids'])
 
                 elif table == 'item_prototypes_review':
                     dr_ids = list({int(r['discovery_rule_id']) for r in host_rows
