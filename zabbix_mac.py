@@ -495,9 +495,16 @@ class ZabbixClient:
         
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
+                # Zabbix 5.0 两处默认行为都会让托管触发器识别与比对失效（5.0.47 真机实证）：
+                # 1) output=extend 不返回 tags → 本方法的标签过滤永远落空，必须 selectTags；
+                # 2) trigger.get 默认返回归约表达式（{functionid} 占位，如 "{24372}<256"），
+                #    下游按 {host:key.func(param)} 解析 item key / 比对指纹会全部失效，
+                #    必须 expandExpression 还原为逐字原文形态。
                 triggers = self.api.trigger.get(
                     hostids=host_id,
-                    output="extend"
+                    output="extend",
+                    selectTags="extend",
+                    expandExpression=True,
                 )
                 # 过滤出带有管理标签的触发器
                 managed_triggers = []

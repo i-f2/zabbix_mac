@@ -183,6 +183,21 @@ class TestZabbixClientTriggers:
             assert len(triggers) == 1
             assert triggers[0]['triggerid'] == '1'
 
+    def test_get_managed_triggers_requests_expand_and_tags(self):
+        """必须显式请求 expandExpression 与 selectTags —— Zabbix 5.0 默认返回
+        {functionid} 归约表达式、且 output=extend 不含 tags，二者都会让托管识别
+        与指纹比对失效（zbx50 5.0.47 真机实证）"""
+        with patch('zabbix_mac.ZabbixAPI') as mock_api:
+            mock_instance = MagicMock()
+            mock_instance.trigger.get.return_value = []
+            mock_api.return_value = mock_instance
+            client = ZabbixClient("http://test/api", "user", "pass")
+            client.api = mock_instance
+            client.get_managed_triggers("10084")
+            _, kwargs = mock_instance.trigger.get.call_args
+            assert kwargs.get('expandExpression') is True
+            assert kwargs.get('selectTags') == 'extend'
+
     def test_create_trigger(self):
         """创建触发器"""
         with patch('zabbix_mac.ZabbixAPI') as mock_api:

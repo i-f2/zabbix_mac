@@ -6787,6 +6787,11 @@ def _match_trigger_rows(rows: list, zabbix_triggers):
     的多条触发器不会被同一复核行抢走，也不会被两行各匹配一次；ident 池与
     name 池并存时同样由 consumed 拦住跨池重复匹配。池里存 triggerid 而非
     dict，避免 dict 按值 == 引起的误配。
+
+    同一身份组内多行对多触发器（如同一 item key 挂 >60/>80/>100 三条阈值
+    触发器）时，两侧各按规范化键（expression → 名称 → priority）排序后
+    按位置一一配对 —— 否则按池序抢占会错位配对，指纹恒不相等，每次同步
+    都朝同一方向"翻面"，预览永不收敛到 UNCHANGED（zbx50 真机实证）。
     """
     by_id = {}
     by_identity = {}
@@ -6799,19 +6804,39 @@ def _match_trigger_rows(rows: list, zabbix_triggers):
             by_identity.setdefault(ident, []).append(tid)
         by_name.setdefault(t.get('description', '') or '', []).append(tid)
 
-    consumed = set()
-    pairs = []
+    # 行按身份（或名称兜底）分组，保序；组内配对时再统一排序
+    groups = {}
+    order = []
     for row in rows:
         ident = _trigger_identity(row.get('expression', ''))
-        pool = (by_identity.get(ident, []) if ident is not None
-                else by_name.get(row.get('name', '') or '', []))
-        matched = None
-        for tid in pool:
-            if tid not in consumed:
-                consumed.add(tid)
-                matched = by_id[tid]
-                break
-        pairs.append((row, matched))
+        key = (('identity', ident) if ident is not None
+               else ('name', row.get('name', '') or ''))
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+
+    consumed = set()
+    pairs = []
+    for key in order:
+        kind, val = key
+        group = groups[key]
+        if kind == 'identity':
+            pool = [tid for tid in by_identity.get(val, []) if tid not in consumed]
+            pool.sort(key=lambda tid: (by_id[tid].get('expression', '') or '',
+                                       by_id[tid].get('description', '') or '',
+                                       int(by_id[tid].get('priority', 0) or 0), tid))
+            group.sort(key=lambda r: (r.get('expression', '') or '',
+                                      r.get('name', '') or '',
+                                      int(r.get('priority', 0) or 0)))
+        else:
+            pool = [tid for tid in by_name.get(val, []) if tid not in consumed]
+            pool.sort(key=lambda tid: (by_id[tid].get('description', '') or '', tid))
+            group.sort(key=lambda r: (r.get('name', '') or '',))
+        taken = pool[:len(group)]
+        consumed.update(taken)
+        for i, row in enumerate(group):
+            pairs.append((row, by_id[taken[i]]) if i < len(taken) else (row, None))
     return pairs
 
 

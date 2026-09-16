@@ -285,6 +285,23 @@ class TestMatcherContract:
         matched = sorted(p[1]['triggerid'] for p in pairs if p[1])
         assert matched == ['1', '2'], matched
 
+    def test_same_key_multi_trigger_pairs_positionally(self):
+        """同一 item key 挂 >60/>80/>100 三条阈值触发器（基线 21001 实况）：
+        两侧按规范化键排序后按位配对 —— 等集时不得错位配成 UPDATE
+        （zbx50 真机实证：按池序抢占会错位，预览永不收敛到 UNCHANGED）"""
+        zt = [_ztrigger(1, 'CPU >100', '{h:cpu.util.last()}>100'),
+              _ztrigger(2, 'CPU >60', '{h:cpu.util.last()}>60'),
+              _ztrigger(3, 'CPU >80', '{h:cpu.util.last()}>80')]
+        rows = [_row(1, 'CPU >60', '{h:cpu.util.last()}>60'),
+                _row(2, 'CPU >80', '{h:cpu.util.last()}>80'),
+                _row(3, 'CPU >100', '{h:cpu.util.last()}>100')]
+        pairs = __import__('app')._match_trigger_rows(rows, zt)
+
+        by_row = {r['name']: t for r, t in pairs}
+        assert by_row['CPU >60']['triggerid'] == '2'
+        assert by_row['CPU >80']['triggerid'] == '3'
+        assert by_row['CPU >100']['triggerid'] == '1'
+
     def test_row_without_parseable_key_falls_back_to_name(self, post_sync):
         """表达式解析不出 item key（如 {TRIGGER.VALUE}=1）→ 回落名称匹配"""
         rows = [_row(1, '服务停了', '{TRIGGER.VALUE}=1')]
