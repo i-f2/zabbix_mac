@@ -1111,23 +1111,19 @@ class ZabbixClient:
         
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
+                # Zabbix 5.0 的 httptest 对象没有 tags：output=extend 不含该键，
+                # selectTags 参数虽被接受但同样返回不了标签（zbx50 5.0.47 真机
+                # 实证）。按管理标签过滤将恒得空集 —— 改为与
+                # get_managed_discovery_rules 相同的宽松契约：返回主机全部
+                # web 场景，归属由调用方按场景名（下游 web.test.* 触发器的
+                # 引用锚）决定。
                 scenarios = self.api.httptest.get(
                     hostids=host_id,
                     output="extend",
                     selectSteps="extend"
                 )
-                # 过滤出带有管理标签的 web 场景
-                managed_scenarios = []
-                for scenario in scenarios:
-                    tags = scenario.get("tags", [])
-                    # 检查是否有管理标签
-                    if any(
-                        tag.get("tag") == MANAGED_TAG["tag"] and tag.get("value") == MANAGED_TAG["value"]
-                        for tag in tags
-                    ):
-                        managed_scenarios.append(scenario)
-                logger.info(f"成功获取主机 {host_id} 的 {len(managed_scenarios)} 个受管理 web 场景")
-                return managed_scenarios
+                logger.info(f"成功获取主机 {host_id} 的 {len(scenarios)} 个 web 场景")
+                return scenarios
             except ZabbixAPIException as e:
                 logger.error(f"获取 web 场景失败 (尝试 {attempt+1}/{MAX_RETRY_ATTEMPTS}): {e}")
                 if attempt < MAX_RETRY_ATTEMPTS - 1:
@@ -1210,12 +1206,9 @@ class ZabbixClient:
         Raises:
             ZabbixAPIException: 更新失败时抛出
         """
-        # 添加管理标签（必须在重试循环外，否则每次重试会追加重复标签）
-        if "tags" not in scenario_data:
-            scenario_data["tags"] = []
-        if MANAGED_TAG not in scenario_data["tags"]:
-            scenario_data["tags"].append(MANAGED_TAG)
-
+        # 注意：不能像 trigger 那样在载荷上追加 MANAGED_TAG —— Zabbix 5.0 的
+        # httptest 对象没有 tags 属性，httptest.update 携带 tags 参数会被整单
+        # 拒收（与 httptest.create 同理，zbx50 5.0.47 真机实证）
         last_error = None
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:

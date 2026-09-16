@@ -309,17 +309,34 @@ class TestZabbixClientWebScenarios:
     """Web 场景测试"""
 
     def test_get_managed_web_scenarios(self):
-        """获取受管理 web 场景"""
+        """获取 web 场景 —— Zabbix 5.0 的 httptest 对象没有 tags（output=extend
+        不含该键、selectTags 也不返回，zbx50 5.0.47 真机实证），不得按 tags
+        过滤，否则恒返回空集；契约与 get_managed_discovery_rules 一致：返回全部"""
         with patch('zabbix_mac.ZabbixAPI') as mock_api:
             mock_instance = MagicMock()
             mock_instance.httptest.get.return_value = [
-                {'httptestid': '1', 'name': 'web1', 'tags': [{'tag': 'ManagedBy', 'value': 'PythonScript'}]}
+                {'httptestid': '1', 'name': 'web1', 'steps': []},
+                {'httptestid': '2', 'name': 'web2', 'steps': []},
             ]
             mock_api.return_value = mock_instance
             client = ZabbixClient("http://test/api", "user", "pass")
             client.api = mock_instance
             scenarios = client.get_managed_web_scenarios("10084")
-            assert len(scenarios) == 1
+            assert len(scenarios) == 2
+
+    def test_get_managed_web_scenarios_requests_steps(self):
+        """场景比对需要 steps（指纹投影 name + steps[url,status_codes]）——
+        必须显式 selectSteps="extend" 拉取"""
+        with patch('zabbix_mac.ZabbixAPI') as mock_api:
+            mock_instance = MagicMock()
+            mock_instance.httptest.get.return_value = []
+            mock_api.return_value = mock_instance
+            client = ZabbixClient("http://test/api", "user", "pass")
+            client.api = mock_instance
+            client.get_managed_web_scenarios("10084")
+            _, kwargs = mock_instance.httptest.get.call_args
+            assert kwargs.get('selectSteps') == 'extend'
+            assert kwargs.get('output') == 'extend'
 
     def test_create_web_scenario(self):
         """创建 web 场景"""
@@ -341,6 +358,18 @@ class TestZabbixClientWebScenarios:
             result = client.update_web_scenario("50000", {'name': 'updated'})
             assert result is True
             client.api.httptest.update.assert_called_once()
+
+    def test_update_web_scenario_payload_has_no_tags(self):
+        """httptest.update 载荷不得携带 tags —— Zabbix 5.0 的 web 场景对象没有
+        tags 属性，携参即被整单拒收（真机实证）；不能像 trigger 那样追加
+        MANAGED_TAG，否则每个 UPDATE 都会失败"""
+        with patch('zabbix_mac.ZabbixAPI') as mock_api:
+            mock_instance = MagicMock()
+            client = ZabbixClient("http://test/api", "user", "pass")
+            client.api = mock_instance
+            client.update_web_scenario("50000", {'name': 'updated'})
+            payload = client.api.httptest.update.call_args[0][0]
+            assert 'tags' not in payload
 
     def test_delete_web_scenario(self):
         """删除 web 场景"""
