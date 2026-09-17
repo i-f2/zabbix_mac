@@ -16,26 +16,32 @@
         <div class="mb-3">
             <label for="nginx_clb" class="form-label">nginx_clb</label>
             <input type="text" class="form-control" id="nginx_clb" name="nginx_clb">
+            <div class="form-text">支持逗号分隔多个 ip:port（如 10.1.1.1:8080,10.1.1.2:8080），初始化时逐端点生成独立场景</div>
         </div>
         <div class="mb-3">
             <label for="nginx" class="form-label">nginx</label>
             <input type="text" class="form-control" id="nginx" name="nginx">
+            <div class="form-text">支持逗号分隔多个 ip:port，初始化时逐端点生成独立场景</div>
         </div>
         <div class="mb-3">
             <label for="clb" class="form-label">clb</label>
             <input type="text" class="form-control" id="clb" name="clb">
+            <div class="form-text">支持逗号分隔多个 ip:port，初始化时逐端点生成独立场景</div>
         </div>
         <div class="mb-3">
             <label for="pod" class="form-label">pod</label>
             <input type="text" class="form-control" id="pod" name="pod">
+            <div class="form-text">支持逗号分隔多个 ip:port，初始化时逐端点生成独立场景</div>
         </div>
         <div class="mb-3">
             <label for="webtest_api" class="form-label">webtest_api <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="webtest_api" name="webtest_api" required>
+            <div class="form-text">clb / pod 端点的 API 路径（如 /api/test），组合为 http://{ip:port}{路径}</div>
         </div>
         <div class="mb-3">
             <label for="webtest_nginx_api" class="form-label">webtest_nginx_api <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="webtest_nginx_api" name="webtest_nginx_api" required>
+            <div class="form-text">nginx 系端点（nginx_clb / nginx）的 API 路径（如 /nginx/api/test），组合为 http://{ip:port}{路径}</div>
         </div>
         <div class="mb-3">
             <label for="in_room" class="form-label">机房</label>
