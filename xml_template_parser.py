@@ -215,11 +215,72 @@ def _parse_item(item_el, template_name):
     return item
 
 
+# ---- 触发器表达式归一化（5.0 旧版语法 → 平台字面量 host 占位）----
+
+# 新版（Zabbix 5.4+）表达式签名：函数名后紧跟 "(/"，如 last(/host/key)。
+# 旧版语法的函数实参不会以裸 "/" 开头（数字、引号或空），故不会误伤；
+# 引号内正则（如 regexp("^/tmp")）的 "/" 已被引号隔开，同样不命中。
+_NEW_SYNTAX_RE = re.compile(r'[A-Za-z_]\w*\(\s*/')
+
+# 旧版 {主机:key.func(args)} 段：
+#   host —— 不得以 $/#/? 开头（排除 {$MACRO}、{#LLD}、6.x 的 {?...}），
+#           且不含 : 或 {}（主机名不可能含这些；据此锁定第一个冒号前的部分）
+#   key  —— 允许嵌套一层花括号：{#FSNAME} / {$MACRO} / {$MACRO:"ctx"}，
+#           也允许 : （如 system.run["ls: -l"]、web.page.get["http://x/y"]）
+#   args —— 允许一层括号嵌套（引号内的括号实参）
+# 逐字符交替而非 (?:[^{}]+|\{[^{}]*\})* 连续匹配：两个分支首字符互斥，
+# 回溯线性 —— 连续匹配形式在恶意输入上会指数级回溯（实测 1200 字符 >6s）。
+_LEGACY_HOST_SEGMENT_RE = re.compile(
+    r'\{'
+    r'(?![$#?])'
+    r'(?P<host>[^:{}]+)'
+    r':'
+    r'(?P<key>(?:[^{}]|\{[^{}]*\})*)'
+    r'\.'
+    r'(?P<func>[A-Za-z_]\w*)'
+    r'\('
+    r'(?P<args>(?:[^()]|\([^()]*\))*)'
+    r'\)\}'
+)
+
+_SNIPPET_MAX = 80
+
+
+def _replace_host_segment(match):
+    """{主机:key.func(args)} → {host:key.func(args)}（host 段替换为字面量占位）。
+    用函数式替换：返回值按字面处理，key 中的反斜杠不会被二次转义。"""
+    return ('{host:' + match.group('key') + '.' + match.group('func')
+            + '(' + match.group('args') + ')}')
+
+
+def _normalize_trigger_expression(expression, trigger_name, kind='触发器'):
+    """触发器表达式归一化：
+    1) 拒绝 5.4+ 新版语法（ValueError，含触发器名与表达式片段）；
+    2) 将每个 {主机:key.func(args)} 段的 host 部分替换为字面量 host；
+    3) 宏（{$M} / {$M:"ctx"} / {#LLD} / {TRIGGER.VALUE}）与无主机简写段
+       （{min(5m)}>{$MACRO}）原样保留；{host:...} 输入幂等不变。
+    """
+    if not expression:
+        return expression
+    hit = _NEW_SYNTAX_RE.search(expression)
+    if hit:
+        snippet = expression if len(expression) <= _SNIPPET_MAX \
+            else expression[:_SNIPPET_MAX] + '…'
+        raise ValueError(
+            f'{kind}「{trigger_name}」使用了不支持的新版表达式语法'
+            f'（函数后紧跟"/"，如 last(/host/key)）: {snippet}；'
+            f'请改写为 5.0 旧版格式（如 {{host:system.cpu.util.last()}}>90）'
+            f'后重新导入')
+    return _LEGACY_HOST_SEGMENT_RE.sub(_replace_host_segment, expression)
+
+
 def _parse_trigger(trig_el, template_name):
     """触发器 → triggers 行 dict"""
+    name = _text(trig_el, 'name')
     return {
-        'name': _text(trig_el, 'name'),
-        'expression': _text(trig_el, 'expression'),
+        'name': name,
+        'expression': _normalize_trigger_expression(
+            _text(trig_el, 'expression'), name),
         'priority': PRIORITY_MAP.get(_text(trig_el, 'priority', 'NOT_CLASSIFIED'), 0),
         'description': _text(trig_el, 'description', ''),
         'status': STATUS_MAP.get(_text(trig_el, 'status', 'ENABLED'), 0),
@@ -246,9 +307,11 @@ def _parse_item_prototype(ip_el):
 
 def _parse_trigger_prototype(tp_el):
     """触发器原型 → trigger_prototypes 行 dict（live 表用 description 存名称）"""
+    name = _text(tp_el, 'name')
     return {
-        'description': _text(tp_el, 'name'),
-        'expression': _text(tp_el, 'expression'),
+        'description': name,
+        'expression': _normalize_trigger_expression(
+            _text(tp_el, 'expression'), name, kind='触发器原型'),
         'priority': PRIORITY_MAP.get(_text(tp_el, 'priority', 'NOT_CLASSIFIED'), 0),
         'status': STATUS_MAP.get(_text(tp_el, 'status', 'ENABLED'), 0),
     }

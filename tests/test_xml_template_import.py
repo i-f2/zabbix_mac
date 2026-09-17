@@ -2,19 +2,21 @@
 """
 Zabbix 模板 XML 导入测试
 
-覆盖: xml_template_parser 解析（6 组件 + 类型映射）、app._upsert 幂等分支、
-parse-preview / execute-import 两个 API 路由。
+覆盖: xml_template_parser 解析（6 组件 + 类型映射 + 触发器表达式归一化）、
+app._upsert 幂等分支、parse-preview / execute-import 两个 API 路由。
 """
 import io
 import os
 import re
 import sys
+import time
 import pytest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from xml_template_parser import (parse_template_xml, _duration_to_days,
+                                 _normalize_trigger_expression,
                                  ITEM_TYPE_MAP, VALUE_TYPE_MAP, PRIORITY_MAP)
 
 SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +57,7 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
             </items>
             <triggers>
                 <trigger>
-                    <expression>last(/21001/system.cpu.util[,iowait])&gt;90</expression>
+                    <expression>{21001:system.cpu.util.last()}&gt;90</expression>
                     <name>High CPU iowait</name>
                     <priority>HIGH</priority>
                     <description>CPU iowait high</description>
@@ -99,7 +101,7 @@ SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
                     </item_prototypes>
                     <trigger_prototypes>
                         <trigger_prototype>
-                            <expression>last(/21001/vfs.fs.size[{#FSNAME},pfree])&lt;10</expression>
+                            <expression>{21001:vfs.fs.size[{#FSNAME},pfree].min(5m)}&lt;20</expression>
                             <name>Disk free less than 10%</name>
                             <priority>WARNING</priority>
                             <status>ENABLED</status>
@@ -152,7 +154,8 @@ class TestParseTemplateXml:
         assert trig['priority'] == PRIORITY_MAP['HIGH'] == 4
         assert trig['status'] == 0
         assert trig['template_name'] == '21001'
-        assert 'last(/21001/system.cpu.util[,iowait])>90' in trig['expression']
+        # host 段已归一化为平台占位符（精确相等，杜绝真实模板名/新语法透传）
+        assert trig['expression'] == '{host:system.cpu.util.last()}>90'
 
     def test_parse_discovery_rule(self):
         tpl = parse_template_xml(SAMPLE_XML)[0]
@@ -174,6 +177,8 @@ class TestParseTemplateXml:
         tp = dr['trigger_prototypes'][0]
         assert tp['description'] == 'Disk free less than 10%'  # live 表用 description 存名称
         assert tp['priority'] == 2  # WARNING
+        # 触发器原型表达式同样归一化（key 含 {#LLD} 嵌套）
+        assert tp['expression'] == '{host:vfs.fs.size[{#FSNAME},pfree].min(5m)}<20'
 
     def test_invalid_xml(self):
         with pytest.raises(ValueError):
@@ -228,7 +233,7 @@ class TestParseTemplateXml:
 </triggers>
 <discovery_rules><discovery_rule><name>DR</name><key>vfs.fs.discovery</key><delay>1h</delay>
 <item_prototypes><item_prototype><name>ip</name><key>vfs.fs.size[{$1}]</key><value_type>UNSIGNED</value_type>
-<trigger_prototypes><trigger_prototype><expression>last(/T1/vfs.fs.size[{$1}])&lt;10</expression><name>low</name><priority>AVERAGE</priority></trigger_prototype></trigger_prototypes>
+<trigger_prototypes><trigger_prototype><expression>{T1:vfs.fs.size[{$1}].last()}&lt;10</expression><name>low</name><priority>AVERAGE</priority></trigger_prototype></trigger_prototypes>
 </item_prototype></item_prototypes>
 </discovery_rule></discovery_rules>
 </zabbix_export>
@@ -241,6 +246,37 @@ class TestParseTemplateXml:
         dr = tpl['discovery_rules'][0]
         assert len(dr['trigger_prototypes']) == 1  # item_prototype 内嵌
         assert dr['rule']['template_name'] == '91001'
+        # 根级孤儿触发器同样走归一化；item 内嵌缩写形态 {last()} 原样透传
+        by_name = {t['name']: t for t in tpl['triggers']}
+        assert by_name['CPU very high']['expression'] == '{host:system.cpu.util.last()}>95'
+        assert by_name['CPU high']['expression'] == '{last()}>90'
+        # item_prototype 内嵌触发器原型也归一化（key 含 {$1} 位置宏）
+        assert dr['trigger_prototypes'][0]['expression'] == '{host:vfs.fs.size[{$1}].last()}<10'
+
+    def test_host_placeholder_idempotent_in_xml(self):
+        """XML 内已是平台占位 {host:...} → 逐字保留（幂等）。"""
+        xml = SAMPLE_XML.replace('{21001:system.cpu.util.last()}',
+                                 '{host:system.cpu.util.last()}')
+        tpl = parse_template_xml(xml)[0]
+        assert tpl['triggers'][0]['expression'] == '{host:system.cpu.util.last()}>90'
+
+    def test_new_syntax_trigger_rejected(self):
+        xml = SAMPLE_XML.replace('{21001:system.cpu.util.last()}&gt;90',
+                                 'last(/21001/system.cpu.util)&gt;90')
+        with pytest.raises(ValueError) as ei:
+            parse_template_xml(xml)
+        msg = str(ei.value)
+        assert 'High CPU iowait' in msg
+        assert '新版' in msg
+
+    def test_new_syntax_trigger_prototype_rejected(self):
+        xml = SAMPLE_XML.replace('{21001:vfs.fs.size[{#FSNAME},pfree].min(5m)}&lt;20',
+                                 'last(/21001/vfs.fs.size[{#FSNAME},pfree])&lt;20')
+        with pytest.raises(ValueError) as ei:
+            parse_template_xml(xml)
+        msg = str(ei.value)
+        assert 'Disk free less than 10%' in msg
+        assert '触发器原型' in msg
 
 
 class TestDurationToDays:
@@ -258,6 +294,126 @@ class TestDurationToDays:
         assert _duration_to_days('') is None
         assert _duration_to_days(None) is None
         assert _duration_to_days('abc') is None
+
+
+class TestNormalizeTriggerExpression:
+    """触发器表达式归一化：{主机:key.func(args)} → {host:key.func(args)}，
+    宏与无主机简写段原样保留，5.4+ 新版语法明确拒绝。"""
+
+    # ---- 归一化 ----
+
+    def test_single_segment(self):
+        assert _normalize_trigger_expression(
+            '{21001:system.cpu.util.last()}>90', 't'
+        ) == '{host:system.cpu.util.last()}>90'
+
+    def test_multi_segment_and_or(self):
+        expr = ('{21001:system.cpu.util.last()}>90 '
+                'or {21001:vm.memory.size[pavailable].last()}<10')
+        assert _normalize_trigger_expression(expr, 't') == (
+            '{host:system.cpu.util.last()}>90 '
+            'or {host:vm.memory.size[pavailable].last()}<10')
+
+    def test_lld_nested_key(self):
+        assert _normalize_trigger_expression(
+            '{21001:vfs.fs.size[{#FSNAME},pfree].min(5m)}<20', 't'
+        ) == '{host:vfs.fs.size[{#FSNAME},pfree].min(5m)}<20'
+
+    def test_key_with_colon_and_url(self):
+        assert _normalize_trigger_expression(
+            '{21001:web.page.get["http://x/y"].last()}=0', 't'
+        ) == '{host:web.page.get["http://x/y"].last()}=0'
+
+    def test_key_with_user_macro_context(self):
+        assert _normalize_trigger_expression(
+            '{21001:system.cpu.util[{$M:"ctx"}].avg(5m)}>1', 't'
+        ) == '{host:system.cpu.util[{$M:"ctx"}].avg(5m)}>1'
+
+    def test_quoted_paren_args(self):
+        assert _normalize_trigger_expression(
+            '{21001:log[/var/log/app,"err (fatal)"].count(1h)}>0', 't'
+        ) == '{host:log[/var/log/app,"err (fatal)"].count(1h)}>0'
+
+    @pytest.mark.parametrize('token', [
+        '{$M}', '{$M:"ctx"}', '{$M:"a:b"}', '{TRIGGER.VALUE}', '{HOST.NAME}',
+        '{#LLD}', '{?calc}',
+    ])
+    def test_macro_tokens_passthrough(self, token):
+        assert _normalize_trigger_expression(f'{token}>1', 't') == f'{token}>1'
+
+    def test_abbreviated_segment_passthrough(self):
+        assert _normalize_trigger_expression(
+            '{min(5m)}>{$MACRO}', 't') == '{min(5m)}>{$MACRO}'
+
+    def test_mixed_abbreviated_and_hosted(self):
+        expr = '{min(5m)}>10 or {T1:net.if.in[eth0].avg(5m)}>80'
+        assert _normalize_trigger_expression(expr, 't') == (
+            '{min(5m)}>10 or {host:net.if.in[eth0].avg(5m)}>80')
+
+    def test_empty_expression_passthrough(self):
+        assert _normalize_trigger_expression(None, 't') is None
+        assert _normalize_trigger_expression('', 't') == ''
+
+    # ---- 幂等 ----
+
+    def test_idempotent_host_placeholder(self):
+        expr = '{host:system.cpu.util.last()}>90'
+        assert _normalize_trigger_expression(expr, 't') == expr
+
+    def test_idempotent_with_colon_in_key(self):
+        expr = '{host:net.tcp.service[ssh,,host:port].last()}=0'
+        assert _normalize_trigger_expression(expr, 't') == expr
+
+    def test_idempotent_full_roundtrip(self):
+        expr = ('{21001:system.cpu.util.last()}>90 '
+                'or {21001:vm.memory.size[pavailable].min(5m)}<10')
+        once = _normalize_trigger_expression(expr, 't')
+        assert _normalize_trigger_expression(once, 't') == once
+
+    # ---- 新版语法拒绝 ----
+
+    def test_new_syntax_rejected(self):
+        with pytest.raises(ValueError) as ei:
+            _normalize_trigger_expression('last(/21001/system.cpu.util)>90', 'High CPU')
+        msg = str(ei.value)
+        assert 'High CPU' in msg
+        assert '新版' in msg
+        assert '5.0 旧版' in msg
+
+    def test_new_syntax_prototype_kind(self):
+        with pytest.raises(ValueError) as ei:
+            _normalize_trigger_expression('last(/T1/key.last())<10', 'low',
+                                          kind='触发器原型')
+        assert '触发器原型' in str(ei.value)
+
+    def test_new_syntax_snippet_truncated(self):
+        long_expr = 'last(/host/' + 'x' * 200 + '.last())>1'
+        with pytest.raises(ValueError) as ei:
+            _normalize_trigger_expression(long_expr, 't')
+        msg = str(ei.value)
+        assert '…' in msg
+        assert long_expr not in msg  # 超长片段截断为 80 字符 + …，不整段进消息
+
+    # ---- 性能金丝雀（ReDoS 防御）----
+
+    def test_adversarial_input_linear(self):
+        """对抗输入必须线性回溯：key/args 用逐字符交替（分支首字符互斥），
+        病态输入毫秒级完成（连续匹配形式在 1200 字符恶意输入上实测 >6s）。"""
+        evils = [
+            '{a' * 800 + ':' + 'b.' * 400,   # 大量未闭合花括号 + 冒号
+            '{' + 'a{' * 800 + '}',          # 嵌套花括号海
+            '{h:' + 'k{' * 800 + '}.f()',    # key 段病态
+            '{' * 1000 + '}' * 1000,         # 全花括号
+        ]
+        start = time.monotonic()
+        for evil in evils:
+            _normalize_trigger_expression(evil, 'perf')
+        assert time.monotonic() - start < 3.0
+
+    def test_many_segments_substitution(self):
+        expr = ' or '.join('{h:k%d.last()}>1' % i for i in range(400))
+        out = _normalize_trigger_expression(expr, 'perf')
+        assert out.count('{host:') == 400
 
 
 # ---- _upsert 幂等分支测试 ----
@@ -459,6 +615,19 @@ class TestParsePreview:
                            data={}, content_type='multipart/form-data')
         assert resp.status_code == 400
 
+    def test_new_syntax_rejected_in_preview(self, client):
+        """新版表达式 → parse 阶段 400 拒绝，消息含触发器名与改写指引。"""
+        xml = SAMPLE_XML.replace('{21001:system.cpu.util.last()}&gt;90',
+                                 'last(/21001/system.cpu.util)&gt;90')
+        data = {'file': (io.BytesIO(xml.encode('utf-8')), 'template.xml')}
+        resp = client.post('/api/base-template/parse-preview', data=data,
+                           content_type='multipart/form-data')
+        body = resp.get_json()
+        assert resp.status_code == 400
+        assert body['success'] is False
+        assert 'High CPU iowait' in body['message']
+        assert '新版' in body['message']
+
 
 class TestExecuteImport:
     def test_created_all(self, client, app):
@@ -532,3 +701,19 @@ class TestExecuteImport:
         assert resp.status_code == 409
         assert data['success'] is False
         assert '拒绝' in data['message']
+
+    def test_new_syntax_rejected_zero_writes(self, client):
+        """execute-import 遇新版表达式 → 400 且零写入（解析先于任何 DB 访问）。"""
+        xml = SAMPLE_XML.replace('{21001:system.cpu.util.last()}&gt;90',
+                                 'last(/21001/system.cpu.util)&gt;90')
+        cursor = FakeCursor()
+        conn = FakeConn(cursor)
+        with patch('app.get_db_connection', return_value=conn):
+            data = {'file': (io.BytesIO(xml.encode('utf-8')), 'template.xml')}
+            resp = client.post('/api/base-template/execute-import', data=data,
+                               content_type='multipart/form-data')
+        body = resp.get_json()
+        assert resp.status_code == 400
+        assert body['success'] is False
+        assert 'High CPU iowait' in body['message']
+        assert cursor.calls('INSERT INTO') == []
