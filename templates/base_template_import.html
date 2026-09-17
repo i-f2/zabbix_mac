@@ -174,7 +174,7 @@ async function executeImport() {
         showToast('请先选择 XML 文件并解析', 'warning');
         return;
     }
-    if (!confirm('将按 XML 内容幂等写入基础模板配置表（已存在的记录按键更新，不会重复插入），确认执行？')) return;
+    if (!confirm('将按 XML 内容写入基础模板配置表；模板ID已导入过将被拒绝（409），请使用新的模板ID。确认执行？')) return;
     var btn = document.getElementById('executeImportBtn');
     btn.disabled = true;
     var fd = new FormData();
