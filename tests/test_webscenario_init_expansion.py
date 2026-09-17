@@ -8,6 +8,7 @@ api 配对（nginx 系配 webtest_nginx_api、clb/pod 配 webtest_api）、
 Web 触发器派生对展开后场景名的继承（派生逻辑零改动，契约钉住）。
 """
 import os
+import re
 import sys
 import pytest
 from unittest.mock import patch
@@ -139,6 +140,52 @@ class TestSourceSqlApiPairing:
         sql = app_module._WEBSCENARIOS_INIT_SPEC['source_sql']('')
         assert "clb as endpoints, webtest_api as api_path" in sql
         assert "pod as endpoints, webtest_api as api_path" in sql
+
+
+class TestBoundedScenarioName:
+    """场景名收口：包裹后硬性 ≤63（Zabbix httptest.name 64 硬限），
+    超预算截断 + 8 位 md5 尾缀 —— 确定性、抗碰撞，短名逐字节不变。"""
+
+    def test_short_name_unchanged_byte_for_byte(self, app_module):
+        assert app_module._wrap_scenario_name('Sys_Sub_clb_1.1.1.1_8080', '10.0.0.1') == \
+            '[10.0.0.1] Web scenario [Sys_Sub_clb_1.1.1.1_8080] failed'
+
+    def test_overlong_name_bounded_to_63(self, app_module):
+        long_inner = '超长系统名_超长子系统名_clb' * 10 + '_1.1.1.1_8080'
+        name = app_module._wrap_scenario_name(long_inner, '10.0.0.1')
+        assert len(name) <= 63
+        assert name.startswith('[10.0.0.1] Web scenario [')
+        assert name.endswith('] failed')
+        # inner 被截断，且尾缀为 '_' + 8 位十六进制哈希
+        inner = name[len('[10.0.0.1] Web scenario ['):-len('] failed')]
+        assert len(inner) < len(long_inner)
+        assert re.search(r'_[0-9a-f]{8}$', inner)
+
+    def test_deterministic_same_input_same_name(self, app_module):
+        long_inner = 'L' * 100
+        assert app_module._wrap_scenario_name(long_inner, '10.0.0.1') == \
+            app_module._wrap_scenario_name(long_inner, '10.0.0.1')
+
+    def test_distinct_long_endpoints_distinct_names(self, app_module):
+        """碰撞金丝雀：同基名不同端点，截断区相同仍须靠哈希尾缀区分。"""
+        base = 'Sys_' + '很长的子系统名称' * 20
+        n1 = app_module._wrap_scenario_name(base + '_1.1.1.1_8080', '10.0.0.1')
+        n2 = app_module._wrap_scenario_name(base + '_1.1.1.2_8080', '10.0.0.1')
+        assert len(n1) <= 63 and len(n2) <= 63
+        assert n1 != n2
+
+    def test_build_rows_all_bounded_and_urls_intact(self, app_module):
+        rows = [_row('1.1.1.1:8080,1.1.1.2:8080', '/api/test',
+                     name='Sys_' + '超长子系统名' * 15 + '_clb')]
+        out = app_module._build_webscenario_rows(rows, ROOM_MAPPING)
+        assert len(out) == 2
+        assert all(len(r[3]) <= 63 for r in out)
+        assert out[0][3] != out[1][3]
+        # URL 组合不受名称收口影响
+        assert [r[4] for r in out] == [
+            'http://1.1.1.1:8080/api/test',
+            'http://1.1.1.2:8080/api/test',
+        ]
 
 
 class TestWebTriggerDerivation:

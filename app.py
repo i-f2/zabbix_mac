@@ -10,6 +10,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import logging
 import os
 import itertools
+import hashlib
 import re
 import secrets
 import ast
@@ -1206,11 +1207,39 @@ def _compose_web_url(endpoint, api_path):
     return endpoint + api
 
 
+_SCENARIO_NAME_LIMIT = 63  # Zabbix httptest.name 64 字符硬限，留 1 位余量
+_SCENARIO_WRAPPER_FIXED_LEN = 25  # 固定包裹段 '[] Web scenario [] failed' 的长度
+_HASH_SUFFIX_LEN = 9  # 收口尾缀长度：'_' + 8 位 md5 十六进制
+
+
+def _wrap_scenario_name(inner, zabbix_ip):
+    """inner 包裹为复核场景名：[{zabbix_ip}] Web scenario [{inner}] failed。
+
+    硬性保证结果 ≤63 字符（Zabbix httptest.name 64 硬限）。同步/核验/触发器
+    创建三条链路均按「复核表名 == Zabbix 实际名」精确匹配，超长名会被 Zabbix
+    静默截断导致身份匹配失效（重复创建 + 孤儿误删 + 核验误报 not_found），
+    故超预算时在源头确定性收口：截断 inner + '_' + md5(inner) 前 8 位 ——
+    同输入必同名（重初始化不漂移），不同 inner 哈希尾缀抗碰撞。
+    前提：机房映射值 ≤19 字符（IPv4 ≤15），超此属配置错误，63 保证不成立。
+    """
+    zabbix_ip = zabbix_ip or 'Unknown'
+    wrapped = f"[{zabbix_ip}] Web scenario [{inner}] failed"
+    if len(wrapped) <= _SCENARIO_NAME_LIMIT:
+        return wrapped
+    budget = max(
+        _SCENARIO_NAME_LIMIT - _SCENARIO_WRAPPER_FIXED_LEN - len(zabbix_ip) - _HASH_SUFFIX_LEN,
+        1,
+    )
+    short_inner = inner[:budget] + '_' + hashlib.md5(inner.encode('utf-8')).hexdigest()[:8]
+    return f"[{zabbix_ip}] Web scenario [{short_inner}] failed"
+
+
 def _build_webscenario_rows(rows, room_mapping):
     """按端点展开生成 Web 场景复核行。
 
     每行的 endpoints（逗号分隔 ip:port，单值即 1 个端点）逐端点展开：
-      名称: [机房IP] Web scenario [{原名}_{ip}_{port}] failed（冒号转下划线）
+      名称: [机房IP] Web scenario [{原名}_{ip}_{port}] failed（冒号转下划线；
+            超过 Zabbix 64 硬限时经 _wrap_scenario_name 截断+哈希收口 ≤63）
       URL:  http://{ip:port}{api_path} —— nginx 系配 webtest_nginx_api、
             clb/pod 配 webtest_api，配对已在 source_sql 各分支固定
     """
@@ -1220,7 +1249,7 @@ def _build_webscenario_rows(rows, room_mapping):
         zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room)) or 'Unknown'
         for endpoint in _split_endpoints(r.get('endpoints')):
             name = r['name'] + '_' + endpoint.replace(':', '_')
-            new_name = f"[{zabbix_ip}] Web scenario [{name}] failed"
+            new_name = _wrap_scenario_name(name, zabbix_ip)
             insert_rows.append((
                 r['system'], r['subsystem'], r['host'],
                 new_name, _compose_web_url(endpoint, r.get('api_path')),
