@@ -1175,17 +1175,57 @@ def _webscenarios_source_where(system_filter, subsystem_filter):
     return suffix, params
 
 
+_ENDPOINT_SPLIT_RE = re.compile(r'[,，]')
+
+
+def _split_endpoints(value):
+    """逗号分隔的 ip:port 串 → 端点列表（兼容全角逗号；去空白、去空项）。
+
+    单值（不含逗号）返回单元素列表 —— 单值/多值统一走展开逻辑。
+    """
+    if not value:
+        return []
+    return [p.strip() for p in _ENDPOINT_SPLIT_RE.split(value) if p.strip()]
+
+
+def _compose_web_url(endpoint, api_path):
+    """端点与 API 路径组合成场景步骤 URL：http://{ip:port}{api_path}。
+
+    - 端点已带 scheme（http:// 或 https://）时不重复加前缀
+    - api_path 不以 / 开头时补 /（容错 `api/test` 形态）
+    - 端点为空返回 ''（source_sql 的 WHERE 已过滤空端点列，此处兜底）
+    """
+    endpoint = (endpoint or '').strip()
+    api = (api_path or '').strip()
+    if not endpoint:
+        return ''
+    if not re.match(r'^https?://', endpoint, re.IGNORECASE):
+        endpoint = 'http://' + endpoint
+    if api and not api.startswith('/'):
+        api = '/' + api
+    return endpoint + api
+
+
 def _build_webscenario_rows(rows, room_mapping):
-    """注入机房对应的 Zabbix Server IP，生成 `[{ip}] Web scenario [{name}] failed`。"""
+    """按端点展开生成 Web 场景复核行。
+
+    每行的 endpoints（逗号分隔 ip:port，单值即 1 个端点）逐端点展开：
+      名称: [机房IP] Web scenario [{原名}_{ip}_{port}] failed（冒号转下划线）
+      URL:  http://{ip:port}{api_path} —— nginx 系配 webtest_nginx_api、
+            clb/pod 配 webtest_api，配对已在 source_sql 各分支固定
+    """
     insert_rows = []
     for r in rows:
         room = (r.get('in_room') or '').strip()
         zabbix_ip = room_mapping.get(room) or room_mapping.get(str(room)) or 'Unknown'
-        new_name = f"[{zabbix_ip}] Web scenario [{r['name']}] failed"
-        insert_rows.append((
-            r['system'], r['subsystem'], r['host'],
-            new_name, r['url'], r['status_code'], r['in_room'],
-        ))
+        for endpoint in _split_endpoints(r.get('endpoints')):
+            name = r['name'] + '_' + endpoint.replace(':', '_')
+            new_name = f"[{zabbix_ip}] Web scenario [{name}] failed"
+            insert_rows.append((
+                r['system'], r['subsystem'], r['host'],
+                new_name, _compose_web_url(endpoint, r.get('api_path')),
+                r['status_code'], r['in_room'],
+            ))
     return insert_rows
 
 
@@ -1213,36 +1253,41 @@ _WEBSCENARIOS_INIT_SPEC = {
     'table': 'webscenario_items_review',
     'columns': ['system', 'subsystem', 'host', 'name', 'url', 'status_code', 'in_room'],
     'source_message': '正在读取 Web 场景源数据...',
-    'build_message': '正在注入机房 IP 并组装记录...',
+    'build_message': '正在按端点展开并注入机房 IP...',
     'source_where': _webscenarios_source_where,
     'source_sql': lambda where_suffix: f"""
-        SELECT system, subsystem, host, name, url, status_code, in_room
+        SELECT system, subsystem, host, name, endpoints, api_path,
+               status_code, in_room
         FROM (
             SELECT system, subsystem,
                 'Zabbix server' as host,
                 system || '_' || subsystem || '_clb' as name,
-                nginx_clb as url, '200' as status_code, in_room
+                nginx_clb as endpoints, webtest_nginx_api as api_path,
+                '200' as status_code, in_room
             FROM webscenario_items
             WHERE nginx_clb IS NOT NULL AND nginx_clb != ''{where_suffix}
             UNION ALL
             SELECT system, subsystem,
                 'Zabbix server' as host,
                 system || '_' || subsystem || '_nginx' as name,
-                nginx as url, '200' as status_code, in_room
+                nginx as endpoints, webtest_nginx_api as api_path,
+                '200' as status_code, in_room
             FROM webscenario_items
             WHERE nginx IS NOT NULL AND nginx != ''{where_suffix}
             UNION ALL
             SELECT system, subsystem,
                 'Zabbix server' as host,
                 system || '_' || subsystem || '_clb_direct' as name,
-                clb as url, '200' as status_code, in_room
+                clb as endpoints, webtest_api as api_path,
+                '200' as status_code, in_room
             FROM webscenario_items
             WHERE clb IS NOT NULL AND clb != ''{where_suffix}
             UNION ALL
             SELECT system, subsystem,
                 'Zabbix server' as host,
                 system || '_' || subsystem || '_pod' as name,
-                pod as url, '200' as status_code, in_room
+                pod as endpoints, webtest_api as api_path,
+                '200' as status_code, in_room
             FROM webscenario_items
             WHERE pod IS NOT NULL AND pod != ''{where_suffix}
         ) src
