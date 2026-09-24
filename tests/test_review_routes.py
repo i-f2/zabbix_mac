@@ -37,20 +37,35 @@ def app(mock_config):
     """创建 mock Flask 应用 (CSRF 禁用)"""
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
+    class _CountRow(dict):
+        """双形态行：兼容 fetchone()[0] 与 fetchone()['count'] 两种取数写法。"""
+
+        def __getitem__(self, k):
+            if isinstance(k, int):
+                return 0
+            return dict.get(self, k, 0)
+
     mock_cursor.fetchall.return_value = []
-    mock_cursor.fetchone.return_value = None
+    # 计数查询形态：路由多处 fetchone()[0]/['count']，None 会 TypeError（活库假通过的历史潜伏）
+    mock_cursor.fetchone.return_value = _CountRow({'count': 0})
+    mock_cursor.description = (('id', None, None, None, None, None, None),)
+    mock_cursor.rowcount = 0
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
+    # 1. 先以 mock 配置导入 app 模块（模块级 load_config 依赖 DB_CONFIG 初始化）
     with patch('config_loader.load_config', return_value=mock_config):
-        with patch('app.get_db_connection', return_value=mock_conn):
-            if 'app' in sys.modules:
-                del sys.modules['app']
-            from app import app
-            app.config['TESTING'] = True
-            app.config['WTF_CSRF_ENABLED'] = False
-            # 清空 before_request handlers 以绕过 CSRF 验证
-            app.before_request_funcs[None] = []
-            yield app
+        if 'app' in sys.modules:
+            del sys.modules['app']
+        from app import app
+        app.config['TESTING'] = True
+        app.config['WTF_CSRF_ENABLED'] = False
+        # 清空 before_request handlers 以绕过 CSRF 验证
+        app.before_request_funcs[None] = []
+
+    # 2. 模块对象稳定后再 patch get_db_connection —— 若在 del+reimport 之前 patch，
+    #    补丁落在孤儿模块上，路由会打到真实数据库（无库时 32 用例全红，历史潜伏缺陷）
+    with patch('app.get_db_connection', return_value=mock_conn):
+        yield app
 
 
 @pytest.fixture
@@ -163,8 +178,8 @@ class TestReviewExportRoutes:
     def test_export(self, client, url, name):
         """导出路由返回 Excel"""
         resp = client.get(url)
-        # 空数据时可能返回 200 或 404，但不应 500
-        assert resp.status_code in (200, 302, 404, 500), f'{name} 导出 {resp.status_code}'
+        # mock 空表下 400「表为空」是导出路由的正确契约；不应 500
+        assert resp.status_code in (200, 302, 400, 404), f'{name} 导出 {resp.status_code}'
         if resp.status_code == 200:
             ct = resp.content_type or ''
             assert 'spreadsheet' in ct or 'vnd.openxmlformats' in ct or 'octet-stream' in ct, \

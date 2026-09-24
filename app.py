@@ -139,7 +139,15 @@ _ALLOWED_IMPORT_COLUMNS = {
 }
 
 def _sanitize_import_columns(table_name, columns):
-    """防止 SQL 注入：仅允许白名单内的列名"""
+    """防止 SQL 注入：仅允许白名单内的列名。
+
+    主键 `id` 列静默剔除 —— 导出文件（SELECT *）必含 id，重导时由序列
+    重新生成，否则「导出→导入」往返必然报「非法列名: id」而断裂。
+    剔除后若无任何有效列则报错（拒绝空列 INSERT）。
+    """
+    columns = [c for c in columns if c != 'id']
+    if not columns:
+        raise ValueError('无有效导入列（仅有 id 主键列）')
     allowed = _ALLOWED_IMPORT_COLUMNS.get(table_name, set())
     invalid = [c for c in columns if c not in allowed]
     if invalid:
