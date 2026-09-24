@@ -6532,7 +6532,7 @@ def api_search():
                 results.append({
                     'id': row['id'],
                     'name': row['name'],
-                    'detail': row.get('template_name', ''),
+                    'detail': row.get('template_id', ''),
                     'type': 'host',
                     'type_label': '主机',
                     'url': url_for('edit_host', host_id=row['id'])
