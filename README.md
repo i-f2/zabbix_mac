@@ -243,7 +243,7 @@ sequenceDiagram
 
 下发前的差异清单弹窗 —— 确认后才真正提交，是「先看后做」的核心安全阀。
 
-![批量同步差异预览弹窗](sync_preview_modal.png)
+![批量同步差异预览弹窗](docs/images/sync_preview_modal.png)
 
 ### 待补充截图
 
